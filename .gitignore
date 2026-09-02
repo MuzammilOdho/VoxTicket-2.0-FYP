@@ -1,0 +1,75 @@
+### Maven ###
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# Keep nested source directories if named target
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### Spring Boot ###
+HELP.md
+
+# Local configuration / secrets
+.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+application-local.yaml
+application-secret.properties
+application-secret.yml
+application-secret.yaml
+
+### Logs ###
+*.log
+logs/
+log/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### Eclipse / STS ###
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### Gradle ###
+.gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Java ###
+*.class
+hs_err_pid*
+replay_pid*
+
+### Operating System ###
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+### Temporary Files ###
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
