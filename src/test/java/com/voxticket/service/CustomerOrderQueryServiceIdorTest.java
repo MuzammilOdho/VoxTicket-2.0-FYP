@@ -39,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -46,10 +47,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Phase 2 acceptance test: it must be impossible to retrieve another
  * customer's private data merely by knowing a valid business reference.
+ *
+ * FIX: class-level @Transactional so each test method's setUp() data is
+ * rolled back afterward - without it, committed rows accumulated across
+ * test methods and could collide with each other on the phone unique
+ * constraint.
  */
 @Testcontainers
 @ActiveProfiles("test")
 @SpringBootTest
+@Transactional
 class CustomerOrderQueryServiceIdorTest {
 
     @Container

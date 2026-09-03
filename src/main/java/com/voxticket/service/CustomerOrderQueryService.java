@@ -3,6 +3,7 @@ package com.voxticket.service;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.InsufficientAssuranceException;
+import com.voxticket.identity.OwnedOrderItemResolver;
 import com.voxticket.identity.OwnedOrderResolver;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.identity.VerifiedOrderRef;
@@ -20,10 +21,17 @@ import com.voxticket.persistence.repository.RefundRepository;
 import com.voxticket.persistence.repository.ReturnRequestRepository;
 import com.voxticket.persistence.repository.ShipmentRepository;
 import com.voxticket.persistence.repository.SupportTicketRepository;
+import com.voxticket.policy.CancellationEligibility;
+import com.voxticket.policy.CancellationPolicyService;
+import com.voxticket.policy.ReturnEligibility;
+import com.voxticket.policy.ReturnPolicyService;
+import com.voxticket.service.dto.CancellationEligibilityView;
+import com.voxticket.service.dto.OrderItemView;
 import com.voxticket.service.dto.OrderSummaryView;
 import com.voxticket.service.dto.PaymentStatusView;
 import com.voxticket.service.dto.RecentOrderView;
 import com.voxticket.service.dto.RefundStatusView;
+import com.voxticket.service.dto.ReturnEligibilityView;
 import com.voxticket.service.dto.ReturnStatusView;
 import com.voxticket.service.dto.ShipmentStatusView;
 import com.voxticket.service.dto.TicketStatusView;
@@ -37,14 +45,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Spec §41. Every method here is customer-scoped: assurance is checked
- * first (spec §8's ladder - order/shipment/payment/refund/return/ticket
- * reads all require at least PHONE_MATCHED per the resolved identity
- * policy), then order ownership is checked through {@link OwnedOrderResolver}
- * before any child data is fetched.
+ * first, then order (and, where relevant, item) ownership is checked
+ * through {@link OwnedOrderResolver}/{@link OwnedOrderItemResolver} before
+ * any child data is fetched.
  *
  * <p>This is the ONLY service Phase 5's AI-facing read tools may call.
  * Nothing here accepts a caller-supplied customerId - it always comes from
- * the {@link CustomerIdentity} the caller already resolved.
+ * the {@link CustomerIdentity} the caller already resolved. The two
+ * eligibility-check methods added in Phase 3 are reads only - they report
+ * what Phase 3's policy services would decide, they do not create or
+ * mutate anything.
  */
 @Service
 @Transactional(readOnly = true)
@@ -54,28 +64,37 @@ public class CustomerOrderQueryService {
     private static final Set<TicketStatus> OPEN_TICKET_STATUSES = Set.of(TicketStatus.OPEN, TicketStatus.IN_PROGRESS);
 
     private final OwnedOrderResolver ownedOrderResolver;
+    private final OwnedOrderItemResolver ownedOrderItemResolver;
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final ShipmentRepository shipmentRepository;
     private final ReturnRequestRepository returnRequestRepository;
     private final RefundRepository refundRepository;
     private final SupportTicketRepository supportTicketRepository;
+    private final CancellationPolicyService cancellationPolicyService;
+    private final ReturnPolicyService returnPolicyService;
 
     public CustomerOrderQueryService(
             OwnedOrderResolver ownedOrderResolver,
+            OwnedOrderItemResolver ownedOrderItemResolver,
             OrderRepository orderRepository,
             PaymentRepository paymentRepository,
             ShipmentRepository shipmentRepository,
             ReturnRequestRepository returnRequestRepository,
             RefundRepository refundRepository,
-            SupportTicketRepository supportTicketRepository) {
+            SupportTicketRepository supportTicketRepository,
+            CancellationPolicyService cancellationPolicyService,
+            ReturnPolicyService returnPolicyService) {
         this.ownedOrderResolver = ownedOrderResolver;
+        this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.shipmentRepository = shipmentRepository;
         this.returnRequestRepository = returnRequestRepository;
         this.refundRepository = refundRepository;
         this.supportTicketRepository = supportTicketRepository;
+        this.cancellationPolicyService = cancellationPolicyService;
+        this.returnPolicyService = returnPolicyService;
     }
 
     public OrderSummaryView getOrderSummary(CustomerIdentity identity, String orderNumber) {
@@ -146,6 +165,37 @@ public class CustomerOrderQueryService {
         return toTicketStatusView(ticket);
     }
 
+    public CancellationEligibilityView checkCancellationEligibility(CustomerIdentity identity, String orderNumber) {
+        requireAssurance(identity);
+        VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
+        Order order = orderRepository.findById(ref.orderId()).orElseThrow();
+        Payment payment = paymentRepository
+                .findFirstByOrderIdOrderByCreatedAtDesc(ref.orderId())
+                .orElseThrow(() -> new IllegalStateException("Order has no payment record: " + orderNumber));
+
+        CancellationEligibility eligibility = cancellationPolicyService.evaluate(order, payment);
+        return new CancellationEligibilityView(
+                orderNumber,
+                eligibility.eligible(),
+                eligibility.denialReason() == null ? null : eligibility.denialReason().name(),
+                eligibility.paymentConsequence() == null ? null : eligibility.paymentConsequence().name());
+    }
+
+    public ReturnEligibilityView checkReturnEligibility(CustomerIdentity identity, String orderNumber, String sku) {
+        requireAssurance(identity);
+        VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
+        Order order = orderRepository.findById(ref.orderId()).orElseThrow();
+        OrderItem item = ownedOrderItemResolver.resolveBySku(ref, sku);
+
+        ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
+        return new ReturnEligibilityView(
+                orderNumber,
+                sku,
+                eligibility.eligible(),
+                eligibility.denialReason() == null ? null : eligibility.denialReason().name(),
+                eligibility.maxReturnableQuantity());
+    }
+
     private void requireAssurance(CustomerIdentity identity) {
         if (!identity.isAtLeast(MIN_READ_ASSURANCE)) {
             throw new InsufficientAssuranceException(MIN_READ_ASSURANCE, identity.assuranceLevel());
@@ -153,10 +203,12 @@ public class CustomerOrderQueryService {
     }
 
     private OrderSummaryView toOrderSummaryView(Order order) {
-        List<String> descriptions = order.getItems().stream().map(OrderItem::getProductName).toList();
+        List<OrderItemView> items = order.getItems().stream()
+                .map(i -> new OrderItemView(i.getProductName(), i.getSku(), i.getQuantity(), i.getUnitPrice(), i.isReturnable(), i.isFinalSale()))
+                .toList();
         return new OrderSummaryView(
                 order.getOrderNumber(), order.getOrderStatus(), order.getFulfillmentStatus(),
-                order.getCurrency(), order.getTotalAmount(), order.getPlacedAt(), descriptions);
+                order.getCurrency(), order.getTotalAmount(), order.getPlacedAt(), items);
     }
 
     private RecentOrderView toRecentOrderView(Order order) {

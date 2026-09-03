@@ -13,5 +13,5 @@ public record OrderSummaryView(
         String currency,
         BigDecimal totalAmount,
         Instant placedAt,
-        List<String> itemDescriptions) {
+        List<OrderItemView> items) {
 }

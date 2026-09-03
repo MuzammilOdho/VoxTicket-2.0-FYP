@@ -10,11 +10,8 @@ spring:
   flyway:
     enabled: true
 
-
   jpa:
     hibernate:
-      # Flyway is authoritative for schema. Hibernate only ever validates -
-      # it must never create or alter the schema itself (spec §60).
       ddl-auto: validate
     open-in-view: false
 
@@ -24,6 +21,7 @@ management:
       exposure:
         include: health, info, prometheus
 
-# Activate with SPRING_PROFILES_ACTIVE=dev locally to enable DataSeeder and
-# any dev-only beans (e.g. DevOtpDeliveryService from Phase 9).
-# The "test" profile is activated automatically by @ActiveProfiles in tests.
+voxticket:
+  commerce:
+    returns:
+      window-days: 30
