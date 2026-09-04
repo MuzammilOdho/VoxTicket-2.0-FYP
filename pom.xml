@@ -19,11 +19,10 @@
 
     <properties>
         <java.version>21</java.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
     </properties>
 
     <dependencies>
-        <!-- FIX: spring-boot-starter-web was renamed to spring-boot-starter-webmvc
-             in Spring Boot 4 (part of the module-splitting effort). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
@@ -44,10 +43,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- FIX: in Spring Boot 4, FlywayAutoConfiguration lives in its own module,
-             which the starter pulls in. The raw flyway-core/flyway-database-postgresql
-             jars alone are NOT auto-configured anymore - this is what caused the
-             "missing table [customers]" failure (migrations never ran). -->
+        <!-- Schema migrations -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>
@@ -57,7 +53,15 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Observability scaffolding (used lightly now, expanded in Phase 13) -->
+        <!-- AI: OpenAI-compatible client, pointed at Groq (spec §54). Model IDs
+             stay configuration-driven per the resolved architecture decision -
+             see application.yml voxticket.ai.tier1-model/tier2-model. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
+        </dependency>
+
+        <!-- Observability scaffolding -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -79,9 +83,6 @@
             <artifactId>spring-boot-testcontainers</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- FIX: Testcontainers 2.x renamed these artifacts (testcontainers-junit-jupiter,
-             testcontainers-postgresql instead of junit-jupiter, postgresql). Java package
-             names and APIs are unchanged - only the Maven coordinates moved. -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
@@ -96,15 +97,17 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- FIX: was pinned to 1.20.4 (Nov 2024), which still carries the vulnerable
-                 commons-compress 1.24.0 (CVE-2024-25710 / CVE-2024-26308, fixed upstream
-                 in commons-compress 1.26.0). 2.0.5 is current and clean. Explicitly pinning
-                 here rather than dropping the override entirely, so the exact version in
-                 use is known rather than inferred from Spring Boot's own managed default. -->
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>2.0.5</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

@@ -1,21 +1,33 @@
 package com.voxticket.api.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+import com.voxticket.agent.SupportAgent;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.repository.CustomerRepository;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/** Phase 4 acceptance test: chat exercises the real shared runtime end-to-end without going through voice. */
+/**
+ * Phase 4's acceptance test, updated for Phase 5: SupportAgent is replaced
+ * with a mock so this stays a test of the controller/runtime/session
+ * wiring, not of live model behavior (which needs a real Groq API key and
+ * network access that neither this sandbox nor a default checkout has).
+ * The AI integration itself is reviewed by hand - see the Phase 5 status
+ * notes for how to verify it manually with a real key.
+ */
 @Testcontainers
 @ActiveProfiles("test")
 @SpringBootTest
@@ -30,6 +42,13 @@ class ChatControllerIntegrationTest {
     private ChatController chatController;
     @Autowired
     private CustomerRepository customerRepository;
+    @MockitoBean
+    private SupportAgent supportAgent;
+
+    @BeforeEach
+    void stubSupportAgent() {
+        when(supportAgent.respond(any(), any())).thenReturn("stubbed agent response");
+    }
 
     @Test
     void anonymousChatWithNoPhoneStaysAnonymous() {
@@ -39,7 +58,7 @@ class ChatControllerIntegrationTest {
 
         assertThat(response.identityAssurance()).isEqualTo("ANONYMOUS");
         assertThat(response.turnNumber()).isEqualTo(1);
-        assertThat(response.text()).isNotBlank();
+        assertThat(response.text()).isEqualTo("stubbed agent response");
     }
 
     @Test

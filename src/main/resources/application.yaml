@@ -15,6 +15,24 @@ spring:
       ddl-auto: validate
     open-in-view: false
 
+  ai:
+    openai:
+      base-url: https://api.groq.com/openai/v1
+      api-key: ${GROQ_API_KEY:test-key-placeholder}
+      chat:
+        model: openai/gpt-oss-20b
+        temperature: 0.3
+        # Groq-specific pass-through (spring.ai.openai.chat.extra-body.* becomes a top-level
+        # request field). GPT-OSS models on Groq return reasoning via include_reasoning
+        # (default true) as a non-standard extension field; Spring AI's tool-calling loop
+        # then echoes that field back on the follow-up request after executing a tool call,
+        # and Groq rejects it on an inbound assistant message. Turning it off here stops the
+        # model from returning it at all, so there's nothing to echo back - and it also
+        # satisfies spec §61's "do not expose chain-of-thought", which VoxTicket should be
+        # doing regardless of this bug.
+        extra-body:
+          include_reasoning: false
+
 management:
   endpoints:
     web:
@@ -25,3 +43,6 @@ voxticket:
   commerce:
     returns:
       window-days: 30
+  ai:
+    tier1-model: openai/gpt-oss-20b
+    tier2-model: openai/gpt-oss-120b

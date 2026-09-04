@@ -41,7 +41,7 @@ public class ConversationSession {
         this.lastActivityAt = this.createdAt;
     }
 
-    static ConversationSession newSession(String sessionId, Channel channel) {
+    public static ConversationSession newSession(String sessionId, Channel channel) {
         return new ConversationSession(sessionId, channel);
     }
 

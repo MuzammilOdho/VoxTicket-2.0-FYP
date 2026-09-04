@@ -1,21 +1,30 @@
 package com.voxticket.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.agent.SupportAgent;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.IdentityService;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class ConversationRuntimeTest {
 
     private final IdentityService identityService = mock(IdentityService.class);
-    private final ConversationRuntime runtime = new ConversationRuntime(new InMemorySessionStore(), identityService);
+    private final SupportAgent supportAgent = mock(SupportAgent.class);
+    private final ConversationRuntime runtime = new ConversationRuntime(new InMemorySessionStore(), identityService, supportAgent);
+
+    @BeforeEach
+    void stubSupportAgent() {
+        when(supportAgent.respond(any(), any())).thenReturn("stubbed agent response");
+    }
 
     @Test
     void firstTurnWithNoPhoneStaysAnonymous() {
@@ -25,6 +34,7 @@ class ConversationRuntimeTest {
 
         assertThat(response.conversationState().identityAssurance()).isEqualTo(IdentityAssurance.ANONYMOUS);
         assertThat(response.conversationState().turnNumber()).isEqualTo(1);
+        assertThat(response.text()).isEqualTo("stubbed agent response");
         assertThat(response.requiresVerification()).isFalse();
         assertThat(response.requiresConfirmation()).isFalse();
     }
