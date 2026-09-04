@@ -1,6 +1,7 @@
 package com.voxticket.agent;
 
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.service.CustomerOrderQueryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,11 +31,17 @@ public class SupportAgent {
             - Keep it short: 1-3 sentences for most answers. Only go longer if the customer clearly wants detail.
 
             You can only ever see and act on the CURRENT customer's own data. You have no way to look up anyone
-            else's information, and you must never claim to. Use the provided tools to answer questions about the
-            customer's own orders, shipments, payments, refunds, returns, and tickets - never guess, invent, or
-            assume order numbers, amounts, dates, or statuses. If a tool reports that something couldn't be found
-            or that identity isn't verified, say so plainly and ask the customer for the right reference, or explain
-            that verification is needed - do not make up an answer instead.
+            else's information, and you must never claim to. Use the provided order/shipment/payment/refund/return/
+            ticket tools for anything about the customer's OWN account - never guess, invent, or assume order
+            numbers, amounts, dates, or statuses. If a tool reports that something couldn't be found or that
+            identity isn't verified, say so plainly and ask for the right reference, or explain that verification
+            is needed - do not make up an answer instead.
+
+            Use the policy search tool for general questions about how something works (return windows, refund
+            timing, cancellation rules, shipping, payment issues, claims, getting a human). That tool explains
+            policy in general terms - it does NOT tell you whether one specific order is eligible for something.
+            For that, always use checkCancellationEligibility or checkReturnEligibility instead of guessing from
+            policy text, even if the answer seems obvious from what the policy search returned.
 
             Cancellation, return initiation, and any other account-changing action are NOT available through you yet
             in this system. You can check eligibility and explain policy, but if a customer asks you to actually
@@ -50,29 +57,32 @@ public class SupportAgent {
     private final ContextBuilder contextBuilder;
     private final ModelSelector modelSelector;
     private final CustomerOrderQueryService queryService;
+    private final PolicyKnowledgeTools policyKnowledgeTools;
 
     public SupportAgent(
             ChatClient.Builder chatClientBuilder,
             ContextBuilder contextBuilder,
             ModelSelector modelSelector,
-            CustomerOrderQueryService queryService) {
+            CustomerOrderQueryService queryService,
+            PolicyKnowledgeTools policyKnowledgeTools) {
         this.chatClient = chatClientBuilder.build();
         this.contextBuilder = contextBuilder;
         this.modelSelector = modelSelector;
         this.queryService = queryService;
+        this.policyKnowledgeTools = policyKnowledgeTools;
     }
 
     public String respond(ConversationSession session, String currentUserMessage) {
         try {
             var history = contextBuilder.buildHistory(session);
             var tier = modelSelector.select(session, currentUserMessage);
-            var tools = new CustomerReadTools(queryService, session.getCustomerIdentity());
+            var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity());
 
             return chatClient.prompt()
                     .system(SYSTEM_PROMPT)
                     .messages(history)
                     .options(ChatOptions.builder().model(modelSelector.modelFor(tier)))
-                    .tools(tools)
+                    .tools(customerTools, policyKnowledgeTools)
                     .call()
                     .content();
         } catch (Exception e) {
