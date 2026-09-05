@@ -15,18 +15,18 @@ import org.springframework.ai.vectorstore.VectorStore;
 class RagServiceTest {
 
     private final VectorStore vectorStore = mock(VectorStore.class);
-    private final RagService ragService = new RagService(vectorStore);
+    private final RagService ragService = new RagService(vectorStore, 3, 0.5);
 
     @Test
     void mapsRetrievedDocumentsToPolicySnippetsWithCategoryAndText() {
-        Document doc = new Document("Returns are accepted within 30 days.", Map.of("category", "returns-policy"));
+        Document doc = new Document("Return window: 30 days.", Map.of("category", "returns-policy"));
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc));
 
         List<RagService.PolicySnippet> results = ragService.searchPolicy("how long do I have to return something");
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).category()).isEqualTo("returns-policy");
-        assertThat(results.get(0).text()).isEqualTo("Returns are accepted within 30 days.");
+        assertThat(results.get(0).text()).isEqualTo("Return window: 30 days.");
     }
 
     @Test
@@ -34,9 +34,7 @@ class RagServiceTest {
         Document doc = new Document("Some policy text.", Map.of());
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of(doc));
 
-        List<RagService.PolicySnippet> results = ragService.searchPolicy("test query");
-
-        assertThat(results.get(0).category()).isEqualTo("policy");
+        assertThat(ragService.searchPolicy("test query").get(0).category()).isEqualTo("policy");
     }
 
     @Test

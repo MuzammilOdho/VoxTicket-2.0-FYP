@@ -1,4 +1,5 @@
-Once a refund is initiated, it can take a little time to show up, since it depends on how the order was originally paid. 
-If it was a card or wallet payment, the refund is created right away on our side, 
-but it usually takes your bank a few business days to actually post it to your account.
-If a refund shows as pending, that's completely normal - it means it's been started and is on its way, just not settled yet.
+Refund creation: once approved, a refund is created immediately in the system with status PENDING.
+Settlement time: card and wallet refunds typically take a few business days to post to the customer's account after being marked SUCCEEDED, depending on the bank or provider.
+COD orders: cash-on-delivery orders that were never charged produce no refund, since no payment was collected.
+Refund failure: a refund can fail with status FAILED due to a provider-side issue; this does not mean the money was lost, and the case should be investigated rather than retried automatically.
+Partial refunds: a payment can have more than one refund; the payment is only fully REFUNDED once the total refunded amount equals the original payment amount.

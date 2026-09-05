@@ -17,33 +17,31 @@ spring:
 
   ai:
     model:
-      # Explicit now that two providers are on the classpath (OpenAI-compatible for
-      # chat, Ollama for embeddings) - without this, Spring Boot has two competing
-      # ChatModel/EmbeddingModel candidates and autoconfiguration is ambiguous.
       chat: openai
       embedding: ollama
 
     openai:
       base-url: https://api.groq.com/openai/v1
       api-key: ${GROQ_API_KEY:test-key-placeholder}
-      chat:
-        model: openai/gpt-oss-20b
-        temperature: 0.3
-        extra-body:
-          include_reasoning: false
 
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       embedding:
-        model: nomic-embed-text
+        model: bge-m3
 
     vectorstore:
       pgvector:
         initialize-schema: false
         schema-validation: true
-        dimensions: 768
+        dimensions: 1024
         index-type: HNSW
         distance-type: COSINE_DISTANCE
+
+    tools:
+      limits:
+        on-limit-exceeded: THROW
+        max-total-tool-calls: 10
+        max-calls-per-tool-default: 5
 
 management:
   endpoints:
@@ -58,3 +56,11 @@ voxticket:
   ai:
     tier1-model: openai/gpt-oss-20b
     tier2-model: openai/gpt-oss-120b
+    temperature: 0.3
+  rag:
+    top-k: 3
+    similarity-threshold: 0.5
+  safety:
+    prompt-guard:
+      provider: ml  # set to "ml" once you've verified the real classifier against a live account
+      ml-model: meta-llama/llama-prompt-guard-2-86m

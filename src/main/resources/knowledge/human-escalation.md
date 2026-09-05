@@ -1,2 +1,3 @@
-If you'd rather speak with a person, or if something needs more attention than I can give it, just let me know and I can get you connected to our support team. 
-I'll make sure they have the context of what we've already discussed so you don't have to repeat yourself.
+Escalation trigger: a customer may request a human agent at any time.
+Escalation process: escalating creates a support ticket and preserves relevant order, return, refund, or claim references so the human agent has context.
+Live transfer: real-time phone transfer to a human agent is not implemented; escalation currently means a ticket and handoff summary, not an immediate live conversation.

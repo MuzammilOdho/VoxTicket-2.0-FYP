@@ -1,4 +1,6 @@
-You can cancel an order as long as it hasn't been fulfilled or shipped yet.
-Once an order has shipped, we're no longer able to cancel it, but you're welcome to return it instead once it arrives.
-If you paid by card and the order gets cancelled, we'll issue a refund. If it was cash on delivery and hadn't been charged yet,
-there's nothing to refund since no payment was collected.
+Eligibility: an order can be cancelled only while it is unfulfilled and not yet shipped.
+Ineligible states: an order that has shipped, is already cancelled, or is already completed cannot be cancelled.
+Payment consequence for COD: cash-on-delivery orders with no payment collected require no refund on cancellation.
+Payment consequence for authorized-only card payments: the authorization is voided; no funds were captured, so no refund is needed.
+Payment consequence for captured card or wallet payments: a refund is created for the full paid amount.
+Ambiguous payment states: a non-COD payment still PENDING at cancellation time is routed to manual review rather than an automatic refund decision.

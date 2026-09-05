@@ -10,6 +10,7 @@ import com.voxticket.identity.InsufficientAssuranceException;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.persistence.entity.enums.FulfillmentStatus;
 import com.voxticket.persistence.entity.enums.OrderStatus;
+import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
 import com.voxticket.service.dto.OrderSummaryView;
 import java.math.BigDecimal;
@@ -42,8 +43,8 @@ class CustomerReadToolsTest {
 
         Object result = tools.getMyOrderSummary("ORD-99999");
 
-        assertThat(result).isInstanceOf(CustomerReadTools.ToolError.class);
-        assertThat(((CustomerReadTools.ToolError) result).code()).isEqualTo("NOT_FOUND_FOR_ACCOUNT");
+        assertThat(result).isInstanceOf(ToolError.class);
+        assertThat(((ToolError) result).code()).isEqualTo("NOT_FOUND_FOR_ACCOUNT");
     }
 
     @Test
@@ -53,8 +54,8 @@ class CustomerReadToolsTest {
 
         Object result = tools.getMyOrderSummary("ORD-10001");
 
-        assertThat(result).isInstanceOf(CustomerReadTools.ToolError.class);
-        assertThat(((CustomerReadTools.ToolError) result).code()).isEqualTo("IDENTITY_NOT_VERIFIED");
+        assertThat(result).isInstanceOf(ToolError.class);
+        assertThat(((ToolError) result).code()).isEqualTo("IDENTITY_NOT_VERIFIED");
     }
 
     @Test
@@ -63,8 +64,8 @@ class CustomerReadToolsTest {
 
         Object result = tools.getMyPaymentStatus("ORD-10001");
 
-        assertThat(result).isInstanceOf(CustomerReadTools.ToolError.class);
-        assertThat(((CustomerReadTools.ToolError) result).code()).isEqualTo("NO_PAYMENT_RECORD");
+        assertThat(result).isInstanceOf(ToolError.class);
+        assertThat(((ToolError) result).code()).isEqualTo("NO_PAYMENT_RECORD");
     }
 
     @Test
@@ -73,7 +74,19 @@ class CustomerReadToolsTest {
 
         Object result = tools.getMyRefundStatus("ORD-10001");
 
-        assertThat(result).isInstanceOf(CustomerReadTools.ToolError.class);
-        assertThat(((CustomerReadTools.ToolError) result).code()).isEqualTo("NO_REFUND_RECORD");
+        assertThat(result).isInstanceOf(ToolError.class);
+        assertThat(((ToolError) result).code()).isEqualTo("NO_REFUND_RECORD");
+    }
+
+    @Test
+    void anInjectionStyledOrderReferenceIsHandledAsAnOrdinaryNonexistentReference() {
+        String injectionAttempt = "'; DROP TABLE orders; --";
+        when(queryService.getOrderSummary(identity, injectionAttempt))
+                .thenThrow(new ResourceNotFoundForAccountException("ORDER", injectionAttempt));
+
+        Object result = tools.getMyOrderSummary(injectionAttempt);
+
+        assertThat(result).isInstanceOf(ToolError.class);
+        assertThat(((ToolError) result).code()).isEqualTo("NOT_FOUND_FOR_ACCOUNT");
     }
 }

@@ -1,4 +1,4 @@
-If a payment shows as failed or still pending, that usually means it either didn't go through or is still being processed by your bank or payment provider.
-It's worth checking with your bank if a pending payment doesn't resolve within a day or two. 
-If you're seeing a charge you don't recognize or think you might have been charged twice, 
-let us know the order number and we'll look into the payment details for you.
+Failed payment: a FAILED payment status means the payment attempt did not succeed and was not collected.
+Pending payment: a PENDING payment status means the payment is still being processed, or for COD has not yet been collected.
+Duplicate or unrecognized charges: these should be investigated using the specific order and payment reference rather than assumed to be an error.
+Payment methods supported: card, wallet, bank transfer, and cash on delivery.
