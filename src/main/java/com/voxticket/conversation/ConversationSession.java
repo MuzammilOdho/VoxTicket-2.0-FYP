@@ -2,11 +2,14 @@ package com.voxticket.conversation;
 
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
+import com.voxticket.procedure.ProcedureSlotResult;
+import com.voxticket.procedure.ProcedureState;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Spec §6. Channel-neutral, in-memory conversational state - never a JPA
@@ -32,6 +35,9 @@ public class ConversationSession {
     private int turnCount = 0;
     private final Instant createdAt;
     private Instant lastActivityAt;
+    private ProcedureState activeProcedure;
+    private ProcedureState pausedProcedure;
+    private boolean escalated;
 
     private ConversationSession(String sessionId, Channel channel) {
         this.sessionId = sessionId;
@@ -69,17 +75,6 @@ public class ConversationSession {
         }
     }
 
-    /**
-     * Resolution happens at most once per session. If still ANONYMOUS, any
-     * resolution result is accepted - including another ANONYMOUS result,
-     * which is a legitimate outcome for an unrecognized number, not an
-     * error. Once anchored to a specific customer, only a strictly higher
-     * assurance level for that SAME customer is accepted; attempts to
-     * switch to a different customer, or to downgrade, are silently
-     * ignored. This is what stops one chat session from re-labeling itself
-     * as a different customer mid-conversation just by sending a different
-     * customerPhone on a later request.
-     */
     public void applyResolvedIdentity(CustomerIdentity resolved) {
         if (resolved == null) {
             return;
@@ -93,6 +88,49 @@ public class ConversationSession {
         if (sameCustomer && strictlyHigherAssurance) {
             customerIdentity = resolved;
         }
+    }
+
+    /**
+     * Spec §13/§14. If neither slot is occupied, the new procedure becomes
+     * active directly. If only active is occupied, the new procedure
+     * becomes active and the previous one is paused (spec §14's
+     * interruption rule). If both are occupied, nothing is created or
+     * discarded - the caller must ask the customer which existing one to
+     * continue (the resolved "third procedure" decision).
+     */
+    public ProcedureSlotResult beginProcedure(ProcedureState newProcedure) {
+        if (activeProcedure == null) {
+            activeProcedure = newProcedure;
+            return ProcedureSlotResult.STARTED;
+        }
+        if (pausedProcedure == null) {
+            pausedProcedure = activeProcedure;
+            activeProcedure = newProcedure;
+            return ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS;
+        }
+        return ProcedureSlotResult.BOTH_SLOTS_OCCUPIED;
+    }
+
+    /** Called once the active procedure reaches a terminal state - the paused one (if any) resumes as active. */
+    public void clearActiveProcedure() {
+        activeProcedure = pausedProcedure;
+        pausedProcedure = null;
+    }
+
+    public Optional<ProcedureState> getActiveProcedure() {
+        return Optional.ofNullable(activeProcedure);
+    }
+
+    public Optional<ProcedureState> getPausedProcedure() {
+        return Optional.ofNullable(pausedProcedure);
+    }
+
+    public void markEscalated() {
+        this.escalated = true;
+    }
+
+    public boolean isEscalated() {
+        return escalated;
     }
 
     public void touch() {

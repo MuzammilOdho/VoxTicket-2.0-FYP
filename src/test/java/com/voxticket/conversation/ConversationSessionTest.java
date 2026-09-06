@@ -94,4 +94,73 @@ class ConversationSessionTest {
 
         assertThat(session.getCustomerIdentity()).isEqualTo(phoneMatched);
     }
+
+    @org.junit.jupiter.api.Test
+    void firstProcedureBecomesActiveDirectly() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        var procedure = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
+
+        var result = session.beginProcedure(procedure);
+
+        assertThat(result).isEqualTo(com.voxticket.procedure.ProcedureSlotResult.STARTED);
+        assertThat(session.getActiveProcedure()).contains(procedure);
+        assertThat(session.getPausedProcedure()).isEmpty();
+    }
+
+    @org.junit.jupiter.api.Test
+    void secondProcedurePausesTheFirst() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        var first = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
+        var second = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
+
+        session.beginProcedure(first);
+        var result = session.beginProcedure(second);
+
+        assertThat(result).isEqualTo(com.voxticket.procedure.ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS);
+        assertThat(session.getActiveProcedure()).contains(second);
+        assertThat(session.getPausedProcedure()).contains(first);
+    }
+
+    @org.junit.jupiter.api.Test
+    void thirdProcedureIsRejectedWithBothSlotsUntouched() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        var first = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
+        var second = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
+        var third = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.CANCELLATION, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
+
+        session.beginProcedure(first);
+        session.beginProcedure(second);
+        var result = session.beginProcedure(third);
+
+        assertThat(result).isEqualTo(com.voxticket.procedure.ProcedureSlotResult.BOTH_SLOTS_OCCUPIED);
+        assertThat(session.getActiveProcedure()).contains(second);
+        assertThat(session.getPausedProcedure()).contains(first);
+    }
+
+    @org.junit.jupiter.api.Test
+    void clearingActiveProcedureResumesThePausedOne() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        var first = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
+        var second = new com.voxticket.procedure.ProcedureState(
+                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
+        session.beginProcedure(first);
+        session.beginProcedure(second);
+
+        session.clearActiveProcedure();
+
+        assertThat(session.getActiveProcedure()).contains(first);
+        assertThat(session.getPausedProcedure()).isEmpty();
+    }
+
+    private com.voxticket.identity.VerifiedOrderRef dummyRef() {
+        return new com.voxticket.identity.VerifiedOrderRef(
+                UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED, Instant.now());
+    }
 }
