@@ -137,7 +137,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <!-- @Tag("manual") tests need live infra (Ollama) and must never run in normal `mvn test`. -->
-<!--                    <excludedGroups>manual</excludedGroups>-->
+                    <excludedGroups>manual</excludedGroups>
                 </configuration>
             </plugin>
 

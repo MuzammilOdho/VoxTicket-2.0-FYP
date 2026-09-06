@@ -39,9 +39,9 @@ spring:
 
     tools:
       limits:
-        on-limit-exceeded: THROW
-        max-total-tool-calls: 10
         max-calls-per-tool-default: 5
+        max-total-tool-calls: 10
+        on-limit-exceeded: THROW
 
 management:
   endpoints:
@@ -62,5 +62,6 @@ voxticket:
     similarity-threshold: 0.5
   safety:
     prompt-guard:
-      provider: ml  # set to "ml" once you've verified the real classifier against a live account
+      provider: ml  #"ml" for groq model based and "heauristic" for regex based prompt guard
       ml-model: meta-llama/llama-prompt-guard-2-86m
+      ml-threshold: 0.5
