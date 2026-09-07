@@ -28,6 +28,7 @@ public class ConversationRuntime {
             "I'm not able to help with that. I can help with questions about your orders, shipments, payments, refunds, returns, or support tickets.";
     private static final String TOO_LONG_MESSAGE = "That message was too long for me to process - could you break it into shorter messages?";
     private static final String REDACTED_FLAGGED_PLACEHOLDER = "[message withheld - flagged by security filter]";
+    private static final String PROCEDURE_FAILURE_MESSAGE = "Something went wrong while processing that - please try again, or ask for a human agent.";
 
     private final SessionStore sessionStore;
     private final IdentityService identityService;
@@ -94,7 +95,7 @@ public class ConversationRuntime {
                 ConfirmationDecision decision = confirmationClassifier.classify(normalizedText);
                 turnNumber = session.recordUserMessage(normalizedText);
                 responseText = switch (decision) {
-                    case YES -> procedureCoordinator.confirmActive(session).message();
+                    case YES -> confirmWithSafeFallback(session);
                     case NO -> procedureCoordinator.declineActive(session).message();
                     case UNCLEAR -> supportAgent.respond(session, normalizedText);
                 };
@@ -110,6 +111,22 @@ public class ConversationRuntime {
             logTurnEnd(session, turnNumber, startNanos, false);
             return new AssistantTurn(responseText, false, stillAwaitingConfirmation, stateView(session, turnNumber), Map.of());
         });
+    }
+
+    /**
+     * FIX (transactional safety): confirmActive() now lets mutation failures propagate out of
+     * its @Transactional boundary instead of swallowing them, so Spring's rollback runs
+     * correctly. This is the "appropriate outer boundary" that catches the result and turns it
+     * into a safe, generic customer-facing message - deliberately generic, since the specific
+     * failure reason is already logged with full detail inside the coordinator.
+     */
+    private String confirmWithSafeFallback(ConversationSession session) {
+        try {
+            return procedureCoordinator.confirmActive(session).message();
+        } catch (Exception e) {
+            log.error("event=procedure_confirmation_failed sessionId={} errorType={}", session.getSessionId(), e.getClass().getSimpleName(), e);
+            return PROCEDURE_FAILURE_MESSAGE;
+        }
     }
 
     private void logTurnEnd(ConversationSession session, int turnNumber, long startNanos, boolean withheld) {

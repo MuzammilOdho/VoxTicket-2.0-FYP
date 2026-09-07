@@ -1,6 +1,8 @@
 package com.voxticket.procedure;
 
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.RecentAction;
+import com.voxticket.conversation.RecentActionType;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.OwnedOrderItemResolver;
@@ -24,17 +26,17 @@ import com.voxticket.persistence.repository.PaymentRepository;
 import com.voxticket.persistence.repository.SupportTicketRepository;
 import com.voxticket.policy.ActionPolicyService;
 import com.voxticket.policy.ActionRequest;
-import com.voxticket.policy.PolicyOutcome;
+import com.voxticket.policy.CancellationEligibility;
+import com.voxticket.policy.CancellationPolicyService;
+import com.voxticket.policy.PaymentConsequence;
 import com.voxticket.policy.PolicyDecision;
+import com.voxticket.policy.PolicyOutcome;
+import com.voxticket.policy.ReturnEligibility;
+import com.voxticket.policy.ReturnPolicyService;
 import com.voxticket.service.CancellationService;
 import com.voxticket.service.ClaimService;
 import com.voxticket.service.ReferenceNumberGenerator;
 import com.voxticket.service.ReturnService;
-import com.voxticket.policy.CancellationEligibility;
-import com.voxticket.policy.CancellationPolicyService;
-import com.voxticket.policy.PaymentConsequence;
-import com.voxticket.policy.ReturnEligibility;
-import com.voxticket.policy.ReturnPolicyService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -45,14 +47,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Spec §12/§13/§19/§20/§21. The single place a stateful procedure is
- * created, advanced, or executed. Tool methods (ProcedureRequestTools) only
- * ever call the start* methods; only ConversationRuntime calls
- * confirmActive/declineActive, and only after its own deterministic
- * ConfirmationClassifier - never as something the model can trigger via a
- * tool call.
- */
 @Service
 public class ProcedureCoordinator {
 
@@ -162,6 +156,7 @@ public class ProcedureCoordinator {
         return beginProcedure(session, ProcedureType.CLAIM, ref, data, IdentityAssurance.PHONE_MATCHED, description);
     }
 
+    /** FIX (idempotency): if this session already escalated, reuse that outcome rather than opening a second ticket. */
     @Transactional
     public ProcedureOutcome requestHumanSupport(ConversationSession session, String reason) {
         CustomerIdentity identity = session.getCustomerIdentity();
@@ -169,11 +164,24 @@ public class ProcedureCoordinator {
             return ProcedureOutcome.error(
                     "IDENTITY_NOT_VERIFIED", "I can connect you with our team, but I'll need your registered phone number first so they can pull up your account.");
         }
+
+        if (session.isEscalated()) {
+            String existingTicket = session.getRecentActions().stream()
+                    .filter(a -> a.type() == RecentActionType.ESCALATED)
+                    .reduce((first, second) -> second)
+                    .map(RecentAction::reference)
+                    .orElse(null);
+            return ProcedureOutcome.ok("ALREADY_ESCALATED", existingTicket != null
+                    ? "You're already connected to our support team on ticket " + existingTicket + " - they have the details already."
+                    : "You're already connected to our support team for this conversation.");
+        }
+
         Customer customer = customerRepository.findById(identity.requireCustomerId()).orElseThrow();
         String summary = buildHandoffSummary(session, reason);
         SupportTicket ticket = supportTicketRepository.save(new SupportTicket(
                 referenceNumberGenerator.ticketNumber(), customer, null, TicketCategory.ESCALATION, TicketPriority.MEDIUM, summary));
         session.markEscalated();
+        session.recordAction(new RecentAction(RecentActionType.ESCALATED, "SUPPORT", "OPEN", null, ticket.getTicketNumber(), Instant.now()));
         log.info("event=procedure_escalated ticketNumber={}", ticket.getTicketNumber());
         return ProcedureOutcome.ok("ESCALATED", "I've let our support team know - reference " + ticket.getTicketNumber()
                 + ". They'll have the details of what we've discussed so far.");
@@ -194,8 +202,6 @@ public class ProcedureCoordinator {
             return ProcedureOutcome.error("EXPIRED", "That request has expired - let's start again if you'd still like to go ahead.");
         }
 
-        // Final defense-in-depth re-check right before mutation - confirms assurance still holds now that
-        // the customer has actually said yes, rather than trusting the state from when the request began.
         PolicyDecision recheck = actionPolicyService.evaluate(new ActionRequest(procedure.getType(), procedure.getRequiredAssurance(), true), session);
         if (recheck.outcome() != PolicyOutcome.ALLOW) {
             procedure.setStatus(ProcedureStatus.FAILED);
@@ -203,8 +209,24 @@ public class ProcedureCoordinator {
             return ProcedureOutcome.error("VERIFICATION_REQUIRED", "This still needs identity verification we can't complete yet in this version of the system.");
         }
 
-        ProcedureOutcome outcome = execute(procedure);
-        procedure.setStatus(outcome.success() ? ProcedureStatus.EXECUTED : ProcedureStatus.FAILED);
+        // FIX (transactional safety): a mutation failure here must propagate OUT of this
+        // @Transactional method so Spring rolls back everything, rather than being swallowed
+        // and returned as a normal-looking result while the underlying transaction may already
+        // be marked rollback-only. Session-state cleanup below is safe to do either way - it's
+        // an in-memory object, not part of the JPA transaction - so it runs before the rethrow,
+        // then the exception propagates to ConversationRuntime, which is the appropriate outer
+        // boundary for turning it into a customer-facing message.
+        ProcedureOutcome outcome;
+        try {
+            outcome = execute(session, procedure);
+        } catch (RuntimeException e) {
+            log.error("event=procedure_execution_failed type={} orderNumber={} errorType={}",
+                    procedure.getType(), procedure.getVerifiedTarget().orderNumber(), e.getClass().getSimpleName(), e);
+            procedure.setStatus(ProcedureStatus.FAILED);
+            session.clearActiveProcedure();
+            throw e;
+        }
+        procedure.setStatus(ProcedureStatus.EXECUTED);
         session.clearActiveProcedure();
         return outcome;
     }
@@ -267,42 +289,45 @@ public class ProcedureCoordinator {
         return ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "Just to confirm - you'd like to " + actionDescription + pausedNote);
     }
 
-    private ProcedureOutcome execute(ProcedureState procedure) {
-        try {
-            return switch (procedure.getType()) {
-                case CANCELLATION -> executeCancellation(procedure);
-                case RETURN -> executeReturn(procedure);
-                case CLAIM -> executeClaim(procedure);
-            };
-        } catch (Exception e) {
-            log.error("event=procedure_execution_failed type={} orderNumber={} errorType={}",
-                    procedure.getType(), procedure.getVerifiedTarget().orderNumber(), e.getClass().getSimpleName(), e);
-            return ProcedureOutcome.error("EXECUTION_FAILED", "Something went wrong while processing that - please try again, or ask for a human agent.");
-        }
+    /** FIX (continuity): each branch now records a RecentAction on success so later follow-ups ("how will I receive the money?") can reference it. */
+    private ProcedureOutcome execute(ConversationSession session, ProcedureState procedure) {
+        return switch (procedure.getType()) {
+            case CANCELLATION -> executeCancellation(session, procedure);
+            case RETURN -> executeReturn(session, procedure);
+            case CLAIM -> executeClaim(session, procedure);
+        };
     }
 
-    private ProcedureOutcome executeCancellation(ProcedureState procedure) {
+    private ProcedureOutcome executeCancellation(ConversationSession session, ProcedureState procedure) {
         var result = cancellationService.cancel(procedure.getVerifiedTarget());
-        return ProcedureOutcome.ok("CANCELLED",
-                "Order " + result.orderNumber() + " has been cancelled." + describePaymentConsequence(result.paymentConsequence()));
+        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, result.orderNumber(), "CANCELLED", null, result.orderNumber(), Instant.now()));
+        if (result.refund() != null) {
+            session.recordAction(new RecentAction(
+                    RecentActionType.REFUND_INITIATED, result.orderNumber(), result.refund().getStatus().name(),
+                    result.refund().getAmount(), result.refund().getRefundNumber(), Instant.now()));
+        }
+        return ProcedureOutcome.ok("CANCELLED", "Order " + result.orderNumber() + " has been cancelled." + describePaymentConsequence(result.paymentConsequence()));
     }
 
-    private ProcedureOutcome executeReturn(ProcedureState procedure) {
+    private ProcedureOutcome executeReturn(ConversationSession session, ProcedureState procedure) {
         Map<String, String> data = procedure.getCollectedData();
         ReturnReason reason = ReturnReason.valueOf(data.get("reason"));
         var returnRequest = returnService.requestReturn(procedure.getVerifiedTarget(), data.get("itemReference"), 1, reason);
-        return ProcedureOutcome.ok("RETURN_STARTED",
-                "Return " + returnRequest.getReturnNumber() + " has been started for order " + procedure.getVerifiedTarget().orderNumber()
-                        + ". I'll let you know what to do with the item next.");
+        session.recordAction(new RecentAction(
+                RecentActionType.RETURN_REQUESTED, procedure.getVerifiedTarget().orderNumber(), returnRequest.getStatus().name(),
+                null, returnRequest.getReturnNumber(), Instant.now()));
+        return ProcedureOutcome.ok("RETURN_STARTED", "Return " + returnRequest.getReturnNumber() + " has been started for order "
+                + procedure.getVerifiedTarget().orderNumber() + ". I'll let you know what to do with the item next.");
     }
 
-    private ProcedureOutcome executeClaim(ProcedureState procedure) {
+    private ProcedureOutcome executeClaim(ConversationSession session, ProcedureState procedure) {
         Map<String, String> data = procedure.getCollectedData();
         ClaimReason reason = ClaimReason.valueOf(data.get("reason"));
         var claim = claimService.fileClaim(procedure.getVerifiedTarget(), data.get("itemReference"), reason, ClaimResolution.MANUAL_REVIEW, data.get("description"));
-        return ProcedureOutcome.ok("CLAIM_FILED",
-                "I've filed claim " + claim.getClaimNumber() + " for order " + procedure.getVerifiedTarget().orderNumber()
-                        + " and opened a support ticket - our team will review it.");
+        session.recordAction(new RecentAction(
+                RecentActionType.CLAIM_FILED, procedure.getVerifiedTarget().orderNumber(), claim.getStatus().name(), null, claim.getClaimNumber(), Instant.now()));
+        return ProcedureOutcome.ok("CLAIM_FILED", "I've filed claim " + claim.getClaimNumber() + " for order "
+                + procedure.getVerifiedTarget().orderNumber() + " and opened a support ticket - our team will review it.");
     }
 
     private String describePaymentConsequence(PaymentConsequence consequence) {

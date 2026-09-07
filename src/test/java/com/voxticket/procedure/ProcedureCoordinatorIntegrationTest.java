@@ -1,9 +1,11 @@
 package com.voxticket.procedure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.RecentActionType;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.persistence.entity.Customer;
@@ -26,6 +28,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+
+import com.voxticket.policy.CancellationNotEligibleException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -203,5 +207,53 @@ class ProcedureCoordinatorIntegrationTest {
 
         assertThat(outcome.success()).isFalse();
         assertThat(outcome.code()).isEqualTo("NO_PENDING_CONFIRMATION");
+    }
+
+    @Test
+    void aFailureDuringExecutionPropagatesRatherThanBeingSwallowed() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.OTP_VERIFIED);
+        procedureCoordinator.startCancellation(session, order.getOrderNumber());
+
+        // Simulate the order becoming ineligible between the request and the confirmation (e.g.
+        // it shipped in the meantime) - CancellationService re-checks eligibility internally and
+        // will throw at confirm time even though the initial request passed.
+        order.setFulfillmentStatus(FulfillmentStatus.FULFILLED);
+        orderRepository.saveAndFlush(order);
+
+        assertThatThrownBy(() -> procedureCoordinator.confirmActive(session))
+                .isInstanceOf(CancellationNotEligibleException.class);
+
+        // The session isn't left stuck waiting on a confirmation that can never succeed.
+        assertThat(session.getActiveProcedure()).isEmpty();
+    }
+
+    @Test
+    void successfulClaimIsRecordedAsARecentActionForFollowUpReference() {
+        Order order = newOrder(BigDecimal.valueOf(1000));
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        String sku = order.getItems().get(0).getSku();
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+        procedureCoordinator.startClaim(session, order.getOrderNumber(), sku, "arrived damaged");
+
+        procedureCoordinator.confirmActive(session);
+
+        assertThat(session.getRecentActions()).anySatisfy(action -> {
+            assertThat(action.type()).isEqualTo(RecentActionType.CLAIM_FILED);
+            assertThat(action.target()).isEqualTo(order.getOrderNumber());
+        });
+    }
+
+    @Test
+    void repeatedHumanSupportRequestsReuseTheSameTicketRatherThanCreatingANewOne() {
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome first = procedureCoordinator.requestHumanSupport(session, "need help");
+        ProcedureOutcome second = procedureCoordinator.requestHumanSupport(session, "still need help");
+
+        assertThat(first.code()).isEqualTo("ESCALATED");
+        assertThat(second.code()).isEqualTo("ALREADY_ESCALATED");
+        assertThat(supportTicketRepository.findByCustomerId(customer.getId())).hasSize(1);
     }
 }
