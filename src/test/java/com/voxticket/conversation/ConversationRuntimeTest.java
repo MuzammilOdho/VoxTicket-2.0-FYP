@@ -26,6 +26,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import com.voxticket.verification.OtpInputClassifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,8 +40,9 @@ class ConversationRuntimeTest {
     private final ConfirmationClassifier confirmationClassifier = new ConfirmationClassifier();
     private final ProcedureCoordinator procedureCoordinator = mock(ProcedureCoordinator.class);
     private final InMemorySessionStore sessionStore = new InMemorySessionStore();
+    private final OtpInputClassifier otpInputClassifier = new OtpInputClassifier();
     private final ConversationRuntime runtime = new ConversationRuntime(
-            sessionStore, identityService, supportAgent, inputNormalizer, promptGuard, confirmationClassifier, procedureCoordinator);
+            sessionStore, identityService, supportAgent, inputNormalizer, promptGuard, confirmationClassifier, otpInputClassifier,  procedureCoordinator);
 
     @BeforeEach
     void stubSupportAgent() {

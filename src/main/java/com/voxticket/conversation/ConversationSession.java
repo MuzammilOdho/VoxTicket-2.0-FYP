@@ -10,15 +10,8 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-/**
- * Spec §6. Channel-neutral, in-memory conversational state - never a JPA
- * entity, never backed by PostgreSQL as the live store (spec §7).
- *
- * <p>Not thread-safe by itself. Every access must go through
- * {@link SessionStore#withSession}, which is the only thing that ever holds
- * a reference to an instance of this class.
- */
 public class ConversationSession {
 
     private static final int MAX_RECENT_ACTIONS = 10;
@@ -38,6 +31,7 @@ public class ConversationSession {
     private ProcedureState activeProcedure;
     private ProcedureState pausedProcedure;
     private boolean escalated;
+    private UUID pendingVerificationChallengeId;
 
     private ConversationSession(String sessionId, Channel channel) {
         this.sessionId = sessionId;
@@ -90,14 +84,6 @@ public class ConversationSession {
         }
     }
 
-    /**
-     * Spec §13/§14. If neither slot is occupied, the new procedure becomes
-     * active directly. If only active is occupied, the new procedure
-     * becomes active and the previous one is paused (spec §14's
-     * interruption rule). If both are occupied, nothing is created or
-     * discarded - the caller must ask the customer which existing one to
-     * continue (the resolved "third procedure" decision).
-     */
     public ProcedureSlotResult beginProcedure(ProcedureState newProcedure) {
         if (activeProcedure == null) {
             activeProcedure = newProcedure;
@@ -111,7 +97,6 @@ public class ConversationSession {
         return ProcedureSlotResult.BOTH_SLOTS_OCCUPIED;
     }
 
-    /** Called once the active procedure reaches a terminal state - the paused one (if any) resumes as active. */
     public void clearActiveProcedure() {
         activeProcedure = pausedProcedure;
         pausedProcedure = null;
@@ -131,6 +116,19 @@ public class ConversationSession {
 
     public boolean isEscalated() {
         return escalated;
+    }
+
+    /** Spec §6 "pendingVerification" - a lightweight reference only; the VerificationChallenge row in the database is the authoritative record. */
+    public void setPendingVerificationChallengeId(UUID challengeId) {
+        this.pendingVerificationChallengeId = challengeId;
+    }
+
+    public Optional<UUID> getPendingVerificationChallengeId() {
+        return Optional.ofNullable(pendingVerificationChallengeId);
+    }
+
+    public void clearPendingVerification() {
+        this.pendingVerificationChallengeId = null;
     }
 
     public void touch() {

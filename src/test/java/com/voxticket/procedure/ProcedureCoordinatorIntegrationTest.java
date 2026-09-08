@@ -43,7 +43,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 @ActiveProfiles("test")
-@SpringBootTest
+@SpringBootTest(properties = "voxticket.otp.resend-cooldown-seconds=0")
 @Transactional
 class ProcedureCoordinatorIntegrationTest {
 
@@ -116,18 +116,6 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(supportTicketRepository.findByCustomerId(customer.getId())).isNotEmpty();
     }
 
-    @Test
-    void cancellationStopsAtVerificationRequiredWhenOnlyPhoneMatched() {
-        Order order = newOrder(BigDecimal.valueOf(500));
-        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
-        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
-
-        ProcedureOutcome outcome = procedureCoordinator.startCancellation(session, order.getOrderNumber());
-
-        assertThat(outcome.success()).isFalse();
-        assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
-        assertThat(session.getActiveProcedure()).isEmpty(); // no slot consumed for a request that never even started
-    }
 
     @Test
     void cancellationCompletesEndToEndAtOtpVerifiedAssurance() {
@@ -256,4 +244,71 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(second.code()).isEqualTo("ALREADY_ESCALATED");
         assertThat(supportTicketRepository.findByCustomerId(customer.getId())).hasSize(1);
     }
+
+    @Test
+    void cancellationAtPhoneMatchedIssuesAVerificationChallengeInsteadOfJustRefusing() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startCancellation(session, order.getOrderNumber());
+
+        assertThat(outcome.success()).isTrue();
+        assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
+        assertThat(outcome.metadata()).containsKey("devOtp");
+        assertThat(session.getActiveProcedure()).isPresent();
+    }
+
+    @Test
+    void fullFlowFromPhoneMatchedThroughOtpToExecutedCancellation() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        procedureCoordinator.startCancellation(session, order.getOrderNumber());
+        // The tool-visible outcome no longer carries the code (see the test above) - fetch it
+        // through the safe, model-invisible resend path instead, exactly as a real dev/tester would.
+        ProcedureOutcome resent = procedureCoordinator.resendVerificationCode(session);
+        String code = resent.metadata().get("devOtp");
+
+        ProcedureOutcome verified = procedureCoordinator.submitVerificationCode(session, code);
+        assertThat(verified.code()).isEqualTo("CONFIRMATION_REQUIRED");
+        assertThat(session.getCustomerIdentity().assuranceLevel()).isEqualTo(IdentityAssurance.OTP_VERIFIED);
+
+        ProcedureOutcome executed = procedureCoordinator.confirmActive(session);
+        assertThat(executed.code()).isEqualTo("CANCELLED");
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    void wrongVerificationCodeKeepsTheProcedureWaitingRatherThanFailingOutright() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+        procedureCoordinator.startCancellation(session, order.getOrderNumber());
+
+        ProcedureOutcome result = procedureCoordinator.submitVerificationCode(session, "000000");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.code()).isEqualTo("VERIFICATION_FAILED");
+        assertThat(session.getActiveProcedure()).isPresent(); // still waiting, not discarded
+    }
+
+    @Test
+    void cancellationAtPhoneMatchedIssuesAVerificationChallengeWithoutLeakingTheCodeToTheModel() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startCancellation(session, order.getOrderNumber());
+
+        assertThat(outcome.success()).isTrue();
+        assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
+        // This exact outcome is what a @Tool method hands back to the model - it must never
+        // carry the OTP, unlike resendVerificationCode's outcome, which is model-invisible.
+        assertThat(outcome.metadata()).isEmpty();
+        assertThat(session.getActiveProcedure()).isPresent();
+    }
+
+
 }

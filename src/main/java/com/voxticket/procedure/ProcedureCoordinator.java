@@ -20,6 +20,7 @@ import com.voxticket.persistence.entity.enums.OrderStatus;
 import com.voxticket.persistence.entity.enums.ReturnReason;
 import com.voxticket.persistence.entity.enums.TicketCategory;
 import com.voxticket.persistence.entity.enums.TicketPriority;
+import com.voxticket.persistence.entity.enums.VerificationPurpose;
 import com.voxticket.persistence.repository.CustomerRepository;
 import com.voxticket.persistence.repository.OrderRepository;
 import com.voxticket.persistence.repository.PaymentRepository;
@@ -37,6 +38,9 @@ import com.voxticket.service.CancellationService;
 import com.voxticket.service.ClaimService;
 import com.voxticket.service.ReferenceNumberGenerator;
 import com.voxticket.service.ReturnService;
+import com.voxticket.verification.VerificationOutcome;
+import com.voxticket.verification.VerificationResult;
+import com.voxticket.verification.VerificationService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -66,6 +70,7 @@ public class ProcedureCoordinator {
     private final ReturnService returnService;
     private final ClaimService claimService;
     private final ReferenceNumberGenerator referenceNumberGenerator;
+    private final VerificationService verificationService;
 
     public ProcedureCoordinator(
             OwnedOrderResolver ownedOrderResolver,
@@ -80,7 +85,8 @@ public class ProcedureCoordinator {
             CancellationService cancellationService,
             ReturnService returnService,
             ClaimService claimService,
-            ReferenceNumberGenerator referenceNumberGenerator) {
+            ReferenceNumberGenerator referenceNumberGenerator,
+            VerificationService verificationService) {
         this.ownedOrderResolver = ownedOrderResolver;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.actionPolicyService = actionPolicyService;
@@ -94,6 +100,7 @@ public class ProcedureCoordinator {
         this.returnService = returnService;
         this.claimService = claimService;
         this.referenceNumberGenerator = referenceNumberGenerator;
+        this.verificationService = verificationService;
     }
 
     // ---- Starting procedures (called from ProcedureRequestTools, i.e. by the model) ----
@@ -110,7 +117,6 @@ public class ProcedureCoordinator {
         if (!eligibility.eligible()) {
             return ProcedureOutcome.error("NOT_ELIGIBLE", "This order is not eligible for cancellation (" + eligibility.denialReason() + ").");
         }
-
         String description = "cancel order " + ref.orderNumber() + "." + describePaymentConsequence(eligibility.paymentConsequence());
         return beginProcedure(session, ProcedureType.CANCELLATION, ref, Map.of(), IdentityAssurance.OTP_VERIFIED, description);
     }
@@ -129,7 +135,6 @@ public class ProcedureCoordinator {
         if (!eligibility.eligible()) {
             return ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ").");
         }
-
         ReturnReason reason = parseReturnReason(reasonText);
         Map<String, String> data = Map.of("itemReference", itemReference, "reason", reason.name());
         String description = "start a return for " + item.getProductName() + " from order " + ref.orderNumber();
@@ -149,14 +154,12 @@ public class ProcedureCoordinator {
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
             return ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order.");
         }
-
         ClaimReason reason = parseClaimReason(problemText);
         Map<String, String> data = Map.of("itemReference", itemReference, "reason", reason.name(), "description", nullToEmpty(problemText));
         String description = "file a claim for " + item.getProductName() + " on order " + ref.orderNumber() + " (" + reason.name().toLowerCase(Locale.ROOT) + ")";
         return beginProcedure(session, ProcedureType.CLAIM, ref, data, IdentityAssurance.PHONE_MATCHED, description);
     }
 
-    /** FIX (idempotency): if this session already escalated, reuse that outcome rather than opening a second ticket. */
     @Transactional
     public ProcedureOutcome requestHumanSupport(ConversationSession session, String reason) {
         CustomerIdentity identity = session.getCustomerIdentity();
@@ -164,7 +167,6 @@ public class ProcedureCoordinator {
             return ProcedureOutcome.error(
                     "IDENTITY_NOT_VERIFIED", "I can connect you with our team, but I'll need your registered phone number first so they can pull up your account.");
         }
-
         if (session.isEscalated()) {
             String existingTicket = session.getRecentActions().stream()
                     .filter(a -> a.type() == RecentActionType.ESCALATED)
@@ -175,7 +177,6 @@ public class ProcedureCoordinator {
                     ? "You're already connected to our support team on ticket " + existingTicket + " - they have the details already."
                     : "You're already connected to our support team for this conversation.");
         }
-
         Customer customer = customerRepository.findById(identity.requireCustomerId()).orElseThrow();
         String summary = buildHandoffSummary(session, reason);
         SupportTicket ticket = supportTicketRepository.save(new SupportTicket(
@@ -185,6 +186,33 @@ public class ProcedureCoordinator {
         log.info("event=procedure_escalated ticketNumber={}", ticket.getTicketNumber());
         return ProcedureOutcome.ok("ESCALATED", "I've let our support team know - reference " + ticket.getTicketNumber()
                 + ". They'll have the details of what we've discussed so far.");
+    }
+
+    // ---- Verification (called ONLY from ConversationRuntime, never from a tool) ----
+
+    public ProcedureOutcome submitVerificationCode(ConversationSession session, String code) {
+        ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
+        if (procedure == null) {
+            return ProcedureOutcome.error("NO_PENDING_VERIFICATION", "There's no verification code pending right now.");
+        }
+        VerificationResult result = verificationService.verify(session, code);
+        if (!result.verified()) {
+            return ProcedureOutcome.error("VERIFICATION_FAILED", result.message());
+        }
+        CustomerIdentity current = session.getCustomerIdentity();
+        session.applyResolvedIdentity(new CustomerIdentity(current.customerId(), IdentityAssurance.OTP_VERIFIED, current.phone()));
+        return moveToConfirmation(procedure);
+    }
+
+    public ProcedureOutcome resendVerificationCode(ConversationSession session) {
+        ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
+        if (procedure == null) {
+            return ProcedureOutcome.error("NO_PENDING_VERIFICATION", "There's no verification in progress right now.");
+        }
+        VerificationOutcome outcome = verificationService.issueChallenge(session, purposeFor(procedure.getType()));
+        return outcome.success()
+                ? ProcedureOutcome.ok("VERIFICATION_REQUIRED", outcome.message(), outcome.metadata())
+                : ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", outcome.message());
     }
 
     // ---- Advancing a pending confirmation (called ONLY from ConversationRuntime, never from a tool) ----
@@ -209,13 +237,8 @@ public class ProcedureCoordinator {
             return ProcedureOutcome.error("VERIFICATION_REQUIRED", "This still needs identity verification we can't complete yet in this version of the system.");
         }
 
-        // FIX (transactional safety): a mutation failure here must propagate OUT of this
-        // @Transactional method so Spring rolls back everything, rather than being swallowed
-        // and returned as a normal-looking result while the underlying transaction may already
-        // be marked rollback-only. Session-state cleanup below is safe to do either way - it's
-        // an in-memory object, not part of the JPA transaction - so it runs before the rethrow,
-        // then the exception propagates to ConversationRuntime, which is the appropriate outer
-        // boundary for turning it into a customer-facing message.
+        // Mutation failures must propagate OUT of this @Transactional method so Spring rolls
+        // back correctly; the outer boundary (ConversationRuntime) converts them to a safe message.
         ProcedureOutcome outcome;
         try {
             outcome = execute(session, procedure);
@@ -233,7 +256,7 @@ public class ProcedureCoordinator {
 
     public ProcedureOutcome declineActive(ConversationSession session) {
         ProcedureState procedure = session.getActiveProcedure().orElse(null);
-        if (procedure == null || procedure.getStatus() != ProcedureStatus.AWAITING_CONFIRMATION) {
+        if (procedure == null) {
             return ProcedureOutcome.error("NO_PENDING_CONFIRMATION", "There's nothing waiting for confirmation right now.");
         }
         procedure.setStatus(ProcedureStatus.CANCELLED);
@@ -263,13 +286,8 @@ public class ProcedureCoordinator {
             ConversationSession session, ProcedureType type, VerifiedOrderRef target, Map<String, String> data,
             IdentityAssurance requiredAssurance, String actionDescription) {
 
-        PolicyDecision decision = actionPolicyService.evaluate(new ActionRequest(type, requiredAssurance, false), session);
-        if (decision.outcome() == PolicyOutcome.REQUIRE_VERIFICATION) {
-            return ProcedureOutcome.error("VERIFICATION_REQUIRED",
-                    "This requires identity verification we can't complete yet in this version of the system, so I'm not able to go ahead with it right now.");
-        }
-
         ProcedureState procedure = new ProcedureState(type, target, data, requiredAssurance);
+        procedure.setPendingDescription(actionDescription);
         ProcedureSlotResult slotResult = session.beginProcedure(procedure);
         if (slotResult == ProcedureSlotResult.BOTH_SLOTS_OCCUPIED) {
             String activeDesc = session.getActiveProcedure().map(this::describe).orElse("one request");
@@ -278,18 +296,40 @@ public class ProcedureCoordinator {
                     "There's already a " + activeDesc + " and a " + pausedDesc + " in progress. Which one would you like to continue first?");
         }
 
-        PendingAction pendingAction = new PendingAction(
-                UUID.randomUUID(), type, target, data, Instant.now(), Instant.now().plus(PENDING_ACTION_TTL), UUID.randomUUID().toString());
-        procedure.setPendingAction(pendingAction);
+        PolicyDecision decision = actionPolicyService.evaluate(new ActionRequest(type, requiredAssurance, false), session);
+        if (decision.outcome() == PolicyOutcome.REQUIRE_VERIFICATION) {
+            procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
+            VerificationOutcome verificationOutcome = verificationService.issueChallenge(session, purposeFor(type));
+            if (!verificationOutcome.success()) {
+                session.clearActiveProcedure(); // undo the slot reservation - restores whatever was paused, or clears to empty
+                return ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message());
+            }
+            String pausedNote = slotResult == ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS
+                    ? " I've paused what we were doing before - we'll come back to it after this."
+                    : "";
+            return ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote, verificationOutcome.metadata());
+        }
 
-        String pausedNote = slotResult == ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS
-                ? " I've paused what we were doing before - we'll come back to it after this."
-                : "";
-        log.info("event=procedure_started type={} orderNumber={} slotResult={}", type, target.orderNumber(), slotResult);
-        return ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "Just to confirm - you'd like to " + actionDescription + pausedNote);
+        return moveToConfirmation(procedure);
     }
 
-    /** FIX (continuity): each branch now records a RecentAction on success so later follow-ups ("how will I receive the money?") can reference it. */
+    private ProcedureOutcome moveToConfirmation(ProcedureState procedure) {
+        PendingAction pendingAction = new PendingAction(
+                UUID.randomUUID(), procedure.getType(), procedure.getVerifiedTarget(), procedure.getCollectedData(),
+                Instant.now(), Instant.now().plus(PENDING_ACTION_TTL), UUID.randomUUID().toString());
+        procedure.setPendingAction(pendingAction);
+        procedure.setStatus(ProcedureStatus.AWAITING_CONFIRMATION);
+        return ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "Thanks, you're verified. Just to confirm - you'd like to " + procedure.getPendingDescription() + "?");
+    }
+
+    private VerificationPurpose purposeFor(ProcedureType type) {
+        return switch (type) {
+            case CANCELLATION -> VerificationPurpose.CANCELLATION;
+            case RETURN -> VerificationPurpose.RETURN;
+            case CLAIM -> throw new IllegalStateException("CLAIM never requires OTP verification");
+        };
+    }
+
     private ProcedureOutcome execute(ConversationSession session, ProcedureState procedure) {
         return switch (procedure.getType()) {
             case CANCELLATION -> executeCancellation(session, procedure);

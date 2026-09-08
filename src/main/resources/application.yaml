@@ -65,3 +65,12 @@ voxticket:
       provider: ml  #"ml" for groq model based and "heauristic" for regex based prompt guard
       ml-model: meta-llama/llama-prompt-guard-2-86m
       ml-threshold: 0.5
+  otp:
+    expiry-minutes: 5
+    max-attempts: 3
+    resend-cooldown-seconds: 60
+    max-challenges-per-customer-per-hour: 5
+    max-challenges-per-session: 5
+    email-from: no-reply@voxticket.example
+    # delivery: not set here on purpose - defaults to "dev" in dev/test profiles.
+    # Set to "email" (plus real spring.mail.* config) to switch delivery.

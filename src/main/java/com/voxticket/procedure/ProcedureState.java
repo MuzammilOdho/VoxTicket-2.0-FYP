@@ -6,7 +6,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
-/** Spec §13. */
 public class ProcedureState {
 
     private final UUID procedureId = UUID.randomUUID();
@@ -16,6 +15,7 @@ public class ProcedureState {
     private final IdentityAssurance requiredAssurance;
     private ProcedureStatus status;
     private PendingAction pendingAction;
+    private String pendingDescription;
     private final Instant createdAt = Instant.now();
     private Instant updatedAt = Instant.now();
 
@@ -62,6 +62,15 @@ public class ProcedureState {
 
     public void setPendingAction(PendingAction pendingAction) {
         this.pendingAction = pendingAction;
+    }
+
+    /** The natural-language description of the action, captured once at request time so it can be repeated after verification completes. */
+    public String getPendingDescription() {
+        return pendingDescription;
+    }
+
+    public void setPendingDescription(String pendingDescription) {
+        this.pendingDescription = pendingDescription;
     }
 
     public Instant getCreatedAt() {

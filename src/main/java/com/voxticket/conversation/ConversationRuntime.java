@@ -6,12 +6,15 @@ import com.voxticket.identity.IdentityService;
 import com.voxticket.procedure.ConfirmationClassifier;
 import com.voxticket.procedure.ConfirmationDecision;
 import com.voxticket.procedure.ProcedureCoordinator;
+import com.voxticket.procedure.ProcedureState;
 import com.voxticket.procedure.ProcedureStatus;
 import com.voxticket.safety.InputNormalizer;
 import com.voxticket.safety.NormalizationResult;
 import com.voxticket.safety.PromptGuard;
 import com.voxticket.safety.PromptGuardVerdict;
 import com.voxticket.safety.SafeLogging;
+import com.voxticket.verification.OtpInputClassifier;
+import com.voxticket.verification.OtpInputResult;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -36,6 +39,7 @@ public class ConversationRuntime {
     private final InputNormalizer inputNormalizer;
     private final PromptGuard promptGuard;
     private final ConfirmationClassifier confirmationClassifier;
+    private final OtpInputClassifier otpInputClassifier;
     private final ProcedureCoordinator procedureCoordinator;
 
     public ConversationRuntime(
@@ -45,6 +49,7 @@ public class ConversationRuntime {
             InputNormalizer inputNormalizer,
             PromptGuard promptGuard,
             ConfirmationClassifier confirmationClassifier,
+            OtpInputClassifier otpInputClassifier,
             ProcedureCoordinator procedureCoordinator) {
         this.sessionStore = sessionStore;
         this.identityService = identityService;
@@ -52,6 +57,7 @@ public class ConversationRuntime {
         this.inputNormalizer = inputNormalizer;
         this.promptGuard = promptGuard;
         this.confirmationClassifier = confirmationClassifier;
+        this.otpInputClassifier = otpInputClassifier;
         this.procedureCoordinator = procedureCoordinator;
     }
 
@@ -71,9 +77,8 @@ public class ConversationRuntime {
                 log.info("event=input_rejected sessionId={} reason=INPUT_TOO_LONG length={}", session.getSessionId(), normalization.rejectedLength());
                 int turnNumber = session.recordUserMessage("[message rejected - too long: " + normalization.rejectedLength() + " characters]");
                 session.recordAssistantMessage(TOO_LONG_MESSAGE);
-                logTurnEnd(session, turnNumber, startNanos, false);
-                return new AssistantTurn(
-                        TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
+                logTurnEnd(session, turnNumber, startNanos);
+                return new AssistantTurn(TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
             }
 
             String normalizedText = normalization.text();
@@ -83,17 +88,32 @@ public class ConversationRuntime {
                         session.getSessionId(), verdict.category(), normalizedText.length(), SafeLogging.hash(normalizedText));
                 int turnNumber = session.recordUserMessage(REDACTED_FLAGGED_PLACEHOLDER);
                 session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
-                logTurnEnd(session, turnNumber, startNanos, false);
+                logTurnEnd(session, turnNumber, startNanos);
                 return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
             }
 
             String responseText;
             int turnNumber;
-            Optional<com.voxticket.procedure.ProcedureState> awaitingConfirmation = session.getActiveProcedure()
-                    .filter(p -> p.getStatus() == ProcedureStatus.AWAITING_CONFIRMATION);
-            if (awaitingConfirmation.isPresent()) {
-                ConfirmationDecision decision = confirmationClassifier.classify(normalizedText);
+            Map<String, String> turnMetadata = Map.of();
+            Optional<ProcedureState> active = session.getActiveProcedure();
+
+            if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
                 turnNumber = session.recordUserMessage(normalizedText);
+                OtpInputResult input = otpInputClassifier.classify(normalizedText);
+                var outcome = switch (input.type()) {
+                    case CODE -> procedureCoordinator.submitVerificationCode(session, input.code());
+                    case RESEND_REQUESTED -> procedureCoordinator.resendVerificationCode(session);
+                    case OTHER -> null;
+                };
+                if (outcome != null) {
+                    responseText = outcome.message();
+                    turnMetadata = outcome.metadata();
+                } else {
+                    responseText = supportAgent.respond(session, normalizedText);
+                }
+            } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
+                turnNumber = session.recordUserMessage(normalizedText);
+                ConfirmationDecision decision = confirmationClassifier.classify(normalizedText);
                 responseText = switch (decision) {
                     case YES -> confirmWithSafeFallback(session);
                     case NO -> procedureCoordinator.declineActive(session).message();
@@ -105,21 +125,14 @@ public class ConversationRuntime {
             }
             session.recordAssistantMessage(responseText);
 
-            boolean stillAwaitingConfirmation = session.getActiveProcedure()
-                    .map(p -> p.getStatus() == ProcedureStatus.AWAITING_CONFIRMATION)
+            boolean stillWaiting = session.getActiveProcedure()
+                    .map(p -> p.getStatus() == ProcedureStatus.AWAITING_CONFIRMATION || p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION)
                     .orElse(false);
-            logTurnEnd(session, turnNumber, startNanos, false);
-            return new AssistantTurn(responseText, false, stillAwaitingConfirmation, stateView(session, turnNumber), Map.of());
+            logTurnEnd(session, turnNumber, startNanos);
+            return new AssistantTurn(responseText, false, stillWaiting, stateView(session, turnNumber), turnMetadata);
         });
     }
 
-    /**
-     * FIX (transactional safety): confirmActive() now lets mutation failures propagate out of
-     * its @Transactional boundary instead of swallowing them, so Spring's rollback runs
-     * correctly. This is the "appropriate outer boundary" that catches the result and turns it
-     * into a safe, generic customer-facing message - deliberately generic, since the specific
-     * failure reason is already logged with full detail inside the coordinator.
-     */
     private String confirmWithSafeFallback(ConversationSession session) {
         try {
             return procedureCoordinator.confirmActive(session).message();
@@ -129,10 +142,10 @@ public class ConversationRuntime {
         }
     }
 
-    private void logTurnEnd(ConversationSession session, int turnNumber, long startNanos, boolean withheld) {
+    private void logTurnEnd(ConversationSession session, int turnNumber, long startNanos) {
         long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
-        log.info("event=turn_end sessionId={} turnNumber={} messageCount={} withheld={} durationMs={}",
-                session.getSessionId(), turnNumber, session.getRecentMessages().size(), withheld, durationMs);
+        log.info("event=turn_end sessionId={} turnNumber={} messageCount={} durationMs={}",
+                session.getSessionId(), turnNumber, session.getRecentMessages().size(), durationMs);
     }
 
     private ConversationStateView stateView(ConversationSession session, int turnNumber) {
