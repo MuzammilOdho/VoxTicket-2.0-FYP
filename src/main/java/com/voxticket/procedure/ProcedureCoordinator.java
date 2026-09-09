@@ -204,6 +204,7 @@ public class ProcedureCoordinator {
         return moveToConfirmation(procedure);
     }
 
+    /** Model-invisible on purpose - only ConversationRuntime calls this, never a tool. This is the only outcome allowed to carry the dev OTP in its metadata. */
     public ProcedureOutcome resendVerificationCode(ConversationSession session) {
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
         if (procedure == null) {
@@ -237,8 +238,6 @@ public class ProcedureCoordinator {
             return ProcedureOutcome.error("VERIFICATION_REQUIRED", "This still needs identity verification we can't complete yet in this version of the system.");
         }
 
-        // Mutation failures must propagate OUT of this @Transactional method so Spring rolls
-        // back correctly; the outer boundary (ConversationRuntime) converts them to a safe message.
         ProcedureOutcome outcome;
         try {
             outcome = execute(session, procedure);
@@ -301,13 +300,17 @@ public class ProcedureCoordinator {
             procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
             VerificationOutcome verificationOutcome = verificationService.issueChallenge(session, purposeFor(type));
             if (!verificationOutcome.success()) {
-                session.clearActiveProcedure(); // undo the slot reservation - restores whatever was paused, or clears to empty
+                session.clearActiveProcedure();
                 return ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message());
             }
             String pausedNote = slotResult == ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS
                     ? " I've paused what we were doing before - we'll come back to it after this."
                     : "";
-            return ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote, verificationOutcome.metadata());
+            // This return value flows straight into the model's tool-call context (requestCancellation/
+            // requestReturn are @Tool methods) - it must NEVER carry metadata, since that's where the
+            // plaintext dev OTP lives. Deliberately calling the 2-arg ProcedureOutcome.ok(...) overload
+            // here, not the 3-arg one, so there is no metadata argument to accidentally attach.
+            return ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote);
         }
 
         return moveToConfirmation(procedure);

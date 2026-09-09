@@ -245,20 +245,7 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(supportTicketRepository.findByCustomerId(customer.getId())).hasSize(1);
     }
 
-    @Test
-    void cancellationAtPhoneMatchedIssuesAVerificationChallengeInsteadOfJustRefusing() {
-        Order order = newOrder(BigDecimal.valueOf(500));
-        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
-        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
-
-        ProcedureOutcome outcome = procedureCoordinator.startCancellation(session, order.getOrderNumber());
-
-        assertThat(outcome.success()).isTrue();
-        assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
-        assertThat(outcome.metadata()).containsKey("devOtp");
-        assertThat(session.getActiveProcedure()).isPresent();
-    }
-
+    
     @Test
     void fullFlowFromPhoneMatchedThroughOtpToExecutedCancellation() {
         Order order = newOrder(BigDecimal.valueOf(500));
