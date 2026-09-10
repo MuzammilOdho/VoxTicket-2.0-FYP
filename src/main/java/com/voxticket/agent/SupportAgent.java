@@ -1,24 +1,27 @@
 package com.voxticket.agent;
 
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.RecentAction;
+import com.voxticket.procedure.ProcedureCoordinator;
+import com.voxticket.procedure.ProcedureRequestTools;
 import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.service.CustomerOrderQueryService;
+import java.math.BigDecimal;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import com.voxticket.procedure.ProcedureCoordinator;
-import com.voxticket.procedure.ProcedureRequestTools;
 
 @Service
 public class SupportAgent {
 
     private static final Logger log = LoggerFactory.getLogger(SupportAgent.class);
 
-    private static final String SYSTEM_PROMPT = """
+    private static final String SYSTEM_PROMPT_BASE = """
             You are VoxTicket, an AI customer-support assistant for an e-commerce store.
             You help with order status, shipment tracking, payments, refunds, returns, cancellation, and claims.
 
@@ -55,6 +58,12 @@ public class SupportAgent {
               explain that plainly - do not retry the tool or guess a workaround.
             Never say verification, cancellation, returns, or claims are "not available" in this system - they are
             all available through these tools; only a specific order might not be eligible, which the tool will tell you.
+
+            If the customer corrects themselves mid-conversation (for example "wait, I meant the other order" or
+            "no, ORD-10002 not ORD-10001"), take the correction at face value and continue with what they just
+            clarified - don't ask them to repeat the whole request from scratch. If a single message contains more
+            than one request (for example, asking about an order status and also asking a policy question), handle
+            each part with the right tool and address all of them in your reply.
 
             If the customer explicitly asks for a human, a supervisor, or says this system can't help, use
             requestHumanSupport.
@@ -101,11 +110,12 @@ public class SupportAgent {
 
             var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity());
             var procedureTools = new ProcedureRequestTools(procedureCoordinator, session);
+            String systemPrompt = buildSystemPrompt(session);
 
             log.info("event=support_agent_call_start sessionId={} tier={} model={}", session.getSessionId(), tier, selectedModel);
 
             String content = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPrompt)
                     .messages(history)
                     .options(OpenAiChatOptions.builder()
                             .model(selectedModel)
@@ -124,5 +134,43 @@ public class SupportAgent {
                     session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
             return "I'm having trouble processing that right now - please try again in a moment.";
         }
+    }
+
+    /**
+     * Spec "recent-action references" (Conversation Quality). Recent actions have been recorded
+     * on the session since Phase 8, but nothing ever surfaced them to the model until now - this
+     * is what lets "how will I get the money?" right after a cancellation actually connect to
+     * something. Package-private so it's directly unit-testable without touching ChatClient.
+     */
+    String buildSystemPrompt(ConversationSession session) {
+        String recentActivity = describeRecentActions(session);
+        if (recentActivity.isBlank()) {
+            return SYSTEM_PROMPT_BASE;
+        }
+        return SYSTEM_PROMPT_BASE + "\n\nRecent activity in this conversation, for context if the customer refers back to "
+                + "it (e.g. \"how will I get the money\" or \"what about my other order\"): " + recentActivity;
+    }
+
+    String describeRecentActions(ConversationSession session) {
+        return session.getRecentActions().stream().map(this::describeAction).collect(Collectors.joining(" "));
+    }
+
+    private String describeAction(RecentAction action) {
+        return switch (action.type()) {
+            case ORDER_CANCELLED -> "Order " + action.target() + " was cancelled.";
+            case REFUND_INITIATED -> "A refund of " + formatAmount(action.amount()) + " (reference " + action.reference()
+                    + ") was initiated for order " + action.target() + ", status " + action.status() + ".";
+            case REFUND_SUCCEEDED -> "Refund " + action.reference() + " for order " + action.target() + " succeeded.";
+            case REFUND_FAILED -> "Refund " + action.reference() + " for order " + action.target() + " failed.";
+            case RETURN_REQUESTED -> "Return " + action.reference() + " was started for order " + action.target() + ", status " + action.status() + ".";
+            case RETURN_COMPLETED -> "Return " + action.reference() + " for order " + action.target() + " was completed.";
+            case CLAIM_FILED -> "Claim " + action.reference() + " was filed for order " + action.target() + ", status " + action.status() + ".";
+            case CLAIM_RESOLVED -> "Claim " + action.reference() + " for order " + action.target() + " was resolved.";
+            case ESCALATED -> "The conversation was escalated to human support, ticket " + action.reference() + ".";
+        };
+    }
+
+    private String formatAmount(BigDecimal amount) {
+        return amount == null ? "an unspecified amount" : amount.toPlainString();
     }
 }
