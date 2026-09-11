@@ -1,5 +1,7 @@
 package com.voxticket.rag;
 
+import com.voxticket.observability.TurnMetrics;
+import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,9 +15,11 @@ public class PolicyKnowledgeTools {
     private static final Logger log = LoggerFactory.getLogger(PolicyKnowledgeTools.class);
 
     private final RagService ragService;
+    private final TurnMetrics turnMetrics;
 
-    public PolicyKnowledgeTools(RagService ragService) {
+    public PolicyKnowledgeTools(RagService ragService, TurnMetrics turnMetrics) {
         this.ragService = ragService;
+        this.turnMetrics = turnMetrics;
     }
 
     @Tool(description = "Search company policy documentation for questions about returns, refund timing, cancellation policy, "
@@ -27,6 +31,7 @@ public class PolicyKnowledgeTools {
         List<RagService.PolicySnippet> results = ragService.searchPolicy(query);
         long durationMs = (System.nanoTime() - start) / 1_000_000;
         log.info("event=tool_call tool=searchPolicy durationMs={} result=OK resultCount={}", durationMs, results.size());
+        turnMetrics.recordToolCall(Duration.ofMillis(durationMs), "searchPolicy", "OK");
         return results;
     }
 }

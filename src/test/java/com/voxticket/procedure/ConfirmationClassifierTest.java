@@ -9,23 +9,32 @@ class ConfirmationClassifierTest {
     private final ConfirmationClassifier classifier = new ConfirmationClassifier();
 
     @Test
-    void plainYesVariantsAreRecognized() {
+    void standaloneYesVariantsAreRecognized() {
         assertThat(classifier.classify("yes")).isEqualTo(ConfirmationDecision.YES);
         assertThat(classifier.classify("Yeah")).isEqualTo(ConfirmationDecision.YES);
         assertThat(classifier.classify("go ahead")).isEqualTo(ConfirmationDecision.YES);
         assertThat(classifier.classify("please do")).isEqualTo(ConfirmationDecision.YES);
+        assertThat(classifier.classify("Yes.")).isEqualTo(ConfirmationDecision.YES);
     }
 
     @Test
-    void plainNoVariantsAreRecognized() {
+    void standaloneNoVariantsAreRecognized() {
         assertThat(classifier.classify("no")).isEqualTo(ConfirmationDecision.NO);
         assertThat(classifier.classify("don't")).isEqualTo(ConfirmationDecision.NO);
         assertThat(classifier.classify("never mind")).isEqualTo(ConfirmationDecision.NO);
+        assertThat(classifier.classify("No!")).isEqualTo(ConfirmationDecision.NO);
     }
 
     @Test
-    void compoundConfirmationIsRecognizedAsYes() {
-        assertThat(classifier.classify("Yes, cancel it and also complain about the delay.")).isEqualTo(ConfirmationDecision.YES);
+    void compoundConfirmationIsNoLongerAutoConsumedAndReturnsUnclear() {
+        assertThat(classifier.classify("Yes, cancel it and also complain about the delay.")).isEqualTo(ConfirmationDecision.UNCLEAR);
+        assertThat(classifier.classify("yes, and where is my other order?")).isEqualTo(ConfirmationDecision.UNCLEAR);
+    }
+
+    @Test
+    void correctiveMessagesAreNeverMisreadAsADecline() {
+        assertThat(classifier.classify("no, I meant ORD-10002")).isEqualTo(ConfirmationDecision.UNCLEAR);
+        assertThat(classifier.classify("no wait, the other order")).isEqualTo(ConfirmationDecision.UNCLEAR);
     }
 
     @Test

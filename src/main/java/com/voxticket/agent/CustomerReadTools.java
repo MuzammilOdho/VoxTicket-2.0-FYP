@@ -3,8 +3,10 @@ package com.voxticket.agent;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.InsufficientAssuranceException;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
+import java.time.Duration;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,10 +19,12 @@ public class CustomerReadTools {
 
     private final CustomerOrderQueryService queryService;
     private final CustomerIdentity identity;
+    private final TurnMetrics turnMetrics;
 
-    public CustomerReadTools(CustomerOrderQueryService queryService, CustomerIdentity identity) {
+    public CustomerReadTools(CustomerOrderQueryService queryService, CustomerIdentity identity, TurnMetrics turnMetrics) {
         this.queryService = queryService;
         this.identity = identity;
+        this.turnMetrics = turnMetrics;
     }
 
     @Tool(description = "Get the customer's most recent orders, most recent first.")
@@ -84,10 +88,12 @@ public class CustomerReadTools {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             String resultCode = (result instanceof ToolError toolError) ? toolError.code() : "OK";
             log.info("event=tool_call tool={} reference={} durationMs={} result={}", toolName, safeReference(reference), durationMs, resultCode);
+            turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, resultCode);
             return result;
         } catch (ResourceNotFoundForAccountException e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=NOT_FOUND_FOR_ACCOUNT", toolName, safeReference(reference), durationMs);
+            turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, "NOT_FOUND_FOR_ACCOUNT");
             return new ToolError(
                     "NOT_FOUND_FOR_ACCOUNT",
                     "That reference doesn't match any of the customer's own records. Do not guess or invent an "
@@ -95,6 +101,7 @@ public class CustomerReadTools {
         } catch (InsufficientAssuranceException e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=IDENTITY_NOT_VERIFIED", toolName, safeReference(reference), durationMs);
+            turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, "IDENTITY_NOT_VERIFIED");
             return new ToolError(
                     "IDENTITY_NOT_VERIFIED",
                     "The customer's phone number could not be matched to an account, so their own order data cannot be looked up yet.");

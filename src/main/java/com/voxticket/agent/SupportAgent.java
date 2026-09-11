@@ -2,18 +2,18 @@ package com.voxticket.agent;
 
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureRequestTools;
 import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.service.CustomerOrderQueryService;
 import java.math.BigDecimal;
-import java.util.Map;
+import java.time.Duration;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -52,18 +52,19 @@ public class SupportAgent {
             - If it asks the customer to confirm, relay that confirmation question and then WAIT - do not say the
               action succeeded, and do not call the tool again to "confirm" it.
             - If it says a verification code has been sent, tell the customer a code was sent to their registered
-              number or email and ask them to read it back to you. Entering the code is handled separately - it is
-              not something you call a tool for, and you will simply be told the outcome afterward.
+              number or email and ask them to read it back to you.
             - If it says something isn't eligible, wasn't found, or that too many requests are already in progress,
               explain that plainly - do not retry the tool or guess a workaround.
             Never say verification, cancellation, returns, or claims are "not available" in this system - they are
             all available through these tools; only a specific order might not be eligible, which the tool will tell you.
 
-            If the customer corrects themselves mid-conversation (for example "wait, I meant the other order" or
-            "no, ORD-10002 not ORD-10001"), take the correction at face value and continue with what they just
-            clarified - don't ask them to repeat the whole request from scratch. If a single message contains more
-            than one request (for example, asking about an order status and also asking a policy question), handle
-            each part with the right tool and address all of them in your reply.
+            If the customer's response to a pending confirmation wasn't a plain yes or no (for example it also asked
+            something else, or seemed to correct which order was meant), do not assume they confirmed or declined.
+            Ask them to confirm with a plain yes or no first, and address anything else they asked separately.
+
+            If the customer corrects themselves mid-conversation (for example "wait, I meant the other order"), take
+            the correction at face value and continue with what they just clarified. If a single message contains
+            more than one request, handle each part with the right tool and address all of them in your reply.
 
             If the customer explicitly asks for a human, a supervisor, or says this system can't help, use
             requestHumanSupport.
@@ -81,7 +82,8 @@ public class SupportAgent {
     private final CustomerOrderQueryService queryService;
     private final PolicyKnowledgeTools policyKnowledgeTools;
     private final ProcedureCoordinator procedureCoordinator;
-    private final double temperature;
+    private final ChatOptionsFactory chatOptionsFactory;
+    private final TurnMetrics turnMetrics;
 
     public SupportAgent(
             ChatClient.Builder chatClientBuilder,
@@ -90,65 +92,94 @@ public class SupportAgent {
             CustomerOrderQueryService queryService,
             PolicyKnowledgeTools policyKnowledgeTools,
             ProcedureCoordinator procedureCoordinator,
-            @Value("${voxticket.ai.temperature:0.3}") double temperature) {
+            ChatOptionsFactory chatOptionsFactory,
+            TurnMetrics turnMetrics) {
         this.chatClient = chatClientBuilder.build();
         this.contextBuilder = contextBuilder;
         this.modelSelector = modelSelector;
         this.queryService = queryService;
         this.policyKnowledgeTools = policyKnowledgeTools;
         this.procedureCoordinator = procedureCoordinator;
-        this.temperature = temperature;
+        this.chatOptionsFactory = chatOptionsFactory;
+        this.turnMetrics = turnMetrics;
     }
 
     public String respond(ConversationSession session, String currentUserMessage) {
         long start = System.nanoTime();
+        String tierLabel = "UNKNOWN";
+        String modelLabel = "unknown";
         try {
-            var history = contextBuilder.buildHistory(session);
-            var tier = modelSelector.select(session, currentUserMessage);
-            var selectedModel = modelSelector.modelFor(tier);
-            log.info("event=model_selected sessionId={} tier={} model={}", session.getSessionId(), tier, selectedModel);
+            var selection = modelSelector.select(session, currentUserMessage);
+            tierLabel = selection.tier().name();
+            modelLabel = modelSelector.modelFor(selection.tier());
+            turnMetrics.recordModelSelection(tierLabel, modelLabel, selection.reason());
+            log.info("event=model_selected sessionId={} tier={} model={} reason={}", session.getSessionId(), tierLabel, modelLabel, selection.reason());
 
-            var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity());
+            var history = contextBuilder.buildHistory(session);
+            var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity(), turnMetrics);
             var procedureTools = new ProcedureRequestTools(procedureCoordinator, session);
             String systemPrompt = buildSystemPrompt(session);
 
-            log.info("event=support_agent_call_start sessionId={} tier={} model={}", session.getSessionId(), tier, selectedModel);
+            log.info("event=support_agent_call_start sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
 
-            String content = chatClient.prompt()
+            ChatResponse chatResponse = chatClient.prompt()
                     .system(systemPrompt)
                     .messages(history)
-                    .options(OpenAiChatOptions.builder()
-                            .model(selectedModel)
-                            .temperature(temperature)
-                            .extraBody(Map.of("include_reasoning", false)))
+                    .options(chatOptionsFactory.forModel(modelLabel))
                     .tools(customerTools, policyKnowledgeTools, procedureTools)
                     .call()
-                    .content();
+                    .chatResponse();
 
+            String content = chatResponse.getResult().getOutput().getText();
             long durationMs = (System.nanoTime() - start) / 1_000_000;
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, modelLabel, "success");
+            recordTokenUsage(chatResponse, modelLabel);
             log.info("event=support_agent_call_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
             return content;
         } catch (Exception e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, modelLabel, "error");
             log.error("event=support_agent_call_end sessionId={} outcome=error errorType={} durationMs={}",
                     session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
             return "I'm having trouble processing that right now - please try again in a moment.";
         }
     }
 
+    private void recordTokenUsage(ChatResponse chatResponse, String model) {
+        try {
+            var usage = chatResponse.getMetadata() == null ? null : chatResponse.getMetadata().getUsage();
+            if (usage == null) {
+                return;
+            }
+            if (usage.getPromptTokens() != null) {
+                turnMetrics.recordTokenUsage(model, "prompt", usage.getPromptTokens());
+            }
+            if (usage.getCompletionTokens() != null) {
+                turnMetrics.recordTokenUsage(model, "completion", usage.getCompletionTokens());
+            }
+        } catch (Exception e) {
+            // "where available" - token usage is a nice-to-have for cost analysis, never worth
+            // risking the actual response over.
+            log.debug("event=token_usage_unavailable model={} reason={}", model, e.getClass().getSimpleName());
+        }
+    }
+
     /**
-     * Spec "recent-action references" (Conversation Quality). Recent actions have been recorded
-     * on the session since Phase 8, but nothing ever surfaced them to the model until now - this
-     * is what lets "how will I get the money?" right after a cancellation actually connect to
-     * something. Package-private so it's directly unit-testable without touching ChatClient.
+     * Spec "recent-action references". IMPORTANT: only stable, historical facts go here (that
+     * something happened, and its reference number) - never a mutable status field, since it can
+     * go stale between when it was recorded and when the customer asks about it later. If the
+     * customer needs CURRENT status, the prompt instructs the model to use the matching tool.
      */
     String buildSystemPrompt(ConversationSession session) {
         String recentActivity = describeRecentActions(session);
         if (recentActivity.isBlank()) {
             return SYSTEM_PROMPT_BASE;
         }
-        return SYSTEM_PROMPT_BASE + "\n\nRecent activity in this conversation, for context if the customer refers back to "
-                + "it (e.g. \"how will I get the money\" or \"what about my other order\"): " + recentActivity;
+        return SYSTEM_PROMPT_BASE + "\n\nRecent activity in this conversation, for resolving references like \"how will I get the "
+                + "money\" or \"what about my other order\": " + recentActivity
+                + " These are historical facts only, to help you understand what the customer is referring to - they are NOT"
+                + " necessarily still accurate right now. If the customer asks about the CURRENT status of any of these, use the"
+                + " matching tool (getMyRefundStatus, getMyReturnStatus, getMyTicketStatus, etc.) rather than treating this note as current.";
     }
 
     String describeRecentActions(ConversationSession session) {
@@ -156,15 +187,16 @@ public class SupportAgent {
     }
 
     private String describeAction(RecentAction action) {
+        // Deliberately no action.status() anywhere here - status is mutable and can go stale;
+        // only stable identifying facts (what happened, its reference, its amount) are included.
         return switch (action.type()) {
             case ORDER_CANCELLED -> "Order " + action.target() + " was cancelled.";
-            case REFUND_INITIATED -> "A refund of " + formatAmount(action.amount()) + " (reference " + action.reference()
-                    + ") was initiated for order " + action.target() + ", status " + action.status() + ".";
+            case REFUND_INITIATED -> "A refund of " + formatAmount(action.amount()) + " (reference " + action.reference() + ") was initiated for order " + action.target() + ".";
             case REFUND_SUCCEEDED -> "Refund " + action.reference() + " for order " + action.target() + " succeeded.";
             case REFUND_FAILED -> "Refund " + action.reference() + " for order " + action.target() + " failed.";
-            case RETURN_REQUESTED -> "Return " + action.reference() + " was started for order " + action.target() + ", status " + action.status() + ".";
+            case RETURN_REQUESTED -> "A return (reference " + action.reference() + ") was started for order " + action.target() + ".";
             case RETURN_COMPLETED -> "Return " + action.reference() + " for order " + action.target() + " was completed.";
-            case CLAIM_FILED -> "Claim " + action.reference() + " was filed for order " + action.target() + ", status " + action.status() + ".";
+            case CLAIM_FILED -> "A claim (reference " + action.reference() + ") was filed for order " + action.target() + ".";
             case CLAIM_RESOLVED -> "Claim " + action.reference() + " for order " + action.target() + " was resolved.";
             case ESCALATED -> "The conversation was escalated to human support, ticket " + action.reference() + ".";
         };

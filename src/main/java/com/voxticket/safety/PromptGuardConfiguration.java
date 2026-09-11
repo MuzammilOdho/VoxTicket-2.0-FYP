@@ -1,7 +1,7 @@
 package com.voxticket.safety;
 
+import com.voxticket.observability.TurnMetrics;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,10 +14,7 @@ public class PromptGuardConfiguration {
     @Primary
     @ConditionalOnProperty(prefix = "voxticket.safety.prompt-guard", name = "provider", havingValue = "ml")
     public PromptGuard mlPromptGuard(
-            ChatClient.Builder chatClientBuilder,
-            HeuristicPromptGuard fallback,
-            @Value("${voxticket.safety.prompt-guard.ml-model:meta-llama/llama-prompt-guard-2-86m}") String model,
-            @Value("${voxticket.safety.prompt-guard.ml-threshold:0.5}") double threshold) {
-        return new GroqMlPromptGuard(chatClientBuilder.build(), fallback, model, threshold);
+            ChatClient.Builder chatClientBuilder, HeuristicPromptGuard fallback, PromptGuardProperties properties, TurnMetrics turnMetrics) {
+        return new GroqMlPromptGuard(chatClientBuilder.build(), fallback, properties, turnMetrics);
     }
 }

@@ -2,7 +2,6 @@ package com.voxticket.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,21 +12,20 @@ import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.identity.VerifiedOrderRef;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ConfirmationClassifier;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureOutcome;
 import com.voxticket.procedure.ProcedureState;
-import com.voxticket.procedure.ProcedureStatus;
 import com.voxticket.procedure.ProcedureType;
 import com.voxticket.safety.HeuristicPromptGuard;
 import com.voxticket.safety.InputNormalizer;
 import com.voxticket.safety.PromptGuard;
+import com.voxticket.verification.OtpInputClassifier;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import com.voxticket.verification.OtpInputClassifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -36,13 +34,15 @@ class ConversationRuntimeTest {
     private final IdentityService identityService = mock(IdentityService.class);
     private final SupportAgent supportAgent = mock(SupportAgent.class);
     private final InputNormalizer inputNormalizer = new InputNormalizer();
-    private final PromptGuard promptGuard = new HeuristicPromptGuard();
+    private final PromptGuard promptGuard = new HeuristicPromptGuard(mock(TurnMetrics.class));
     private final ConfirmationClassifier confirmationClassifier = new ConfirmationClassifier();
+    private final OtpInputClassifier otpInputClassifier = new OtpInputClassifier();
     private final ProcedureCoordinator procedureCoordinator = mock(ProcedureCoordinator.class);
     private final InMemorySessionStore sessionStore = new InMemorySessionStore();
-    private final OtpInputClassifier otpInputClassifier = new OtpInputClassifier();
+    private final TurnMetrics turnMetrics = mock(TurnMetrics.class);
     private final ConversationRuntime runtime = new ConversationRuntime(
-            sessionStore, identityService, supportAgent, inputNormalizer, promptGuard, confirmationClassifier, otpInputClassifier,  procedureCoordinator);
+            sessionStore, identityService, supportAgent, inputNormalizer, promptGuard,
+            confirmationClassifier, otpInputClassifier, procedureCoordinator, turnMetrics);
 
     @BeforeEach
     void stubSupportAgent() {
@@ -105,12 +105,12 @@ class ConversationRuntimeTest {
     }
 
     @Test
-    void confirmationYesWhilePendingCallsCoordinatorNotSupportAgent() {
+    void standaloneYesWhilePendingCallsCoordinatorNotSupportAgent() {
         String sessionId = "s8";
         seedAwaitingConfirmation(sessionId);
         when(procedureCoordinator.confirmActive(any())).thenReturn(ProcedureOutcome.ok("CANCELLED", "Order ORD-TEST has been cancelled."));
 
-        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "yes, go ahead", null, Instant.now(), Map.of()));
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "yes", null, Instant.now(), Map.of()));
 
         verify(procedureCoordinator).confirmActive(any());
         verify(supportAgent, never()).respond(any(), any());
@@ -118,12 +118,12 @@ class ConversationRuntimeTest {
     }
 
     @Test
-    void confirmationNoWhilePendingCallsDeclineNotSupportAgent() {
+    void standaloneNoWhilePendingCallsDeclineNotSupportAgent() {
         String sessionId = "s9";
         seedAwaitingConfirmation(sessionId);
         when(procedureCoordinator.declineActive(any())).thenReturn(ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that."));
 
-        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "no, don't", null, Instant.now(), Map.of()));
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "no", null, Instant.now(), Map.of()));
 
         verify(procedureCoordinator).declineActive(any());
         verify(supportAgent, never()).respond(any(), any());
@@ -131,8 +131,32 @@ class ConversationRuntimeTest {
     }
 
     @Test
-    void unclearResponseWhilePendingFallsThroughToSupportAgentWithoutTouchingTheProcedure() {
+    void compoundConfirmationWhilePendingReachesSupportAgentInsteadOfBeingAutoExecuted() {
         String sessionId = "s10";
+        seedAwaitingConfirmation(sessionId);
+
+        runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "yes, and where is my other order?", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator, never()).confirmActive(any());
+        verify(procedureCoordinator, never()).declineActive(any());
+        verify(supportAgent).respond(any(), any());
+    }
+
+    @Test
+    void correctiveMessageWhilePendingReachesSupportAgentRatherThanBeingMisreadAsADecline() {
+        String sessionId = "s11";
+        seedAwaitingConfirmation(sessionId);
+
+        runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "no, I meant ORD-10002", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator, never()).confirmActive(any());
+        verify(procedureCoordinator, never()).declineActive(any());
+        verify(supportAgent).respond(any(), any());
+    }
+
+    @Test
+    void unrelatedQuestionWhilePendingFallsThroughToSupportAgentWithoutTouchingTheProcedure() {
+        String sessionId = "s12";
         seedAwaitingConfirmation(sessionId);
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "how long would the refund take?", null, Instant.now(), Map.of()));

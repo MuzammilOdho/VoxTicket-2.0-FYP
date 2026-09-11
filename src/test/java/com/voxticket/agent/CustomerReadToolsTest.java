@@ -8,6 +8,7 @@ import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.InsufficientAssuranceException;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.FulfillmentStatus;
 import com.voxticket.persistence.entity.enums.OrderStatus;
 import com.voxticket.safety.ToolError;
@@ -24,7 +25,7 @@ class CustomerReadToolsTest {
 
     private final CustomerOrderQueryService queryService = mock(CustomerOrderQueryService.class);
     private final CustomerIdentity identity = new CustomerIdentity(UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, "+923001234567");
-    private final CustomerReadTools tools = new CustomerReadTools(queryService, identity);
+    private final CustomerReadTools tools = new CustomerReadTools(queryService, identity, mock(TurnMetrics.class));
 
     @Test
     void getMyOrderSummaryReturnsTheServiceResultOnSuccess() {

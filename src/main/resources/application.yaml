@@ -57,14 +57,19 @@ voxticket:
     tier1-model: openai/gpt-oss-20b
     tier2-model: openai/gpt-oss-120b
     temperature: 0.3
+    suppress-reasoning: true
+    selector:
+      long-message-threshold: 300
+      min-order-references-for-tier2: 2
   rag:
     top-k: 3
     similarity-threshold: 0.5
   safety:
     prompt-guard:
-      provider: ml  #"ml" for groq model based and "heauristic" for regex based prompt guard
+      provider: heuristic
       ml-model: meta-llama/llama-prompt-guard-2-86m
       ml-threshold: 0.5
+      ml-max-tokens: 10
   otp:
     expiry-minutes: 5
     max-attempts: 3

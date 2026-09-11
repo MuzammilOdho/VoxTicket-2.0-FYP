@@ -9,6 +9,7 @@ import com.voxticket.identity.OwnedOrderItemResolver;
 import com.voxticket.identity.OwnedOrderResolver;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.identity.VerifiedOrderRef;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.entity.Order;
 import com.voxticket.persistence.entity.OrderItem;
@@ -71,6 +72,7 @@ public class ProcedureCoordinator {
     private final ClaimService claimService;
     private final ReferenceNumberGenerator referenceNumberGenerator;
     private final VerificationService verificationService;
+    private final TurnMetrics turnMetrics;
 
     public ProcedureCoordinator(
             OwnedOrderResolver ownedOrderResolver,
@@ -86,7 +88,8 @@ public class ProcedureCoordinator {
             ReturnService returnService,
             ClaimService claimService,
             ReferenceNumberGenerator referenceNumberGenerator,
-            VerificationService verificationService) {
+            VerificationService verificationService,
+            TurnMetrics turnMetrics) {
         this.ownedOrderResolver = ownedOrderResolver;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.actionPolicyService = actionPolicyService;
@@ -101,6 +104,7 @@ public class ProcedureCoordinator {
         this.claimService = claimService;
         this.referenceNumberGenerator = referenceNumberGenerator;
         this.verificationService = verificationService;
+        this.turnMetrics = turnMetrics;
     }
 
     // ---- Starting procedures (called from ProcedureRequestTools, i.e. by the model) ----
@@ -108,14 +112,15 @@ public class ProcedureCoordinator {
     public ProcedureOutcome startCancellation(ConversationSession session, String orderReference) {
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders.");
+            return recordOutcome(ProcedureType.CANCELLATION, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         Payment payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(ref.orderId())
                 .orElseThrow(() -> new IllegalStateException("Order has no payment record: " + ref.orderNumber()));
         CancellationEligibility eligibility = cancellationPolicyService.evaluate(order, payment);
         if (!eligibility.eligible()) {
-            return ProcedureOutcome.error("NOT_ELIGIBLE", "This order is not eligible for cancellation (" + eligibility.denialReason() + ").");
+            return recordOutcome(ProcedureType.CANCELLATION,
+                    ProcedureOutcome.error("NOT_ELIGIBLE", "This order is not eligible for cancellation (" + eligibility.denialReason() + ")."));
         }
         String description = "cancel order " + ref.orderNumber() + "." + describePaymentConsequence(eligibility.paymentConsequence());
         return beginProcedure(session, ProcedureType.CANCELLATION, ref, Map.of(), IdentityAssurance.OTP_VERIFIED, description);
@@ -124,16 +129,17 @@ public class ProcedureCoordinator {
     public ProcedureOutcome startReturn(ConversationSession session, String orderReference, String itemReference, String reasonText) {
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders.");
+            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
         OrderItem item = resolveItem(ref, itemReference);
         if (item == null) {
-            return ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That item doesn't match any item on this order.");
+            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That item doesn't match any item on this order."));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
         if (!eligibility.eligible()) {
-            return ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ").");
+            return recordOutcome(ProcedureType.RETURN,
+                    ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ")."));
         }
         ReturnReason reason = parseReturnReason(reasonText);
         Map<String, String> data = Map.of("itemReference", itemReference, "reason", reason.name());
@@ -144,15 +150,15 @@ public class ProcedureCoordinator {
     public ProcedureOutcome startClaim(ConversationSession session, String orderReference, String itemReference, String problemText) {
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders.");
+            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
         OrderItem item = resolveItem(ref, itemReference);
         if (item == null) {
-            return ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That item doesn't match any item on this order.");
+            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That item doesn't match any item on this order."));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
-            return ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order.");
+            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."));
         }
         ClaimReason reason = parseClaimReason(problemText);
         Map<String, String> data = Map.of("itemReference", itemReference, "reason", reason.name(), "description", nullToEmpty(problemText));
@@ -184,6 +190,7 @@ public class ProcedureCoordinator {
         session.markEscalated();
         session.recordAction(new RecentAction(RecentActionType.ESCALATED, "SUPPORT", "OPEN", null, ticket.getTicketNumber(), Instant.now()));
         log.info("event=procedure_escalated ticketNumber={}", ticket.getTicketNumber());
+        turnMetrics.recordProcedureOutcome("ESCALATION", "ESCALATED", true);
         return ProcedureOutcome.ok("ESCALATED", "I've let our support team know - reference " + ticket.getTicketNumber()
                 + ". They'll have the details of what we've discussed so far.");
     }
@@ -197,14 +204,13 @@ public class ProcedureCoordinator {
         }
         VerificationResult result = verificationService.verify(session, code);
         if (!result.verified()) {
-            return ProcedureOutcome.error("VERIFICATION_FAILED", result.message());
+            return recordOutcome(procedure.getType(), ProcedureOutcome.error("VERIFICATION_FAILED", result.message()));
         }
         CustomerIdentity current = session.getCustomerIdentity();
         session.applyResolvedIdentity(new CustomerIdentity(current.customerId(), IdentityAssurance.OTP_VERIFIED, current.phone()));
         return moveToConfirmation(procedure);
     }
 
-    /** Model-invisible on purpose - only ConversationRuntime calls this, never a tool. This is the only outcome allowed to carry the dev OTP in its metadata. */
     public ProcedureOutcome resendVerificationCode(ConversationSession session) {
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
         if (procedure == null) {
@@ -228,14 +234,15 @@ public class ProcedureCoordinator {
         if (pendingAction == null || Instant.now().isAfter(pendingAction.expiresAt())) {
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
-            return ProcedureOutcome.error("EXPIRED", "That request has expired - let's start again if you'd still like to go ahead.");
+            return recordOutcome(procedure.getType(), ProcedureOutcome.error("EXPIRED", "That request has expired - let's start again if you'd still like to go ahead."));
         }
 
         PolicyDecision recheck = actionPolicyService.evaluate(new ActionRequest(procedure.getType(), procedure.getRequiredAssurance(), true), session);
         if (recheck.outcome() != PolicyOutcome.ALLOW) {
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
-            return ProcedureOutcome.error("VERIFICATION_REQUIRED", "This still needs identity verification we can't complete yet in this version of the system.");
+            return recordOutcome(procedure.getType(),
+                    ProcedureOutcome.error("VERIFICATION_REQUIRED", "This still needs identity verification we can't complete yet in this version of the system."));
         }
 
         ProcedureOutcome outcome;
@@ -246,11 +253,12 @@ public class ProcedureCoordinator {
                     procedure.getType(), procedure.getVerifiedTarget().orderNumber(), e.getClass().getSimpleName(), e);
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
+            turnMetrics.recordProcedureOutcome(procedure.getType().name(), "EXECUTION_FAILED", false);
             throw e;
         }
         procedure.setStatus(ProcedureStatus.EXECUTED);
         session.clearActiveProcedure();
-        return outcome;
+        return recordOutcome(procedure.getType(), outcome);
     }
 
     public ProcedureOutcome declineActive(ConversationSession session) {
@@ -260,10 +268,15 @@ public class ProcedureCoordinator {
         }
         procedure.setStatus(ProcedureStatus.CANCELLED);
         session.clearActiveProcedure();
-        return ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that.");
+        return recordOutcome(procedure.getType(), ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that."));
     }
 
     // ---- internal ----
+
+    private ProcedureOutcome recordOutcome(ProcedureType type, ProcedureOutcome outcome) {
+        turnMetrics.recordProcedureOutcome(type.name(), outcome.code(), outcome.success());
+        return outcome;
+    }
 
     private VerifiedOrderRef resolveOrder(ConversationSession session, String orderReference) {
         try {
@@ -291,8 +304,8 @@ public class ProcedureCoordinator {
         if (slotResult == ProcedureSlotResult.BOTH_SLOTS_OCCUPIED) {
             String activeDesc = session.getActiveProcedure().map(this::describe).orElse("one request");
             String pausedDesc = session.getPausedProcedure().map(this::describe).orElse("another request");
-            return ProcedureOutcome.error("TOO_MANY_ACTIVE_PROCEDURES",
-                    "There's already a " + activeDesc + " and a " + pausedDesc + " in progress. Which one would you like to continue first?");
+            return recordOutcome(type, ProcedureOutcome.error("TOO_MANY_ACTIVE_PROCEDURES",
+                    "There's already a " + activeDesc + " and a " + pausedDesc + " in progress. Which one would you like to continue first?"));
         }
 
         PolicyDecision decision = actionPolicyService.evaluate(new ActionRequest(type, requiredAssurance, false), session);
@@ -301,19 +314,15 @@ public class ProcedureCoordinator {
             VerificationOutcome verificationOutcome = verificationService.issueChallenge(session, purposeFor(type));
             if (!verificationOutcome.success()) {
                 session.clearActiveProcedure();
-                return ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message());
+                return recordOutcome(type, ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()));
             }
             String pausedNote = slotResult == ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS
                     ? " I've paused what we were doing before - we'll come back to it after this."
                     : "";
-            // This return value flows straight into the model's tool-call context (requestCancellation/
-            // requestReturn are @Tool methods) - it must NEVER carry metadata, since that's where the
-            // plaintext dev OTP lives. Deliberately calling the 2-arg ProcedureOutcome.ok(...) overload
-            // here, not the 3-arg one, so there is no metadata argument to accidentally attach.
-            return ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote);
+            return recordOutcome(type, ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote));
         }
 
-        return moveToConfirmation(procedure);
+        return recordOutcome(type, moveToConfirmation(procedure));
     }
 
     private ProcedureOutcome moveToConfirmation(ProcedureState procedure) {

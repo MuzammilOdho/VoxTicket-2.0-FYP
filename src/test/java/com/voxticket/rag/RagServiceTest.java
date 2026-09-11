@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.observability.TurnMetrics;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 class RagServiceTest {
 
     private final VectorStore vectorStore = mock(VectorStore.class);
-    private final RagService ragService = new RagService(vectorStore, 3, 0.5);
+    private final RagService ragService = new RagService(vectorStore, new RagProperties(3, 0.5), mock(TurnMetrics.class));
 
     @Test
     void mapsRetrievedDocumentsToPolicySnippetsWithCategoryAndText() {
@@ -43,4 +44,17 @@ class RagServiceTest {
 
         assertThat(ragService.searchPolicy("something totally unrelated")).isEmpty();
     }
-}
+
+    @Test
+    void differentTopKAndThresholdConfigurationChangesTheSearchRequestWithoutCodeChanges() {
+        RagService tunedService = new RagService(vectorStore, new RagProperties(10, 0.9), mock(TurnMetrics.class));
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+
+        tunedService.searchPolicy("test");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(SearchRequest.class);
+        org.mockito.Mockito.verify(vectorStore).similaritySearch(captor.capture());
+        assertThat(captor.getValue().getTopK()).isEqualTo(10);
+        assertThat(captor.getValue().getSimilarityThreshold()).isEqualTo(0.9);
+    }
+}   

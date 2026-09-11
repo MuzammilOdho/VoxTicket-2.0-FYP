@@ -1,12 +1,14 @@
 package com.voxticket.safety;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
+import com.voxticket.observability.TurnMetrics;
 import org.junit.jupiter.api.Test;
 
 class HeuristicPromptGuardTest {
 
-    private final HeuristicPromptGuard promptGuard = new HeuristicPromptGuard();
+    private final HeuristicPromptGuard promptGuard = new HeuristicPromptGuard(mock(TurnMetrics.class));
 
     @Test
     void ordinarySupportQuestionsAreAllowed() {

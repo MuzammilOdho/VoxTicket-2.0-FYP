@@ -3,6 +3,7 @@ package com.voxticket.conversation;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityService;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ConfirmationClassifier;
 import com.voxticket.procedure.ConfirmationDecision;
 import com.voxticket.procedure.ProcedureCoordinator;
@@ -15,6 +16,7 @@ import com.voxticket.safety.PromptGuardVerdict;
 import com.voxticket.safety.SafeLogging;
 import com.voxticket.verification.OtpInputClassifier;
 import com.voxticket.verification.OtpInputResult;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -41,6 +43,7 @@ public class ConversationRuntime {
     private final ConfirmationClassifier confirmationClassifier;
     private final OtpInputClassifier otpInputClassifier;
     private final ProcedureCoordinator procedureCoordinator;
+    private final TurnMetrics turnMetrics;
 
     public ConversationRuntime(
             SessionStore sessionStore,
@@ -50,7 +53,8 @@ public class ConversationRuntime {
             PromptGuard promptGuard,
             ConfirmationClassifier confirmationClassifier,
             OtpInputClassifier otpInputClassifier,
-            ProcedureCoordinator procedureCoordinator) {
+            ProcedureCoordinator procedureCoordinator,
+            TurnMetrics turnMetrics) {
         this.sessionStore = sessionStore;
         this.identityService = identityService;
         this.supportAgent = supportAgent;
@@ -59,6 +63,7 @@ public class ConversationRuntime {
         this.confirmationClassifier = confirmationClassifier;
         this.otpInputClassifier = otpInputClassifier;
         this.procedureCoordinator = procedureCoordinator;
+        this.turnMetrics = turnMetrics;
     }
 
     public AssistantTurn processTurn(UserTurn turn) {
@@ -77,7 +82,7 @@ public class ConversationRuntime {
                 log.info("event=input_rejected sessionId={} reason=INPUT_TOO_LONG length={}", session.getSessionId(), normalization.rejectedLength());
                 int turnNumber = session.recordUserMessage("[message rejected - too long: " + normalization.rejectedLength() + " characters]");
                 session.recordAssistantMessage(TOO_LONG_MESSAGE);
-                logTurnEnd(session, turnNumber, startNanos);
+                completeTurn(session, turnNumber, startNanos, "input_too_long");
                 return new AssistantTurn(TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
             }
 
@@ -88,12 +93,13 @@ public class ConversationRuntime {
                         session.getSessionId(), verdict.category(), normalizedText.length(), SafeLogging.hash(normalizedText));
                 int turnNumber = session.recordUserMessage(REDACTED_FLAGGED_PLACEHOLDER);
                 session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
-                logTurnEnd(session, turnNumber, startNanos);
+                completeTurn(session, turnNumber, startNanos, "blocked");
                 return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
             }
 
             String responseText;
             int turnNumber;
+            String outcomeLabel;
             Map<String, String> turnMetadata = Map.of();
             Optional<ProcedureState> active = session.getActiveProcedure();
 
@@ -108,8 +114,10 @@ public class ConversationRuntime {
                 if (outcome != null) {
                     responseText = outcome.message();
                     turnMetadata = outcome.metadata();
+                    outcomeLabel = "verification";
                 } else {
                     responseText = supportAgent.respond(session, normalizedText);
+                    outcomeLabel = "verification_unclear";
                 }
             } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
                 turnNumber = session.recordUserMessage(normalizedText);
@@ -119,16 +127,18 @@ public class ConversationRuntime {
                     case NO -> procedureCoordinator.declineActive(session).message();
                     case UNCLEAR -> supportAgent.respond(session, normalizedText);
                 };
+                outcomeLabel = "confirmation_" + decision.name().toLowerCase();
             } else {
                 turnNumber = session.recordUserMessage(normalizedText);
                 responseText = supportAgent.respond(session, normalizedText);
+                outcomeLabel = "normal";
             }
             session.recordAssistantMessage(responseText);
 
             boolean stillWaiting = session.getActiveProcedure()
                     .map(p -> p.getStatus() == ProcedureStatus.AWAITING_CONFIRMATION || p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION)
                     .orElse(false);
-            logTurnEnd(session, turnNumber, startNanos);
+            completeTurn(session, turnNumber, startNanos, outcomeLabel);
             return new AssistantTurn(responseText, false, stillWaiting, stateView(session, turnNumber), turnMetadata);
         });
     }
@@ -142,10 +152,11 @@ public class ConversationRuntime {
         }
     }
 
-    private void logTurnEnd(ConversationSession session, int turnNumber, long startNanos) {
-        long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
-        log.info("event=turn_end sessionId={} turnNumber={} messageCount={} durationMs={}",
-                session.getSessionId(), turnNumber, session.getRecentMessages().size(), durationMs);
+    private void completeTurn(ConversationSession session, int turnNumber, long startNanos, String outcome) {
+        long durationNanos = System.nanoTime() - startNanos;
+        log.info("event=turn_end sessionId={} turnNumber={} messageCount={} outcome={} durationMs={}",
+                session.getSessionId(), turnNumber, session.getRecentMessages().size(), outcome, durationNanos / 1_000_000);
+        turnMetrics.recordTurn(Duration.ofNanos(durationNanos), session.getChannel().name(), outcome);
     }
 
     private ConversationStateView stateView(ConversationSession session, int turnNumber) {

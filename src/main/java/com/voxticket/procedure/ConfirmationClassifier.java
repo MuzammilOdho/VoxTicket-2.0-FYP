@@ -1,47 +1,53 @@
 package com.voxticket.procedure;
 
-import java.util.regex.Pattern;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Spec §21. Deterministic first pass - this is what actually gates a
- * mutation, not the general-purpose LLM. Handles both cases spec/the
- * resolved decisions explicitly call out:
- * - a clean compound confirmation ("Yes, cancel it and also complain about
- *   the delay" -> YES, with the rest of the sentence left for the agent to
- *   handle as a separate request on the next normal turn);
- * - a contradictory one ("yeah, right, don't cancel it" -> UNCLEAR, never
- *   silently read as YES just because it starts with an affirmative word).
+ * Spec §21 + resolved correction: deliberately strict. Only a standalone,
+ * unambiguous yes/no - the ENTIRE message, once trimmed and stripped of
+ * trailing punctuation - counts. Anything else, including compound ("yes,
+ * and where is my other order?") or corrective ("no, I meant ORD-10002")
+ * messages, returns UNCLEAR and reaches SupportAgent instead.
  *
- * <p>Anything this can't confidently resolve returns UNCLEAR. There is
- * deliberately no LLM-based second-guess step: per the resolved decision,
- * a single uncertain classification must never authorize a mutation, so
- * UNCLEAR just means the procedure stays parked and the customer is asked
- * again - it falls through to a normal SupportAgent turn, which can ask
- * for clarification or answer a side question without touching the
- * pending action either way.
+ * <p>This is a deliberate simplification from the earlier version, which
+ * tried to auto-execute compound confirmations - that silently dropped the
+ * second half of the request (there was never a way to act on "also
+ * complain about the delay" through the deterministic path), and
+ * misclassified corrections like "no, I meant ORD-10002" as a flat decline
+ * when the customer was actually still trying to proceed, just against a
+ * different order. SupportAgent has the full conversation context and can
+ * ask for an explicit yes/no before anything is confirmed - it still has no
+ * tool that can trigger the mutation itself, so this doesn't weaken the
+ * security boundary at all, only fixes what happens with ambiguous input.
  */
 @Component
 public class ConfirmationClassifier {
 
-    private static final Pattern YES_LEADING = Pattern.compile(
-            "^(yes|yeah|yep|yup|sure|ok|okay|confirmed?|go ahead|please do|do it)\\b[,.!]?\\s*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NO_LEADING = Pattern.compile(
-            "^(no|nope|don'?t|do not|stop|never ?mind|wait)\\b[,.!]?\\s*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CONTRADICTS_YES = Pattern.compile(
-            "\\b(don'?t|do not|not)\\b.{0,30}\\b(cancel|return|refund|do it|go ahead|proceed)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Set<String> YES_PHRASES = Set.of(
+            "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "confirmed", "go ahead", "please do", "do it");
+    private static final Set<String> NO_PHRASES = Set.of(
+            "no", "nope", "don't", "do not", "stop", "never mind", "nevermind", "wait", "cancel that");
 
     public ConfirmationDecision classify(String message) {
-        String text = message == null ? "" : message.trim();
-        if (text.isEmpty()) {
+        String normalized = normalize(message);
+        if (normalized.isEmpty()) {
             return ConfirmationDecision.UNCLEAR;
         }
-        if (NO_LEADING.matcher(text).lookingAt()) {
+        if (YES_PHRASES.contains(normalized)) {
+            return ConfirmationDecision.YES;
+        }
+        if (NO_PHRASES.contains(normalized)) {
             return ConfirmationDecision.NO;
         }
-        if (YES_LEADING.matcher(text).lookingAt()) {
-            return CONTRADICTS_YES.matcher(text).find() ? ConfirmationDecision.UNCLEAR : ConfirmationDecision.YES;
-        }
         return ConfirmationDecision.UNCLEAR;
+    }
+
+    private String normalize(String message) {
+        if (message == null) {
+            return "";
+        }
+        return message.trim().toLowerCase(Locale.ROOT).replaceAll("[.!?]+$", "");
     }
 }

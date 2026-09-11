@@ -8,6 +8,7 @@ import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
+import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.service.CustomerOrderQueryService;
@@ -16,7 +17,6 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 
-/** Tests only the pure string-building logic - never touches the ChatClient fluent chain. */
 class SupportAgentSystemPromptTest {
 
     private final SupportAgent agent = newAgent();
@@ -27,7 +27,7 @@ class SupportAgentSystemPromptTest {
         return new SupportAgent(
                 builder, mock(ContextBuilder.class), mock(ModelSelector.class),
                 mock(CustomerOrderQueryService.class), mock(PolicyKnowledgeTools.class),
-                mock(ProcedureCoordinator.class), 0.3);
+                mock(ProcedureCoordinator.class), mock(ChatOptionsFactory.class), mock(TurnMetrics.class));
     }
 
     @Test
@@ -49,7 +49,7 @@ class SupportAgentSystemPromptTest {
     }
 
     @Test
-    void aRefundWithAnAmountIsDescribedWithItsAmountAndReference() {
+    void aRefundIsDescribedWithItsAmountAndReferenceButNoMutableStatus() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10001", "PENDING", BigDecimal.valueOf(5000), "RFN-00001", Instant.now()));
 
@@ -57,6 +57,18 @@ class SupportAgentSystemPromptTest {
 
         assertThat(prompt).contains("RFN-00001");
         assertThat(prompt).contains("5000");
+        assertThat(prompt).doesNotContain("PENDING");
+    }
+
+    @Test
+    void thePromptInstructsTheModelToUseToolsForCurrentStatusRatherThanTrustingHistory() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordAction(new RecentAction(RecentActionType.CLAIM_FILED, "ORD-20002", "OPEN", null, "CLM-00001", Instant.now()));
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("historical facts only");
+        assertThat(prompt).contains("NOT necessarily still");
     }
 
     @Test

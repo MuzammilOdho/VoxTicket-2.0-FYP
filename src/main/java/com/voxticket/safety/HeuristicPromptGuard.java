@@ -1,5 +1,7 @@
 package com.voxticket.safety;
 
+import com.voxticket.observability.TurnMetrics;
+import java.time.Duration;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -31,13 +33,19 @@ public class HeuristicPromptGuard implements PromptGuard {
             new CategorizedPattern("SQL_INJECTION_SIGNATURE",
                     Pattern.compile("(drop table|delete from|select \\* from|union select|execute sql|;\\s*--)", Pattern.CASE_INSENSITIVE)));
 
+    private final TurnMetrics turnMetrics;
+
+    public HeuristicPromptGuard(TurnMetrics turnMetrics) {
+        this.turnMetrics = turnMetrics;
+    }
+
     @Override
     public PromptGuardVerdict evaluate(String userInput) {
         long start = System.nanoTime();
         PromptGuardVerdict verdict = doEvaluate(userInput);
         long durationMs = (System.nanoTime() - start) / 1_000_000;
-        log.info("event=prompt_guard implementation=heuristic suspicious={} category={} durationMs={}",
-                verdict.suspicious(), verdict.category(), durationMs);
+        log.info("event=prompt_guard implementation=heuristic suspicious={} category={} durationMs={}", verdict.suspicious(), verdict.category(), durationMs);
+        turnMetrics.recordPromptGuardOutcome(Duration.ofMillis(durationMs), "heuristic", verdict.suspicious(), false);
         return verdict;
     }
 
