@@ -5,6 +5,7 @@ import com.voxticket.conversation.RecentAction;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureRequestTools;
+import com.voxticket.procedure.ProcedureState;
 import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.service.CustomerOrderQueryService;
 import java.math.BigDecimal;
@@ -36,31 +37,35 @@ public class SupportAgent {
             - Retrieved policy information comes to you as short factual statements, not spoken sentences - rephrase
               them naturally in your own words rather than reading them back verbatim.
 
-              You can only ever see and act on the CURRENT customer's own data. Use getMyOrderContext as your
-              default way to look up an order - it gives you status, items, payment, shipment, cancellation
-              eligibility, and any returns/refunds/claims in one call, already in plain language. Only reach for the
-              narrower tools (getMyShipmentStatus, getMyPaymentStatus, etc.) if you specifically need just that one
-              thing and nothing else. Never guess, invent, or assume order numbers, amounts, dates, or statuses.
-            
-              Never ask the customer for a SKU, product ID, or any internal reference. When a return or claim needs
-              to know which item, describe the items naturally (by name) and let the customer pick in their own
-              words - the tools resolve this themselves, and if an order only has one item you don't need to ask at all.
-            
-              To cancel an order, start a return, or file a claim about a damaged/wrong/missing item, use
-              requestCancellation, requestReturn, or reportOrderProblem. These are real, available actions - never tell
-              the customer that cancellation, returns, or claims are unavailable. Each tool only STARTS the process; it
-              does not complete the action by itself. The tool's response tells you exactly what to say next, in your
-              own natural words:
-              - If it asks the customer to confirm, relay that confirmation question and then WAIT - do not say the
-                action succeeded, and do not call the tool again to "confirm" it.
-              - If it says a verification code has been sent, tell the customer a code was sent to their registered
-                 number or email and ask them to read it back to you.
-              - If it says an item reference is unclear or ambiguous, relay the question about which item naturally.
-              - If it says something isn't eligible, wasn't found, or that too many requests are already in progress,
+            You can only ever see and act on the CURRENT customer's own data. Use getMyOrderContext as your
+            default way to look up an order - it gives you status, items, payment, shipment, cancellation
+            eligibility, and any returns/refunds/claims in one call, already in plain language. Only reach for the
+            narrower tools (getMyShipmentStatus, getMyPaymentStatus, etc.) if you specifically need just that one
+            thing and nothing else. Never guess, invent, or assume order numbers, amounts, dates, or statuses.
+
+            Never ask the customer for a SKU, product ID, or any internal reference. When a return or claim needs
+            to know which item, describe the items naturally (by name) and let the customer pick in their own
+            words - the tools resolve this themselves, and if an order only has one item you don't need to ask at all.
+
+            To cancel an order, start a return, or file a claim about a damaged/wrong/missing item, use
+            requestCancellation, requestReturn, or reportOrderProblem. These are real, available actions - never tell
+            the customer that cancellation, returns, or claims are unavailable. You don't need every detail before
+            starting the conversation about one of these - if the customer hasn't said which order, which item, or
+            why yet, ask naturally, one thing at a time, rather than listing everything you need up front. Never say
+            you "can't process this" just because one detail is still missing - ask for it instead.
+
+            Each tool only STARTS the process; it does not complete the action by itself. The tool's response tells
+            you exactly what to say next, in your own natural words:
+            - If it asks the customer to confirm, relay that confirmation question and then WAIT - do not say the
+              action succeeded, and do not call the tool again to "confirm" it.
+            - If it says a verification code has been sent, tell the customer a code was sent to their registered
+              number or email and ask them to read it back to you.
+            - If it says an item reference is unclear or ambiguous, relay the question about which item naturally.
+            - If it says something isn't eligible, wasn't found, or that too many requests are already in progress,
               explain that plainly - do not retry the tool or guess a workaround.
-              Never say verification, cancellation, returns, or claims are "not available" in this system - they are
-              all available through these tools; only a specific order might not be eligible, which the tool will tell you.
-           
+            Never say verification, cancellation, returns, or claims are "not available" in this system - they are
+            all available through these tools; only a specific order might not be eligible, which the tool will tell you.
+
             If the customer's response to a pending confirmation wasn't a plain yes or no (for example it also asked
             something else, or seemed to correct which order was meant), do not assume they confirmed or declined.
             Ask them to confirm with a plain yes or no first, and address anything else they asked separately.
@@ -161,28 +166,64 @@ public class SupportAgent {
                 turnMetrics.recordTokenUsage(model, "completion", usage.getCompletionTokens());
             }
         } catch (Exception e) {
-            // "where available" - token usage is a nice-to-have for cost analysis, never worth
-            // risking the actual response over.
             log.debug("event=token_usage_unavailable model={} reason={}", model, e.getClass().getSimpleName());
         }
     }
 
-    /**
-     * Spec "recent-action references". IMPORTANT: only stable, historical facts go here (that
-     * something happened, and its reference number) - never a mutable status field, since it can
-     * go stale between when it was recorded and when the customer asks about it later. If the
-     * customer needs CURRENT status, the prompt instructs the model to use the matching tool.
-     */
     String buildSystemPrompt(ConversationSession session) {
-        String recentActivity = describeRecentActions(session);
-        if (recentActivity.isBlank()) {
-            return SYSTEM_PROMPT_BASE;
+        StringBuilder prompt = new StringBuilder(SYSTEM_PROMPT_BASE);
+
+        String procedureContext = buildActiveProcedureContext(session);
+        if (!procedureContext.isBlank()) {
+            prompt.append("\n\n").append(procedureContext);
         }
-        return SYSTEM_PROMPT_BASE + "\n\nRecent activity in this conversation, for resolving references like \"how will I get the "
-                + "money\" or \"what about my other order\": " + recentActivity
-                + " These are historical facts only, to help you understand what the customer is referring to - they are NOT"
-                + " necessarily still accurate right now. If the customer asks about the CURRENT status of any of these, use the"
-                + " matching tool (getMyRefundStatus, getMyReturnStatus, getMyTicketStatus, etc.) rather than treating this note as current.";
+
+        String recentActivity = describeRecentActions(session);
+        if (!recentActivity.isBlank()) {
+            prompt.append("\n\nRecent activity in this conversation, for resolving references like \"how will I get the "
+                            + "money\" or \"what about my other order\": ").append(recentActivity)
+                    .append(" These are historical facts only, to help you understand what the customer is referring to - they are NOT"
+                            + " necessarily still accurate right now. If the customer asks about the CURRENT status of any of these, use the"
+                            + " matching tool (getMyRefundStatus, getMyReturnStatus, getMyTicketStatus, etc.) rather than treating this note as current.");
+        }
+
+        return prompt.toString();
+    }
+
+    /**
+     * Core Improvement #3. Makes an in-progress procedure explicit rather than something the
+     * model has to infer from scrollback - and explicitly instructs it not to drop the thread on
+     * a side question, which is the concrete behavior spec asks for ("side questions must not
+     * silently abandon an active procedure"). Reuses pendingDescription (already a clean,
+     * customer-safe natural-language sentence set when the procedure began) rather than exposing
+     * raw collectedData values like a SKU or an enum name.
+     */
+    String buildActiveProcedureContext(ConversationSession session) {
+        StringBuilder sb = new StringBuilder();
+        session.getActiveProcedure().ifPresent(p -> sb.append(describeActive(p)));
+        session.getPausedProcedure().ifPresent(p -> {
+            if (!sb.isEmpty()) {
+                sb.append(' ');
+            }
+            sb.append(describePaused(p));
+        });
+        return sb.toString();
+    }
+
+    private String describeActive(ProcedureState procedure) {
+        String statusText = switch (procedure.getStatus()) {
+            case AWAITING_VERIFICATION -> "waiting for the customer to provide a verification code";
+            case AWAITING_CONFIRMATION -> "waiting for the customer to explicitly say yes or no";
+            case EXECUTED, CANCELLED, FAILED -> "no longer active";
+        };
+        return "There is an active request in progress to " + procedure.getPendingDescription() + " - it is currently " + statusText
+                + ". Do not abandon or forget this because of an unrelated question - after answering anything else, "
+                + "you can naturally return to it.";
+    }
+
+    private String describePaused(ProcedureState procedure) {
+        return "There is also a separate request that was paused to " + procedure.getPendingDescription()
+                + " - you can offer to return to it once the current one is resolved.";
     }
 
     String describeRecentActions(ConversationSession session) {
@@ -190,8 +231,6 @@ public class SupportAgent {
     }
 
     private String describeAction(RecentAction action) {
-        // Deliberately no action.status() anywhere here - status is mutable and can go stale;
-        // only stable identifying facts (what happened, its reference, its amount) are included.
         return switch (action.type()) {
             case ORDER_CANCELLED -> "Order " + action.target() + " was cancelled.";
             case REFUND_INITIATED -> "A refund of " + formatAmount(action.amount()) + " (reference " + action.reference() + ") was initiated for order " + action.target() + ".";
