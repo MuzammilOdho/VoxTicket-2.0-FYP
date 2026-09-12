@@ -90,4 +90,16 @@ class CustomerReadToolsTest {
         assertThat(result).isInstanceOf(ToolError.class);
         assertThat(((ToolError) result).code()).isEqualTo("NOT_FOUND_FOR_ACCOUNT");
     }
+
+    @Test
+    void getMyOrderContextReturnsTheAggregatedServiceResultOnSuccess() {
+        var context = new com.voxticket.service.dto.OrderContextView(
+                "ORD-10001", "in progress", "not yet shipped", "PKR", BigDecimal.valueOf(1000), Instant.now(),
+                List.of(), null, List.of(), "Eligible for cancellation.", List.of(), List.of(), List.of());
+        when(queryService.getOrderContext(identity, "ORD-10001")).thenReturn(context);
+
+        Object result = tools.getMyOrderContext("ORD-10001");
+
+        assertThat(result).isSameAs(context);
+    }
 }

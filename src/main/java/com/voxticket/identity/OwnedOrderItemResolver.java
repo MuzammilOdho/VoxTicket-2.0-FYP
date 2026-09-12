@@ -2,16 +2,11 @@ package com.voxticket.identity;
 
 import com.voxticket.persistence.entity.OrderItem;
 import com.voxticket.persistence.repository.OrderItemRepository;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 
-/**
- * Resolves an item reference (SKU) to an {@link OrderItem} within an
- * already-verified order. This is the item-level counterpart to
- * {@link OwnedOrderResolver}: it exists so a return/claim request can only
- * ever act on an item that is actually part of the order the caller already
- * proved ownership of, using the same customer-safe reference (a SKU) that
- * the rest of the system exposes - never an internal UUID.
- */
 @Component
 public class OwnedOrderItemResolver {
 
@@ -19,6 +14,43 @@ public class OwnedOrderItemResolver {
 
     public OwnedOrderItemResolver(OrderItemRepository orderItemRepository) {
         this.orderItemRepository = orderItemRepository;
+    }
+
+    public OrderItem resolve(VerifiedOrderRef orderRef, String itemDescription) {
+        List<OrderItem> items = orderItemRepository.findByOrderId(orderRef.orderId());
+        if (items.isEmpty()) {
+            throw new ResourceNotFoundForAccountException("ORDER_ITEM", String.valueOf(itemDescription));
+        }
+        if (items.size() == 1) {
+            return items.get(0);
+        }
+        if (itemDescription == null || itemDescription.isBlank()) {
+            throw new AmbiguousItemException(items);
+        }
+
+        String trimmed = itemDescription.trim();
+        Optional<OrderItem> exactSku = items.stream().filter(i -> i.getSku().equalsIgnoreCase(trimmed)).findFirst();
+        if (exactSku.isPresent()) {
+            return exactSku.get();
+        }
+
+        // FIX: natural phrasing like "the t-shirt" or "my shoes" was failing a plain substring
+        // check against "Cotton T-Shirt" - "the"/"my" aren't part of the product name. Stripping
+        // a small set of common leading filler words before matching handles the single most
+        // common real phrasing pattern without building a full NLP/stopword pipeline.
+        String needle = stripLeadingFillerWords(trimmed).toLowerCase(Locale.ROOT);
+        List<OrderItem> nameMatches = items.stream().filter(i -> i.getProductName().toLowerCase(Locale.ROOT).contains(needle)).toList();
+        if (nameMatches.size() == 1) {
+            return nameMatches.get(0);
+        }
+        if (nameMatches.isEmpty()) {
+            throw new ResourceNotFoundForAccountException("ORDER_ITEM", itemDescription);
+        }
+        throw new AmbiguousItemException(nameMatches);
+    }
+
+    private String stripLeadingFillerWords(String text) {
+        return text.replaceAll("(?i)^(the|a|an|my)\\s+", "").trim();
     }
 
     public OrderItem resolveBySku(VerifiedOrderRef orderRef, String sku) {

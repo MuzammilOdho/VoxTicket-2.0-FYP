@@ -3,12 +3,7 @@ package com.voxticket.procedure;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
-import com.voxticket.identity.CustomerIdentity;
-import com.voxticket.identity.IdentityAssurance;
-import com.voxticket.identity.OwnedOrderItemResolver;
-import com.voxticket.identity.OwnedOrderResolver;
-import com.voxticket.identity.ResourceNotFoundForAccountException;
-import com.voxticket.identity.VerifiedOrderRef;
+import com.voxticket.identity.*;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.entity.Order;
@@ -47,6 +42,8 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -131,9 +128,14 @@ public class ProcedureCoordinator {
         if (ref == null) {
             return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
-        OrderItem item = resolveItem(ref, itemReference);
-        if (item == null) {
-            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That item doesn't match any item on this order."));
+        OrderItem item;
+        try {
+            item = ownedOrderItemResolver.resolve(ref, itemReference);
+        } catch (ResourceNotFoundForAccountException e) {
+            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"));
+        } catch (AmbiguousItemException e) {
+            String candidates = e.getCandidates().stream().map(OrderItem::getProductName).collect(Collectors.joining(", "));
+            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
@@ -142,7 +144,7 @@ public class ProcedureCoordinator {
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ")."));
         }
         ReturnReason reason = parseReturnReason(reasonText);
-        Map<String, String> data = Map.of("itemReference", itemReference, "reason", reason.name());
+        Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name());
         String description = "start a return for " + item.getProductName() + " from order " + ref.orderNumber();
         return beginProcedure(session, ProcedureType.RETURN, ref, data, IdentityAssurance.OTP_VERIFIED, description);
     }
@@ -152,16 +154,21 @@ public class ProcedureCoordinator {
         if (ref == null) {
             return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
-        OrderItem item = resolveItem(ref, itemReference);
-        if (item == null) {
-            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That item doesn't match any item on this order."));
+        OrderItem item;
+        try {
+            item = ownedOrderItemResolver.resolve(ref, itemReference);
+        } catch (ResourceNotFoundForAccountException e) {
+            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"));
+        } catch (AmbiguousItemException e) {
+            String candidates = e.getCandidates().stream().map(OrderItem::getProductName).collect(Collectors.joining(", "));
+            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
             return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."));
         }
         ClaimReason reason = parseClaimReason(problemText);
-        Map<String, String> data = Map.of("itemReference", itemReference, "reason", reason.name(), "description", nullToEmpty(problemText));
+        Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name(), "description", nullToEmpty(problemText));
         String description = "file a claim for " + item.getProductName() + " on order " + ref.orderNumber() + " (" + reason.name().toLowerCase(Locale.ROOT) + ")";
         return beginProcedure(session, ProcedureType.CLAIM, ref, data, IdentityAssurance.PHONE_MATCHED, description);
     }
@@ -286,13 +293,6 @@ public class ProcedureCoordinator {
         }
     }
 
-    private OrderItem resolveItem(VerifiedOrderRef ref, String itemReference) {
-        try {
-            return ownedOrderItemResolver.resolveBySku(ref, itemReference);
-        } catch (ResourceNotFoundForAccountException e) {
-            return null;
-        }
-    }
 
     private ProcedureOutcome beginProcedure(
             ConversationSession session, ProcedureType type, VerifiedOrderRef target, Map<String, String> data,

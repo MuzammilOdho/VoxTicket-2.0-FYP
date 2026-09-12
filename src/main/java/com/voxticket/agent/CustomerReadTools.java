@@ -108,6 +108,14 @@ public class CustomerReadTools {
         }
     }
 
+    @Tool(description = "Get a complete picture of one of the customer's own orders - status, items, payment, shipment, cancellation "
+            + "eligibility, and any related returns, refunds, or claims - all in one call. Prefer this over the narrower single-purpose "
+            + "tools (getMyShipmentStatus, getMyPaymentStatus, getMyRefundStatus, getMyReturnStatus) whenever you need more than one "
+            + "piece of information about an order.")
+    public Object getMyOrderContext(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
+        return safely("getMyOrderContext", orderReference, () -> queryService.getOrderContext(identity, orderReference));
+    }
+
     private String safeReference(String reference) {
         return reference == null ? "none" : reference;
     }

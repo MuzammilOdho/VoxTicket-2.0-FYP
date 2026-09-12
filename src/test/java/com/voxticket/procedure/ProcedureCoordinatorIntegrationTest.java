@@ -297,5 +297,29 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(session.getActiveProcedure()).isPresent();
     }
 
+    @Test
+    void singleItemOrderAutoResolvesForAClaimWithoutNeedingAnItemReference() {
+        Order order = newOrder(BigDecimal.valueOf(1000));
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startClaim(session, order.getOrderNumber(), "", "arrived damaged");
+
+        assertThat(outcome.code()).isEqualTo("CONFIRMATION_REQUIRED");
+    }
+
+    @Test
+    void ambiguousItemDescriptionAsksForClarificationInsteadOfGuessing() {
+        Order order = newOrder(BigDecimal.valueOf(2000));
+        order.addItem(new OrderItem("Blue Cotton Shirt", "SKU-EXTRA-" + java.util.UUID.randomUUID(), 1, BigDecimal.valueOf(1000), true, false));
+        orderRepository.saveAndFlush(order);
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startClaim(session, order.getOrderNumber(), "", "one item was damaged");
+
+        assertThat(outcome.success()).isFalse();
+        assertThat(outcome.code()).isEqualTo("ITEM_REQUIRED");
+    }
 
 }
