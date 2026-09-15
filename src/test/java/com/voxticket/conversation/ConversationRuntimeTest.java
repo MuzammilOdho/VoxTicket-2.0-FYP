@@ -13,11 +13,7 @@ import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
-import com.voxticket.procedure.ConfirmationClassifier;
-import com.voxticket.procedure.ProcedureCoordinator;
-import com.voxticket.procedure.ProcedureOutcome;
-import com.voxticket.procedure.ProcedureState;
-import com.voxticket.procedure.ProcedureType;
+import com.voxticket.procedure.*;
 import com.voxticket.safety.HeuristicPromptGuard;
 import com.voxticket.safety.InputNormalizer;
 import com.voxticket.safety.PromptGuard;
@@ -169,8 +165,29 @@ class ConversationRuntimeTest {
 
     private void seedAwaitingConfirmation(String sessionId) {
         sessionStore.withSession(sessionId, Channel.CHAT, session -> {
-            VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), IdentityAssurance.OTP_VERIFIED, Instant.now());
+            VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
+            ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, ref, Map.of(), IdentityAssurance.PHONE_MATCHED);
+            session.beginProcedure(procedure);
+            return null;
+        });
+    }
+
+    @Test
+    void verificationExecutionFailureIsCaughtAndReturnsASafeGenericMessage() {
+        String sessionId = "s13";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.submitVerificationCode(any(), any())).thenThrow(new RuntimeException("db error"));
+
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "123456", null, Instant.now(), Map.of()));
+
+        assertThat(response.text()).contains("Something went wrong");
+    }
+
+    private void seedAwaitingVerification(String sessionId) {
+        sessionStore.withSession(sessionId, Channel.CHAT, session -> {
+            VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
             ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, ref, Map.of(), IdentityAssurance.OTP_VERIFIED);
+            procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
             session.beginProcedure(procedure);
             return null;
         });

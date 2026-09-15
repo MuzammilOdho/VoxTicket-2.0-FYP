@@ -24,8 +24,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Spec §9. Never logs or stores a plaintext OTP - only a salted hash.
- * Never sends the code anywhere the model could see it.
+ * Spec §9 + Core Improvement #4. issueChallenge/verify are bound to the
+ * exact procedure and order they authorize - a challenge issued for
+ * cancelling ORD-10001 cannot verify against a request for ORD-20002, even
+ * if the code itself happened to match some other row (defense in depth;
+ * in practice there's only ever one challenge pending per session, but the
+ * binding is checked explicitly rather than assumed).
  */
 @Service
 public class VerificationService {
@@ -62,7 +66,7 @@ public class VerificationService {
     }
 
     @Transactional
-    public VerificationOutcome issueChallenge(ConversationSession session, VerificationPurpose purpose) {
+    public VerificationOutcome issueChallenge(ConversationSession session, VerificationPurpose purpose, UUID procedureId, String orderNumber) {
         UUID customerId = session.getCustomerIdentity().requireCustomerId();
         Customer customer = customerRepository.findById(customerId).orElseThrow();
 
@@ -91,11 +95,12 @@ public class VerificationService {
         String maskedDestination = mask(customer, channel);
 
         VerificationChallenge challenge = repository.save(new VerificationChallenge(
-                customer, session.getSessionId(), purpose, channel, maskedDestination, hash, salt, Instant.now().plus(expiry)));
+                customer, session.getSessionId(), purpose, channel, maskedDestination, hash, salt, procedureId, orderNumber, Instant.now().plus(expiry)));
 
         otpDeliveryService.deliver(customer, plainOtp, purpose);
         session.setPendingVerificationChallengeId(challenge.getId());
-        log.info("event=otp_issued customerId={} sessionId={} channel={} purpose={}", customerId, session.getSessionId(), channel, purpose);
+        log.info("event=otp_issued customerId={} sessionId={} channel={} purpose={} procedureId={} orderNumber={}",
+                customerId, session.getSessionId(), channel, purpose, procedureId, orderNumber);
 
         Map<String, String> metadata = channel == OtpDeliveryChannel.DEV ? Map.of("devOtp", plainOtp) : Map.of();
         return VerificationOutcome.challengeIssued(
@@ -103,7 +108,7 @@ public class VerificationService {
     }
 
     @Transactional
-    public VerificationResult verify(ConversationSession session, String submittedCode) {
+    public VerificationResult verify(ConversationSession session, String submittedCode, UUID expectedProcedureId, String expectedOrderNumber) {
         UUID challengeId = session.getPendingVerificationChallengeId().orElse(null);
         if (challengeId == null) {
             return VerificationResult.error("There's no verification code pending right now.");
@@ -112,6 +117,13 @@ public class VerificationService {
         if (challenge == null || challenge.isConsumed()) {
             session.clearPendingVerification();
             return VerificationResult.error("That verification code is no longer valid - let's request a new one.");
+        }
+        if (!challenge.getProcedureId().equals(expectedProcedureId) || !challenge.getOrderNumber().equals(expectedOrderNumber)) {
+            // Should never happen given only one challenge is ever pending per session, but an
+            // OTP must never be usable for anything other than the exact action it was issued for.
+            log.warn("event=otp_binding_mismatch sessionId={} expectedProcedureId={} expectedOrderNumber={}",
+                    session.getSessionId(), expectedProcedureId, expectedOrderNumber);
+            return VerificationResult.error("That verification code doesn't match what we're trying to verify - let's request a new one.");
         }
         if (challenge.isExpired()) {
             challenge.markConsumedWithoutVerification();
@@ -133,7 +145,8 @@ public class VerificationService {
 
         challenge.markVerified();
         session.clearPendingVerification();
-        log.info("event=otp_verified sessionId={} customerId={}", session.getSessionId(), challenge.getCustomer().getId());
+        log.info("event=otp_verified sessionId={} customerId={} procedureId={} orderNumber={}",
+                session.getSessionId(), challenge.getCustomer().getId(), expectedProcedureId, expectedOrderNumber);
         return VerificationResult.success();
     }
 

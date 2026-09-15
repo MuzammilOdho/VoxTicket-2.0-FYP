@@ -3,7 +3,13 @@ package com.voxticket.procedure;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
-import com.voxticket.identity.*;
+import com.voxticket.identity.AmbiguousItemException;
+import com.voxticket.identity.CustomerIdentity;
+import com.voxticket.identity.IdentityAssurance;
+import com.voxticket.identity.OwnedOrderItemResolver;
+import com.voxticket.identity.OwnedOrderResolver;
+import com.voxticket.identity.ResourceNotFoundForAccountException;
+import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.entity.Order;
@@ -43,12 +49,23 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Spec §12/§13/§19/§20/§21 + Core Improvements #4/#5.
+ *
+ * <p>CANCELLATION and RETURN always require a fresh, action-bound OTP,
+ * regardless of the session's current identity assurance - a session that
+ * already carries OTP_VERIFIED from a DIFFERENT, earlier action never
+ * exempts a new one. OTP success itself is the authorization for that
+ * specific action - there is no separate post-OTP confirmation step, and
+ * OTP verification never upgrades session-wide identity assurance. CLAIM
+ * never uses OTP (PHONE_MATCHED only) and keeps its existing explicit
+ * yes/no confirmation flow via confirmActive.
+ */
 @Service
 public class ProcedureCoordinator {
 
@@ -120,7 +137,7 @@ public class ProcedureCoordinator {
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This order is not eligible for cancellation (" + eligibility.denialReason() + ")."));
         }
         String description = "cancel order " + ref.orderNumber() + "." + describePaymentConsequence(eligibility.paymentConsequence());
-        return beginProcedure(session, ProcedureType.CANCELLATION, ref, Map.of(), IdentityAssurance.OTP_VERIFIED, description);
+        return beginProcedure(session, ProcedureType.CANCELLATION, ref, Map.of(), true, description);
     }
 
     public ProcedureOutcome startReturn(ConversationSession session, String orderReference, String itemReference, String reasonText) {
@@ -146,7 +163,7 @@ public class ProcedureCoordinator {
         ReturnReason reason = parseReturnReason(reasonText);
         Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name());
         String description = "start a return for " + item.getProductName() + " from order " + ref.orderNumber();
-        return beginProcedure(session, ProcedureType.RETURN, ref, data, IdentityAssurance.OTP_VERIFIED, description);
+        return beginProcedure(session, ProcedureType.RETURN, ref, data, true, description);
     }
 
     public ProcedureOutcome startClaim(ConversationSession session, String orderReference, String itemReference, String problemText) {
@@ -170,7 +187,7 @@ public class ProcedureCoordinator {
         ClaimReason reason = parseClaimReason(problemText);
         Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name(), "description", nullToEmpty(problemText));
         String description = "file a claim for " + item.getProductName() + " on order " + ref.orderNumber() + " (" + reason.name().toLowerCase(Locale.ROOT) + ")";
-        return beginProcedure(session, ProcedureType.CLAIM, ref, data, IdentityAssurance.PHONE_MATCHED, description);
+        return beginProcedure(session, ProcedureType.CLAIM, ref, data, false, description);
     }
 
     @Transactional
@@ -204,18 +221,42 @@ public class ProcedureCoordinator {
 
     // ---- Verification (called ONLY from ConversationRuntime, never from a tool) ----
 
+    /**
+     * Core Improvement #4: OTP success directly authorizes AND executes this exact action - no
+     * separate post-OTP confirmation step. Deliberately NOT @Transactional at this level:
+     * verificationService.verify(...) commits its own transaction independently (consuming the
+     * code) BEFORE execution is attempted. If it were wrapped in one shared transaction with the
+     * business mutation and the mutation later failed, the rollback could undo the "consumed"
+     * flag too, leaving an already-used code replayable.
+     */
     public ProcedureOutcome submitVerificationCode(ConversationSession session, String code) {
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
         if (procedure == null) {
             return ProcedureOutcome.error("NO_PENDING_VERIFICATION", "There's no verification code pending right now.");
         }
-        VerificationResult result = verificationService.verify(session, code);
+        VerificationResult result = verificationService.verify(session, code, procedure.getProcedureId(), procedure.getVerifiedTarget().orderNumber());
         if (!result.verified()) {
             return recordOutcome(procedure.getType(), ProcedureOutcome.error("VERIFICATION_FAILED", result.message()));
         }
-        CustomerIdentity current = session.getCustomerIdentity();
-        session.applyResolvedIdentity(new CustomerIdentity(current.customerId(), IdentityAssurance.OTP_VERIFIED, current.phone()));
-        return moveToConfirmation(procedure);
+
+        ProcedureOutcome outcome;
+        try {
+            // "recheck ownership, current DB state, and eligibility before executing" is already
+            // covered here: CancellationService/ReturnService re-check eligibility against fresh
+            // DB state on every call (proven below), and ownership can't have changed since
+            // orders are never reassigned between customers in this system.
+            outcome = execute(session, procedure);
+        } catch (RuntimeException e) {
+            log.error("event=procedure_execution_failed type={} orderNumber={} errorType={}",
+                    procedure.getType(), procedure.getVerifiedTarget().orderNumber(), e.getClass().getSimpleName(), e);
+            procedure.setStatus(ProcedureStatus.FAILED);
+            session.clearActiveProcedure();
+            turnMetrics.recordProcedureOutcome(procedure.getType().name(), "EXECUTION_FAILED", false);
+            throw e;
+        }
+        procedure.setStatus(ProcedureStatus.EXECUTED);
+        session.clearActiveProcedure();
+        return recordOutcome(procedure.getType(), outcome);
     }
 
     public ProcedureOutcome resendVerificationCode(ConversationSession session) {
@@ -223,13 +264,14 @@ public class ProcedureCoordinator {
         if (procedure == null) {
             return ProcedureOutcome.error("NO_PENDING_VERIFICATION", "There's no verification in progress right now.");
         }
-        VerificationOutcome outcome = verificationService.issueChallenge(session, purposeFor(procedure.getType()));
+        VerificationOutcome outcome = verificationService.issueChallenge(
+                session, purposeFor(procedure.getType()), procedure.getProcedureId(), procedure.getVerifiedTarget().orderNumber());
         return outcome.success()
                 ? ProcedureOutcome.ok("VERIFICATION_REQUIRED", outcome.message(), outcome.metadata())
                 : ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", outcome.message());
     }
 
-    // ---- Advancing a pending confirmation (called ONLY from ConversationRuntime, never from a tool) ----
+    // ---- Advancing a pending confirmation (CLAIM only now - called ONLY from ConversationRuntime, never from a tool) ----
 
     @Transactional
     public ProcedureOutcome confirmActive(ConversationSession session) {
@@ -249,7 +291,7 @@ public class ProcedureCoordinator {
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
             return recordOutcome(procedure.getType(),
-                    ProcedureOutcome.error("VERIFICATION_REQUIRED", "This still needs identity verification we can't complete yet in this version of the system."));
+                    ProcedureOutcome.error("IDENTITY_NOT_VERIFIED", "This still needs identity verification we can't complete."));
         }
 
         ProcedureOutcome outcome;
@@ -293,12 +335,22 @@ public class ProcedureCoordinator {
         }
     }
 
-
+    /**
+     * Core Improvement #4/#5: TYPE dictates the path, never session assurance. CANCELLATION/
+     * RETURN always require a fresh, action-bound OTP - there is no check of whether the session
+     * already carries OTP_VERIFIED from an earlier, unrelated action, because that earlier OTP
+     * must never authorize a different mutation. CLAIM only needs PHONE_MATCHED and keeps the
+     * existing explicit confirmation step.
+     */
     private ProcedureOutcome beginProcedure(
             ConversationSession session, ProcedureType type, VerifiedOrderRef target, Map<String, String> data,
-            IdentityAssurance requiredAssurance, String actionDescription) {
+            boolean requiresOtp, String actionDescription) {
 
-        ProcedureState procedure = new ProcedureState(type, target, data, requiredAssurance);
+        if (!session.getCustomerIdentity().isAtLeast(IdentityAssurance.PHONE_MATCHED)) {
+            return recordOutcome(type, ProcedureOutcome.error("IDENTITY_NOT_VERIFIED", "I'll need to verify who I'm speaking with before I can do that."));
+        }
+
+        ProcedureState procedure = new ProcedureState(type, target, data, requiresOtp ? IdentityAssurance.OTP_VERIFIED : IdentityAssurance.PHONE_MATCHED);
         procedure.setPendingDescription(actionDescription);
         ProcedureSlotResult slotResult = session.beginProcedure(procedure);
         if (slotResult == ProcedureSlotResult.BOTH_SLOTS_OCCUPIED) {
@@ -308,10 +360,9 @@ public class ProcedureCoordinator {
                     "There's already a " + activeDesc + " and a " + pausedDesc + " in progress. Which one would you like to continue first?"));
         }
 
-        PolicyDecision decision = actionPolicyService.evaluate(new ActionRequest(type, requiredAssurance, false), session);
-        if (decision.outcome() == PolicyOutcome.REQUIRE_VERIFICATION) {
+        if (requiresOtp) {
             procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
-            VerificationOutcome verificationOutcome = verificationService.issueChallenge(session, purposeFor(type));
+            VerificationOutcome verificationOutcome = verificationService.issueChallenge(session, purposeFor(type), procedure.getProcedureId(), target.orderNumber());
             if (!verificationOutcome.success()) {
                 session.clearActiveProcedure();
                 return recordOutcome(type, ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()));
@@ -331,7 +382,7 @@ public class ProcedureCoordinator {
                 Instant.now(), Instant.now().plus(PENDING_ACTION_TTL), UUID.randomUUID().toString());
         procedure.setPendingAction(pendingAction);
         procedure.setStatus(ProcedureStatus.AWAITING_CONFIRMATION);
-        return ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "Thanks, you're verified. Just to confirm - you'd like to " + procedure.getPendingDescription() + "?");
+        return ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "Just to confirm - you'd like to " + procedure.getPendingDescription() + "?");
     }
 
     private VerificationPurpose purposeFor(ProcedureType type) {

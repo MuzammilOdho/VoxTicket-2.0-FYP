@@ -7,6 +7,7 @@ import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ConfirmationClassifier;
 import com.voxticket.procedure.ConfirmationDecision;
 import com.voxticket.procedure.ProcedureCoordinator;
+import com.voxticket.procedure.ProcedureOutcome;
 import com.voxticket.procedure.ProcedureState;
 import com.voxticket.procedure.ProcedureStatus;
 import com.voxticket.safety.InputNormalizer;
@@ -106,8 +107,8 @@ public class ConversationRuntime {
             if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
                 turnNumber = session.recordUserMessage(normalizedText);
                 OtpInputResult input = otpInputClassifier.classify(normalizedText);
-                var outcome = switch (input.type()) {
-                    case CODE -> procedureCoordinator.submitVerificationCode(session, input.code());
+                ProcedureOutcome outcome = switch (input.type()) {
+                    case CODE -> submitVerificationWithSafeFallback(session, input.code());
                     case RESEND_REQUESTED -> procedureCoordinator.resendVerificationCode(session);
                     case OTHER -> null;
                 };
@@ -149,6 +150,20 @@ public class ConversationRuntime {
         } catch (Exception e) {
             log.error("event=procedure_confirmation_failed sessionId={} errorType={}", session.getSessionId(), e.getClass().getSimpleName(), e);
             return PROCEDURE_FAILURE_MESSAGE;
+        }
+    }
+
+    /**
+     * submitVerificationCode now executes the mutation directly on OTP success (Core Improvement
+     * #4), so it can throw where confirmActive used to be the only path that could. Same
+     * safe-fallback pattern: log the full detail here, surface only a generic message.
+     */
+    private ProcedureOutcome submitVerificationWithSafeFallback(ConversationSession session, String code) {
+        try {
+            return procedureCoordinator.submitVerificationCode(session, code);
+        } catch (Exception e) {
+            log.error("event=procedure_verification_execution_failed sessionId={} errorType={}", session.getSessionId(), e.getClass().getSimpleName(), e);
+            return ProcedureOutcome.error("EXECUTION_FAILED", PROCEDURE_FAILURE_MESSAGE);
         }
     }
 

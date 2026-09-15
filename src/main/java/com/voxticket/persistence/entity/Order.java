@@ -87,7 +87,7 @@ public class Order extends BaseEntity {
     private Instant completedAt;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private final List<OrderItem> items = new ArrayList<>();
+    private List<OrderItem> items = new ArrayList<>();
 
     protected Order() {
         // JPA

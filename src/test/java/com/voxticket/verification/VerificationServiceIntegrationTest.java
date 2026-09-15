@@ -25,7 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 @ActiveProfiles("test")
-@SpringBootTest(properties = "voxticket.otp.max-attempts=2") // small cap so the exhaustion test doesn't need many tries
+@SpringBootTest(properties = "voxticket.otp.max-attempts=2")
 @Transactional
 class VerificationServiceIntegrationTest {
 
@@ -51,49 +51,73 @@ class VerificationServiceIntegrationTest {
     }
 
     @Test
-    void issuingAChallengePersistsAHashNotThePlaintextCode() {
-        VerificationOutcome outcome = verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION);
+    void issuingAChallengePersistsAHashNotThePlaintextCodeAndBindsToTheProcedureAndOrder() {
+        UUID procedureId = UUID.randomUUID();
+        VerificationOutcome outcome = verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION, procedureId, "ORD-TEST");
 
         assertThat(outcome.success()).isTrue();
-        assertThat(session.getPendingVerificationChallengeId()).isPresent();
         VerificationChallenge stored = challengeRepository.findById(session.getPendingVerificationChallengeId().get()).orElseThrow();
         assertThat(stored.getOtpHash()).doesNotContain(outcome.metadata().get("devOtp"));
+        assertThat(stored.getProcedureId()).isEqualTo(procedureId);
+        assertThat(stored.getOrderNumber()).isEqualTo("ORD-TEST");
     }
 
     @Test
-    void theCorrectCodeVerifiesSuccessfully() {
-        VerificationOutcome issued = verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION);
-        String plainOtp = issued.metadata().get("devOtp");
+    void theCorrectCodeVerifiesSuccessfullyWhenProcedureAndOrderMatch() {
+        UUID procedureId = UUID.randomUUID();
+        VerificationOutcome issued = verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION, procedureId, "ORD-TEST");
 
-        VerificationResult result = verificationService.verify(session, plainOtp);
+        VerificationResult result = verificationService.verify(session, issued.metadata().get("devOtp"), procedureId, "ORD-TEST");
 
         assertThat(result.verified()).isTrue();
         assertThat(session.getPendingVerificationChallengeId()).isEmpty();
     }
 
     @Test
-    void aWrongCodeFailsWithoutConsumingTheChallengeImmediately() {
-        verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION);
+    void aCorrectCodeIsRejectedIfTheProcedureBindingDoesNotMatch() {
+        UUID procedureId = UUID.randomUUID();
+        VerificationOutcome issued = verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION, procedureId, "ORD-TEST");
 
-        VerificationResult result = verificationService.verify(session, "000000");
+        VerificationResult result = verificationService.verify(session, issued.metadata().get("devOtp"), UUID.randomUUID(), "ORD-TEST");
 
         assertThat(result.verified()).isFalse();
-        assertThat(session.getPendingVerificationChallengeId()).isPresent(); // still usable for the next attempt
+    }
+
+    @Test
+    void aCorrectCodeIsRejectedIfTheOrderBindingDoesNotMatch() {
+        UUID procedureId = UUID.randomUUID();
+        VerificationOutcome issued = verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION, procedureId, "ORD-TEST");
+
+        VerificationResult result = verificationService.verify(session, issued.metadata().get("devOtp"), procedureId, "ORD-DIFFERENT");
+
+        assertThat(result.verified()).isFalse();
+    }
+
+    @Test
+    void aWrongCodeFailsWithoutConsumingTheChallengeImmediately() {
+        UUID procedureId = UUID.randomUUID();
+        verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION, procedureId, "ORD-TEST");
+
+        VerificationResult result = verificationService.verify(session, "000000", procedureId, "ORD-TEST");
+
+        assertThat(result.verified()).isFalse();
+        assertThat(session.getPendingVerificationChallengeId()).isPresent();
     }
 
     @Test
     void exceedingMaxAttemptsConsumesTheChallenge() {
-        verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION);
+        UUID procedureId = UUID.randomUUID();
+        verificationService.issueChallenge(session, VerificationPurpose.CANCELLATION, procedureId, "ORD-TEST");
 
-        verificationService.verify(session, "000000");
-        verificationService.verify(session, "111111");
+        verificationService.verify(session, "000000", procedureId, "ORD-TEST");
+        verificationService.verify(session, "111111", procedureId, "ORD-TEST");
 
         assertThat(session.getPendingVerificationChallengeId()).isEmpty();
     }
 
     @Test
     void verifyingWithNoChallengeIssuedFails() {
-        VerificationResult result = verificationService.verify(session, "123456");
+        VerificationResult result = verificationService.verify(session, "123456", UUID.randomUUID(), "ORD-TEST");
 
         assertThat(result.verified()).isFalse();
     }

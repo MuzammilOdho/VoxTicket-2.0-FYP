@@ -118,20 +118,72 @@ class ProcedureCoordinatorIntegrationTest {
 
 
     @Test
-    void cancellationCompletesEndToEndAtOtpVerifiedAssurance() {
+    void fullFlowFromPhoneMatchedThroughOtpDirectlyToExecutedCancellationWithNoSeparateConfirmationStep() {
         Order order = newOrder(BigDecimal.valueOf(500));
         paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
-        ConversationSession session = sessionAt(IdentityAssurance.OTP_VERIFIED);
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
 
-        ProcedureOutcome started = procedureCoordinator.startCancellation(session, order.getOrderNumber());
-        assertThat(started.code()).isEqualTo("CONFIRMATION_REQUIRED");
+        procedureCoordinator.startCancellation(session, order.getOrderNumber());
+        String code = procedureCoordinator.resendVerificationCode(session).metadata().get("devOtp");
 
-        ProcedureOutcome confirmed = procedureCoordinator.confirmActive(session);
-        assertThat(confirmed.success()).isTrue();
-        assertThat(confirmed.code()).isEqualTo("CANCELLED");
+        ProcedureOutcome executed = procedureCoordinator.submitVerificationCode(session, code);
+
+        assertThat(executed.code()).isEqualTo("CANCELLED");
         assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        // The action-bound OTP never upgraded session-wide identity assurance.
+        assertThat(session.getCustomerIdentity().assuranceLevel()).isEqualTo(IdentityAssurance.PHONE_MATCHED);
     }
 
+    @Test
+    void evenAnAlreadyOtpVerifiedSessionStillRequiresAFreshActionBoundOtpForCancellation() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        // Simulates a session that was already OTP_VERIFIED from some earlier, unrelated action.
+        ConversationSession session = sessionAt(IdentityAssurance.OTP_VERIFIED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startCancellation(session, order.getOrderNumber());
+
+        assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
+        assertThat(outcome.metadata()).isEmpty();
+    }
+
+    @Test
+    void anOtpVerifiedForOneCancellationDoesNotAuthorizeCancellingADifferentOrder() {
+        Order orderA = newOrder(BigDecimal.valueOf(500));
+        Order orderB = newOrder(BigDecimal.valueOf(700));
+        paymentRepository.save(new Payment(orderA, PaymentMethod.COD, orderA.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        paymentRepository.save(new Payment(orderB, PaymentMethod.COD, orderB.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        procedureCoordinator.startCancellation(session, orderA.getOrderNumber());
+        String codeA = procedureCoordinator.resendVerificationCode(session).metadata().get("devOtp");
+        ProcedureOutcome executedA = procedureCoordinator.submitVerificationCode(session, codeA);
+        assertThat(executedA.code()).isEqualTo("CANCELLED");
+
+        ProcedureOutcome challengeB = procedureCoordinator.startCancellation(session, orderB.getOrderNumber());
+        assertThat(challengeB.code()).isEqualTo("VERIFICATION_REQUIRED");
+
+        ProcedureOutcome reusedCodeAttempt = procedureCoordinator.submitVerificationCode(session, codeA);
+        assertThat(reusedCodeAttempt.success()).isFalse();
+        assertThat(orderRepository.findById(orderB.getId()).orElseThrow().getOrderStatus()).isNotEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    void aFailureDuringOtpExecutionPropagatesRatherThanBeingSwallowed() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+        procedureCoordinator.startCancellation(session, order.getOrderNumber());
+        String code = procedureCoordinator.resendVerificationCode(session).metadata().get("devOtp");
+
+        // Simulate the order becoming ineligible between the request and OTP verification.
+        order.setFulfillmentStatus(FulfillmentStatus.FULFILLED);
+        orderRepository.saveAndFlush(order);
+
+        assertThatThrownBy(() -> procedureCoordinator.submitVerificationCode(session, code))
+                .isInstanceOf(CancellationNotEligibleException.class);
+        assertThat(session.getActiveProcedure()).isEmpty();
+    }
     @Test
     void ineligibleCancellationIsRejectedBeforeAnyConfirmationIsRequested() {
         Order order = newOrder(BigDecimal.valueOf(500));
@@ -198,26 +250,6 @@ class ProcedureCoordinatorIntegrationTest {
     }
 
     @Test
-    void aFailureDuringExecutionPropagatesRatherThanBeingSwallowed() {
-        Order order = newOrder(BigDecimal.valueOf(500));
-        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
-        ConversationSession session = sessionAt(IdentityAssurance.OTP_VERIFIED);
-        procedureCoordinator.startCancellation(session, order.getOrderNumber());
-
-        // Simulate the order becoming ineligible between the request and the confirmation (e.g.
-        // it shipped in the meantime) - CancellationService re-checks eligibility internally and
-        // will throw at confirm time even though the initial request passed.
-        order.setFulfillmentStatus(FulfillmentStatus.FULFILLED);
-        orderRepository.saveAndFlush(order);
-
-        assertThatThrownBy(() -> procedureCoordinator.confirmActive(session))
-                .isInstanceOf(CancellationNotEligibleException.class);
-
-        // The session isn't left stuck waiting on a confirmation that can never succeed.
-        assertThat(session.getActiveProcedure()).isEmpty();
-    }
-
-    @Test
     void successfulClaimIsRecordedAsARecentActionForFollowUpReference() {
         Order order = newOrder(BigDecimal.valueOf(1000));
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
@@ -245,27 +277,6 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(supportTicketRepository.findByCustomerId(customer.getId())).hasSize(1);
     }
 
-    
-    @Test
-    void fullFlowFromPhoneMatchedThroughOtpToExecutedCancellation() {
-        Order order = newOrder(BigDecimal.valueOf(500));
-        paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
-        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
-
-        procedureCoordinator.startCancellation(session, order.getOrderNumber());
-        // The tool-visible outcome no longer carries the code (see the test above) - fetch it
-        // through the safe, model-invisible resend path instead, exactly as a real dev/tester would.
-        ProcedureOutcome resent = procedureCoordinator.resendVerificationCode(session);
-        String code = resent.metadata().get("devOtp");
-
-        ProcedureOutcome verified = procedureCoordinator.submitVerificationCode(session, code);
-        assertThat(verified.code()).isEqualTo("CONFIRMATION_REQUIRED");
-        assertThat(session.getCustomerIdentity().assuranceLevel()).isEqualTo(IdentityAssurance.OTP_VERIFIED);
-
-        ProcedureOutcome executed = procedureCoordinator.confirmActive(session);
-        assertThat(executed.code()).isEqualTo("CANCELLED");
-        assertThat(orderRepository.findById(order.getId()).orElseThrow().getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
-    }
 
     @Test
     void wrongVerificationCodeKeepsTheProcedureWaitingRatherThanFailingOutright() {

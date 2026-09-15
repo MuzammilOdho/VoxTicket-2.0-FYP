@@ -13,8 +13,9 @@ import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.UUID;
 
-/** Spec §9. Never stores a plaintext OTP - only a salted hash. */
+/** Spec §9 + Core Improvement #4. Bound to the exact procedure/order it authorizes - never stores a plaintext OTP, only a salted hash. */
 @Entity
 @Table(name = "verification_challenges")
 public class VerificationChallenge extends BaseEntity {
@@ -53,6 +54,15 @@ public class VerificationChallenge extends BaseEntity {
     private String otpSalt;
 
     @NotNull
+    @Column(name = "procedure_id", nullable = false)
+    private UUID procedureId;
+
+    @NotNull
+    @Size(max = 30)
+    @Column(name = "order_number", nullable = false, length = 30)
+    private String orderNumber;
+
+    @NotNull
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -75,7 +85,7 @@ public class VerificationChallenge extends BaseEntity {
 
     public VerificationChallenge(
             Customer customer, String sessionId, VerificationPurpose purpose, OtpDeliveryChannel deliveryChannel,
-            String maskedDestination, String otpHash, String otpSalt, Instant expiresAt) {
+            String maskedDestination, String otpHash, String otpSalt, UUID procedureId, String orderNumber, Instant expiresAt) {
         this.customer = customer;
         this.sessionId = sessionId;
         this.purpose = purpose;
@@ -83,6 +93,8 @@ public class VerificationChallenge extends BaseEntity {
         this.maskedDestination = maskedDestination;
         this.otpHash = otpHash;
         this.otpSalt = otpSalt;
+        this.procedureId = procedureId;
+        this.orderNumber = orderNumber;
         this.createdAt = Instant.now();
         this.expiresAt = expiresAt;
     }
@@ -130,6 +142,14 @@ public class VerificationChallenge extends BaseEntity {
 
     public String getOtpSalt() {
         return otpSalt;
+    }
+
+    public UUID getProcedureId() {
+        return procedureId;
+    }
+
+    public String getOrderNumber() {
+        return orderNumber;
     }
 
     public Instant getCreatedAt() {
