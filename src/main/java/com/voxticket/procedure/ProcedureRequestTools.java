@@ -4,15 +4,6 @@ import com.voxticket.conversation.ConversationSession;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
-/**
- * Spec §18 "Procedure Requests". Constructed fresh per turn by SupportAgent,
- * closed over that turn's session - same structural pattern as
- * CustomerReadTools. These tools only ever START a guarded procedure; they
- * never execute the underlying mutation themselves. Execution only happens
- * through ProcedureCoordinator.confirmActive, which only ConversationRuntime
- * calls, only after its own deterministic ConfirmationClassifier - there is
- * no tool through which the model could trigger execution directly.
- */
 public class ProcedureRequestTools {
 
     private final ProcedureCoordinator procedureCoordinator;
@@ -33,8 +24,10 @@ public class ProcedureRequestTools {
             + "it does NOT create the return by itself. The customer must still explicitly confirm afterward.")
     public Object requestReturn(
             @ToolParam(description = "Order number, e.g. ORD-10001") String orderReference,
-            @ToolParam(description = "Item SKU, from the order summary") String itemReference,
-            @ToolParam(description = "Why the customer is returning it, in their own words") String reason) {
+            @ToolParam(description = "Which item, described naturally in the customer's own words - product name, color, or any other "
+                    + "distinguishing detail. NEVER a SKU or internal ID. Leave blank if the order only has one item or the customer hasn't said yet.")
+            String itemReference,
+            @ToolParam(description = "Why the customer is returning it, in their own words. Leave blank if they haven't said yet.") String reason) {
         return procedureCoordinator.startReturn(session, orderReference, itemReference, reason);
     }
 
@@ -42,8 +35,10 @@ public class ProcedureRequestTools {
             + "missing item. This starts a guarded process - it does NOT file the claim by itself. The customer must still explicitly confirm afterward.")
     public Object reportOrderProblem(
             @ToolParam(description = "Order number, e.g. ORD-10001") String orderReference,
-            @ToolParam(description = "Item SKU, from the order summary") String itemReference,
-            @ToolParam(description = "Description of the problem, in the customer's own words") String problem) {
+            @ToolParam(description = "Which item, described naturally in the customer's own words - product name, color, or any other "
+                    + "distinguishing detail. NEVER a SKU or internal ID. Leave blank if the order only has one item or the customer hasn't said yet.")
+            String itemReference,
+            @ToolParam(description = "Description of the problem, in the customer's own words. Leave blank if they haven't said yet.") String problem) {
         return procedureCoordinator.startClaim(session, orderReference, itemReference, problem);
     }
 

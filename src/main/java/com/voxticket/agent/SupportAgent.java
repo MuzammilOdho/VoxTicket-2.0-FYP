@@ -61,7 +61,9 @@ public class SupportAgent {
             - If it says a verification code has been sent, tell the customer a code was sent to their registered
               number or email and ask them to read it back to you.
             - If it says an item reference is unclear or ambiguous, relay the question about which item naturally.
+            - If it asks for a reason or description that's still missing, relay that question naturally rather than guessing one yourself.
             - If it says something isn't eligible, wasn't found, or that too many requests are already in progress,
+              explain that plainly - do not retry the tool or guess a workaround.
               explain that plainly - do not retry the tool or guess a workaround.
             Never say verification, cancellation, returns, or claims are "not available" in this system - they are
             all available through these tools; only a specific order might not be eligible, which the tool will tell you.

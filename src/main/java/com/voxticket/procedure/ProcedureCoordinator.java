@@ -54,18 +54,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Spec §12/§13/§19/§20/§21 + Core Improvements #4/#5.
- *
- * <p>CANCELLATION and RETURN always require a fresh, action-bound OTP,
- * regardless of the session's current identity assurance - a session that
- * already carries OTP_VERIFIED from a DIFFERENT, earlier action never
- * exempts a new one. OTP success itself is the authorization for that
- * specific action - there is no separate post-OTP confirmation step, and
- * OTP verification never upgrades session-wide identity assurance. CLAIM
- * never uses OTP (PHONE_MATCHED only) and keeps its existing explicit
- * yes/no confirmation flow via confirmActive.
- */
 @Service
 public class ProcedureCoordinator {
 
@@ -160,6 +148,12 @@ public class ProcedureCoordinator {
             return recordOutcome(ProcedureType.RETURN,
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ")."));
         }
+        // FIX (Return/Claim Quality): a blank reason used to silently default to OTHER. Spec is
+        // explicit - missing information gets asked for, never guessed past.
+        if (reasonText == null || reasonText.isBlank()) {
+            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("REASON_REQUIRED",
+                    "Could you tell me why you'd like to return the " + item.getProductName() + " - for example wrong size, damaged, or you changed your mind?"));
+        }
         ReturnReason reason = parseReturnReason(reasonText);
         Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name());
         String description = "start a return for " + item.getProductName() + " from order " + ref.orderNumber();
@@ -184,8 +178,13 @@ public class ProcedureCoordinator {
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
             return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."));
         }
+        // FIX (Return/Claim Quality): same principle as the return-reason fix above.
+        if (problemText == null || problemText.isBlank()) {
+            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("PROBLEM_REQUIRED",
+                    "Could you tell me what happened with the " + item.getProductName() + " - for example was it damaged, defective, the wrong item, or missing?"));
+        }
         ClaimReason reason = parseClaimReason(problemText);
-        Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name(), "description", nullToEmpty(problemText));
+        Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name(), "description", problemText);
         String description = "file a claim for " + item.getProductName() + " on order " + ref.orderNumber() + " (" + reason.name().toLowerCase(Locale.ROOT) + ")";
         return beginProcedure(session, ProcedureType.CLAIM, ref, data, false, description);
     }
@@ -221,14 +220,6 @@ public class ProcedureCoordinator {
 
     // ---- Verification (called ONLY from ConversationRuntime, never from a tool) ----
 
-    /**
-     * Core Improvement #4: OTP success directly authorizes AND executes this exact action - no
-     * separate post-OTP confirmation step. Deliberately NOT @Transactional at this level:
-     * verificationService.verify(...) commits its own transaction independently (consuming the
-     * code) BEFORE execution is attempted. If it were wrapped in one shared transaction with the
-     * business mutation and the mutation later failed, the rollback could undo the "consumed"
-     * flag too, leaving an already-used code replayable.
-     */
     public ProcedureOutcome submitVerificationCode(ConversationSession session, String code) {
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
         if (procedure == null) {
@@ -241,10 +232,6 @@ public class ProcedureCoordinator {
 
         ProcedureOutcome outcome;
         try {
-            // "recheck ownership, current DB state, and eligibility before executing" is already
-            // covered here: CancellationService/ReturnService re-check eligibility against fresh
-            // DB state on every call (proven below), and ownership can't have changed since
-            // orders are never reassigned between customers in this system.
             outcome = execute(session, procedure);
         } catch (RuntimeException e) {
             log.error("event=procedure_execution_failed type={} orderNumber={} errorType={}",
@@ -271,7 +258,7 @@ public class ProcedureCoordinator {
                 : ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", outcome.message());
     }
 
-    // ---- Advancing a pending confirmation (CLAIM only now - called ONLY from ConversationRuntime, never from a tool) ----
+    // ---- Advancing a pending confirmation (CLAIM only - called ONLY from ConversationRuntime, never from a tool) ----
 
     @Transactional
     public ProcedureOutcome confirmActive(ConversationSession session) {
@@ -335,13 +322,6 @@ public class ProcedureCoordinator {
         }
     }
 
-    /**
-     * Core Improvement #4/#5: TYPE dictates the path, never session assurance. CANCELLATION/
-     * RETURN always require a fresh, action-bound OTP - there is no check of whether the session
-     * already carries OTP_VERIFIED from an earlier, unrelated action, because that earlier OTP
-     * must never authorize a different mutation. CLAIM only needs PHONE_MATCHED and keeps the
-     * existing explicit confirmation step.
-     */
     private ProcedureOutcome beginProcedure(
             ConversationSession session, ProcedureType type, VerifiedOrderRef target, Map<String, String> data,
             boolean requiresOtp, String actionDescription) {
@@ -364,6 +344,7 @@ public class ProcedureCoordinator {
             procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
             VerificationOutcome verificationOutcome = verificationService.issueChallenge(session, purposeFor(type), procedure.getProcedureId(), target.orderNumber());
             if (!verificationOutcome.success()) {
+                procedure.setStatus(ProcedureStatus.FAILED);
                 session.clearActiveProcedure();
                 return recordOutcome(type, ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()));
             }
@@ -457,7 +438,7 @@ public class ProcedureCoordinator {
     }
 
     private ReturnReason parseReturnReason(String text) {
-        String lower = nullToEmpty(text).toLowerCase(Locale.ROOT);
+        String lower = text.toLowerCase(Locale.ROOT);
         if (lower.contains("size")) return ReturnReason.WRONG_SIZE;
         if (lower.contains("defect")) return ReturnReason.DEFECTIVE;
         if (lower.contains("damag")) return ReturnReason.DAMAGED;
@@ -467,15 +448,11 @@ public class ProcedureCoordinator {
     }
 
     private ClaimReason parseClaimReason(String text) {
-        String lower = nullToEmpty(text).toLowerCase(Locale.ROOT);
+        String lower = text.toLowerCase(Locale.ROOT);
         if (lower.contains("damag")) return ClaimReason.DAMAGED;
         if (lower.contains("defect")) return ClaimReason.DEFECTIVE;
         if (lower.contains("wrong")) return ClaimReason.WRONG_ITEM;
         if (lower.contains("missing")) return ClaimReason.MISSING_ITEM;
         return ClaimReason.OTHER;
-    }
-
-    private String nullToEmpty(String text) {
-        return text == null ? "" : text;
     }
 }

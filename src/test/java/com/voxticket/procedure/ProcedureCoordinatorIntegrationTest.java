@@ -332,5 +332,34 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(outcome.success()).isFalse();
         assertThat(outcome.code()).isEqualTo("ITEM_REQUIRED");
     }
+    @Test
+    void startReturnAsksForAReasonWhenNotProvided() {
+        Order order = newOrder(BigDecimal.valueOf(1000));
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        Shipment shipment = new Shipment(order, "TCS", "TCS-1", ShipmentStatus.DELIVERED);
+        shipment.setDeliveredAt(Instant.now());
+        shipmentRepository.save(shipment);
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "");
+
+        assertThat(outcome.success()).isFalse();
+        assertThat(outcome.code()).isEqualTo("REASON_REQUIRED");
+        assertThat(session.getActiveProcedure()).isEmpty();
+    }
+
+    @Test
+    void startClaimAsksForAProblemDescriptionWhenNotProvided() {
+        Order order = newOrder(BigDecimal.valueOf(1000));
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        ProcedureOutcome outcome = procedureCoordinator.startClaim(session, order.getOrderNumber(), "", "");
+
+        assertThat(outcome.success()).isFalse();
+        assertThat(outcome.code()).isEqualTo("PROBLEM_REQUIRED");
+        assertThat(session.getActiveProcedure()).isEmpty();
+    }
+
 
 }
