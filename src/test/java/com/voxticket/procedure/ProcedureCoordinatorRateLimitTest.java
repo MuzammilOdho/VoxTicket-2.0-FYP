@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.identity.IdentityAssurance;
@@ -67,7 +68,7 @@ class ProcedureCoordinatorRateLimitTest {
                 orderRepository, paymentRepository, mock(CustomerRepository.class), mock(SupportTicketRepository.class),
                 cancellationPolicyService, mock(ReturnPolicyService.class), mock(CancellationService.class),
                 mock(ReturnService.class), mock(ClaimService.class), mock(ReferenceNumberGenerator.class),
-                verificationService, mock(TurnMetrics.class));
+                verificationService, mock(TurnMetrics.class), mock(ConversationAuditService.class));
 
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         session.applyResolvedIdentity(new com.voxticket.identity.CustomerIdentity(UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, "+923001234567"));

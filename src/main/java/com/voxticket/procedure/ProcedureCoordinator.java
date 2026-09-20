@@ -1,5 +1,6 @@
 package com.voxticket.procedure;
 
+import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
@@ -18,6 +19,7 @@ import com.voxticket.persistence.entity.Payment;
 import com.voxticket.persistence.entity.SupportTicket;
 import com.voxticket.persistence.entity.enums.ClaimReason;
 import com.voxticket.persistence.entity.enums.ClaimResolution;
+import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.persistence.entity.enums.OrderStatus;
 import com.voxticket.persistence.entity.enums.ReturnReason;
 import com.voxticket.persistence.entity.enums.TicketCategory;
@@ -47,6 +49,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -59,6 +62,7 @@ public class ProcedureCoordinator {
 
     private static final Logger log = LoggerFactory.getLogger(ProcedureCoordinator.class);
     private static final Duration PENDING_ACTION_TTL = Duration.ofMinutes(5);
+    private static final Set<String> STARTED_CODES = Set.of("CONFIRMATION_REQUIRED", "VERIFICATION_REQUIRED", "ALREADY_ESCALATED");
 
     private final OwnedOrderResolver ownedOrderResolver;
     private final OwnedOrderItemResolver ownedOrderItemResolver;
@@ -75,6 +79,7 @@ public class ProcedureCoordinator {
     private final ReferenceNumberGenerator referenceNumberGenerator;
     private final VerificationService verificationService;
     private final TurnMetrics turnMetrics;
+    private final ConversationAuditService auditService;
 
     public ProcedureCoordinator(
             OwnedOrderResolver ownedOrderResolver,
@@ -91,7 +96,8 @@ public class ProcedureCoordinator {
             ClaimService claimService,
             ReferenceNumberGenerator referenceNumberGenerator,
             VerificationService verificationService,
-            TurnMetrics turnMetrics) {
+            TurnMetrics turnMetrics,
+            ConversationAuditService auditService) {
         this.ownedOrderResolver = ownedOrderResolver;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.actionPolicyService = actionPolicyService;
@@ -107,6 +113,7 @@ public class ProcedureCoordinator {
         this.referenceNumberGenerator = referenceNumberGenerator;
         this.verificationService = verificationService;
         this.turnMetrics = turnMetrics;
+        this.auditService = auditService;
     }
 
     // ---- Starting procedures (called from ProcedureRequestTools, i.e. by the model) ----
@@ -114,14 +121,14 @@ public class ProcedureCoordinator {
     public ProcedureOutcome startCancellation(ConversationSession session, String orderReference) {
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return recordOutcome(ProcedureType.CANCELLATION, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
+            return recordOutcome(session, ProcedureType.CANCELLATION, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         Payment payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(ref.orderId())
                 .orElseThrow(() -> new IllegalStateException("Order has no payment record: " + ref.orderNumber()));
         CancellationEligibility eligibility = cancellationPolicyService.evaluate(order, payment);
         if (!eligibility.eligible()) {
-            return recordOutcome(ProcedureType.CANCELLATION,
+            return recordOutcome(session, ProcedureType.CANCELLATION,
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This order is not eligible for cancellation (" + eligibility.denialReason() + ")."));
         }
         String description = "cancel order " + ref.orderNumber() + "." + describePaymentConsequence(eligibility.paymentConsequence());
@@ -131,27 +138,25 @@ public class ProcedureCoordinator {
     public ProcedureOutcome startReturn(ConversationSession session, String orderReference, String itemReference, String reasonText) {
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
+            return recordOutcome(session, ProcedureType.RETURN, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
         OrderItem item;
         try {
             item = ownedOrderItemResolver.resolve(ref, itemReference);
         } catch (ResourceNotFoundForAccountException e) {
-            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"));
+            return recordOutcome(session, ProcedureType.RETURN, ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"));
         } catch (AmbiguousItemException e) {
             String candidates = e.getCandidates().stream().map(OrderItem::getProductName).collect(Collectors.joining(", "));
-            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"));
+            return recordOutcome(session, ProcedureType.RETURN, ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
         if (!eligibility.eligible()) {
-            return recordOutcome(ProcedureType.RETURN,
+            return recordOutcome(session, ProcedureType.RETURN,
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ")."));
         }
-        // FIX (Return/Claim Quality): a blank reason used to silently default to OTHER. Spec is
-        // explicit - missing information gets asked for, never guessed past.
         if (reasonText == null || reasonText.isBlank()) {
-            return recordOutcome(ProcedureType.RETURN, ProcedureOutcome.error("REASON_REQUIRED",
+            return recordOutcome(session, ProcedureType.RETURN, ProcedureOutcome.error("REASON_REQUIRED",
                     "Could you tell me why you'd like to return the " + item.getProductName() + " - for example wrong size, damaged, or you changed your mind?"));
         }
         ReturnReason reason = parseReturnReason(reasonText);
@@ -163,24 +168,23 @@ public class ProcedureCoordinator {
     public ProcedureOutcome startClaim(ConversationSession session, String orderReference, String itemReference, String problemText) {
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
+            return recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."));
         }
         OrderItem item;
         try {
             item = ownedOrderItemResolver.resolve(ref, itemReference);
         } catch (ResourceNotFoundForAccountException e) {
-            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"));
+            return recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"));
         } catch (AmbiguousItemException e) {
             String candidates = e.getCandidates().stream().map(OrderItem::getProductName).collect(Collectors.joining(", "));
-            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"));
+            return recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"));
         }
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
-            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."));
+            return recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."));
         }
-        // FIX (Return/Claim Quality): same principle as the return-reason fix above.
         if (problemText == null || problemText.isBlank()) {
-            return recordOutcome(ProcedureType.CLAIM, ProcedureOutcome.error("PROBLEM_REQUIRED",
+            return recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("PROBLEM_REQUIRED",
                     "Could you tell me what happened with the " + item.getProductName() + " - for example was it damaged, defective, the wrong item, or missing?"));
         }
         ClaimReason reason = parseClaimReason(problemText);
@@ -214,6 +218,7 @@ public class ProcedureCoordinator {
         session.recordAction(new RecentAction(RecentActionType.ESCALATED, "SUPPORT", "OPEN", null, ticket.getTicketNumber(), Instant.now()));
         log.info("event=procedure_escalated ticketNumber={}", ticket.getTicketNumber());
         turnMetrics.recordProcedureOutcome("ESCALATION", "ESCALATED", true);
+        auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.ESCALATED, "ticketNumber=" + ticket.getTicketNumber());
         return ProcedureOutcome.ok("ESCALATED", "I've let our support team know - reference " + ticket.getTicketNumber()
                 + ". They'll have the details of what we've discussed so far.");
     }
@@ -227,23 +232,28 @@ public class ProcedureCoordinator {
         }
         VerificationResult result = verificationService.verify(session, code, procedure.getProcedureId(), procedure.getVerifiedTarget().orderNumber());
         if (!result.verified()) {
-            return recordOutcome(procedure.getType(), ProcedureOutcome.error("VERIFICATION_FAILED", result.message()));
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_FAILED, "type=" + procedure.getType());
+            return recordOutcome(session, procedure.getType(), ProcedureOutcome.error("VERIFICATION_FAILED", result.message()));
         }
+        auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_VERIFIED, "type=" + procedure.getType());
 
         ProcedureOutcome outcome;
         try {
             outcome = execute(session, procedure);
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.EXECUTION_SUCCEEDED, "type=" + procedure.getType() + " code=" + outcome.code());
         } catch (RuntimeException e) {
             log.error("event=procedure_execution_failed type={} orderNumber={} errorType={}",
                     procedure.getType(), procedure.getVerifiedTarget().orderNumber(), e.getClass().getSimpleName(), e);
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
             turnMetrics.recordProcedureOutcome(procedure.getType().name(), "EXECUTION_FAILED", false);
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.EXECUTION_FAILED,
+                    "type=" + procedure.getType() + " errorType=" + e.getClass().getSimpleName());
             throw e;
         }
         procedure.setStatus(ProcedureStatus.EXECUTED);
         session.clearActiveProcedure();
-        return recordOutcome(procedure.getType(), outcome);
+        return recordOutcome(session, procedure.getType(), outcome);
     }
 
     public ProcedureOutcome resendVerificationCode(ConversationSession session) {
@@ -253,6 +263,9 @@ public class ProcedureCoordinator {
         }
         VerificationOutcome outcome = verificationService.issueChallenge(
                 session, purposeFor(procedure.getType()), procedure.getProcedureId(), procedure.getVerifiedTarget().orderNumber());
+        if (outcome.success()) {
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_ISSUED, "type=" + procedure.getType() + " resend=true");
+        }
         return outcome.success()
                 ? ProcedureOutcome.ok("VERIFICATION_REQUIRED", outcome.message(), outcome.metadata())
                 : ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", outcome.message());
@@ -270,31 +283,34 @@ public class ProcedureCoordinator {
         if (pendingAction == null || Instant.now().isAfter(pendingAction.expiresAt())) {
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
-            return recordOutcome(procedure.getType(), ProcedureOutcome.error("EXPIRED", "That request has expired - let's start again if you'd still like to go ahead."));
+            return recordOutcome(session, procedure.getType(), ProcedureOutcome.error("EXPIRED", "That request has expired - let's start again if you'd still like to go ahead."));
         }
 
         PolicyDecision recheck = actionPolicyService.evaluate(new ActionRequest(procedure.getType(), procedure.getRequiredAssurance(), true), session);
         if (recheck.outcome() != PolicyOutcome.ALLOW) {
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
-            return recordOutcome(procedure.getType(),
+            return recordOutcome(session, procedure.getType(),
                     ProcedureOutcome.error("IDENTITY_NOT_VERIFIED", "This still needs identity verification we can't complete."));
         }
 
         ProcedureOutcome outcome;
         try {
             outcome = execute(session, procedure);
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.EXECUTION_SUCCEEDED, "type=" + procedure.getType() + " code=" + outcome.code());
         } catch (RuntimeException e) {
             log.error("event=procedure_execution_failed type={} orderNumber={} errorType={}",
                     procedure.getType(), procedure.getVerifiedTarget().orderNumber(), e.getClass().getSimpleName(), e);
             procedure.setStatus(ProcedureStatus.FAILED);
             session.clearActiveProcedure();
             turnMetrics.recordProcedureOutcome(procedure.getType().name(), "EXECUTION_FAILED", false);
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.EXECUTION_FAILED,
+                    "type=" + procedure.getType() + " errorType=" + e.getClass().getSimpleName());
             throw e;
         }
         procedure.setStatus(ProcedureStatus.EXECUTED);
         session.clearActiveProcedure();
-        return recordOutcome(procedure.getType(), outcome);
+        return recordOutcome(session, procedure.getType(), outcome);
     }
 
     public ProcedureOutcome declineActive(ConversationSession session) {
@@ -304,14 +320,23 @@ public class ProcedureCoordinator {
         }
         procedure.setStatus(ProcedureStatus.CANCELLED);
         session.clearActiveProcedure();
-        return recordOutcome(procedure.getType(), ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that."));
+        return recordOutcome(session, procedure.getType(), ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that."));
     }
 
     // ---- internal ----
 
-    private ProcedureOutcome recordOutcome(ProcedureType type, ProcedureOutcome outcome) {
+    private ProcedureOutcome recordOutcome(ConversationSession session, ProcedureType type, ProcedureOutcome outcome) {
         turnMetrics.recordProcedureOutcome(type.name(), outcome.code(), outcome.success());
+        ConversationEventType eventType = classifyProcedureEvent(outcome);
+        auditService.recordEvent(session, session.getTurnCount(), eventType, "type=" + type + " code=" + outcome.code());
         return outcome;
+    }
+
+    private ConversationEventType classifyProcedureEvent(ProcedureOutcome outcome) {
+        if (!outcome.success()) {
+            return ConversationEventType.PROCEDURE_FAILED;
+        }
+        return STARTED_CODES.contains(outcome.code()) ? ConversationEventType.PROCEDURE_STARTED : ConversationEventType.PROCEDURE_COMPLETED;
     }
 
     private VerifiedOrderRef resolveOrder(ConversationSession session, String orderReference) {
@@ -327,7 +352,7 @@ public class ProcedureCoordinator {
             boolean requiresOtp, String actionDescription) {
 
         if (!session.getCustomerIdentity().isAtLeast(IdentityAssurance.PHONE_MATCHED)) {
-            return recordOutcome(type, ProcedureOutcome.error("IDENTITY_NOT_VERIFIED", "I'll need to verify who I'm speaking with before I can do that."));
+            return recordOutcome(session, type, ProcedureOutcome.error("IDENTITY_NOT_VERIFIED", "I'll need to verify who I'm speaking with before I can do that."));
         }
 
         ProcedureState procedure = new ProcedureState(type, target, data, requiresOtp ? IdentityAssurance.OTP_VERIFIED : IdentityAssurance.PHONE_MATCHED);
@@ -336,7 +361,7 @@ public class ProcedureCoordinator {
         if (slotResult == ProcedureSlotResult.BOTH_SLOTS_OCCUPIED) {
             String activeDesc = session.getActiveProcedure().map(this::describe).orElse("one request");
             String pausedDesc = session.getPausedProcedure().map(this::describe).orElse("another request");
-            return recordOutcome(type, ProcedureOutcome.error("TOO_MANY_ACTIVE_PROCEDURES",
+            return recordOutcome(session, type, ProcedureOutcome.error("TOO_MANY_ACTIVE_PROCEDURES",
                     "There's already a " + activeDesc + " and a " + pausedDesc + " in progress. Which one would you like to continue first?"));
         }
 
@@ -346,15 +371,16 @@ public class ProcedureCoordinator {
             if (!verificationOutcome.success()) {
                 procedure.setStatus(ProcedureStatus.FAILED);
                 session.clearActiveProcedure();
-                return recordOutcome(type, ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()));
+                return recordOutcome(session, type, ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()));
             }
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_ISSUED, "type=" + type);
             String pausedNote = slotResult == ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS
                     ? " I've paused what we were doing before - we'll come back to it after this."
                     : "";
-            return recordOutcome(type, ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote));
+            return recordOutcome(session, type, ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote));
         }
 
-        return recordOutcome(type, moveToConfirmation(procedure));
+        return recordOutcome(session, type, moveToConfirmation(procedure));
     }
 
     private ProcedureOutcome moveToConfirmation(ProcedureState procedure) {

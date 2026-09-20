@@ -1,12 +1,15 @@
 package com.voxticket.agent;
 
+import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureRequestTools;
 import com.voxticket.procedure.ProcedureState;
 import com.voxticket.rag.PolicyKnowledgeTools;
+import com.voxticket.rag.RagService;
 import com.voxticket.service.CustomerOrderQueryService;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -37,15 +40,25 @@ public class SupportAgent {
             - Retrieved policy information comes to you as short factual statements, not spoken sentences - rephrase
               them naturally in your own words rather than reading them back verbatim.
 
-            You can only ever see and act on the CURRENT customer's own data. Use getMyOrderContext as your
-            default way to look up an order - it gives you status, items, payment, shipment, cancellation
-            eligibility, and any returns/refunds/claims in one call, already in plain language. Only reach for the
-            narrower tools (getMyShipmentStatus, getMyPaymentStatus, etc.) if you specifically need just that one
-            thing and nothing else. Never guess, invent, or assume order numbers, amounts, dates, or statuses.
+            You can only ever see and act on the CURRENT customer's own data. Use getMyOrderContext to look up
+            anything about an order - status, items, payment, shipment, cancellation eligibility, and any
+            returns/refunds/claims all come back together, already in plain language. Never guess, invent, or
+            assume order numbers, amounts, dates, or statuses.
+
+            Use the policy search tool for general "how does X work" questions. It explains policy in general terms -
+            it does NOT tell you whether one specific order is eligible for something. getMyOrderContext already tells
+            you cancellation eligibility directly; for returns, don't pre-check eligibility separately - just use
+            requestReturn, and if the item isn't eligible it will tell you why.
 
             Never ask the customer for a SKU, product ID, or any internal reference. When a return or claim needs
             to know which item, describe the items naturally (by name) and let the customer pick in their own
             words - the tools resolve this themselves, and if an order only has one item you don't need to ask at all.
+
+            If the customer is asking a hypothetical or general "what if" question - what would happen if it arrived
+            damaged, whether they could return something later, what cancellation would involve - rather than
+            describing something that has actually happened or asking you to act right now, answer informationally
+            and do NOT call requestCancellation, requestReturn, or reportOrderProblem. Only use those tools when the
+            customer is actually asking you to start that process now.
 
             To cancel an order, start a return, or file a claim about a damaged/wrong/missing item, use
             requestCancellation, requestReturn, or reportOrderProblem. These are real, available actions - never tell
@@ -63,7 +76,6 @@ public class SupportAgent {
             - If it says an item reference is unclear or ambiguous, relay the question about which item naturally.
             - If it asks for a reason or description that's still missing, relay that question naturally rather than guessing one yourself.
             - If it says something isn't eligible, wasn't found, or that too many requests are already in progress,
-              explain that plainly - do not retry the tool or guess a workaround.
               explain that plainly - do not retry the tool or guess a workaround.
             Never say verification, cancellation, returns, or claims are "not available" in this system - they are
             all available through these tools; only a specific order might not be eligible, which the tool will tell you.
@@ -90,28 +102,31 @@ public class SupportAgent {
     private final ContextBuilder contextBuilder;
     private final ModelSelector modelSelector;
     private final CustomerOrderQueryService queryService;
-    private final PolicyKnowledgeTools policyKnowledgeTools;
+    private final RagService ragService;
     private final ProcedureCoordinator procedureCoordinator;
     private final ChatOptionsFactory chatOptionsFactory;
     private final TurnMetrics turnMetrics;
+    private final ConversationAuditService auditService;
 
     public SupportAgent(
             ChatClient.Builder chatClientBuilder,
             ContextBuilder contextBuilder,
             ModelSelector modelSelector,
             CustomerOrderQueryService queryService,
-            PolicyKnowledgeTools policyKnowledgeTools,
+            RagService ragService,
             ProcedureCoordinator procedureCoordinator,
             ChatOptionsFactory chatOptionsFactory,
-            TurnMetrics turnMetrics) {
+            TurnMetrics turnMetrics,
+            ConversationAuditService auditService) {
         this.chatClient = chatClientBuilder.build();
         this.contextBuilder = contextBuilder;
         this.modelSelector = modelSelector;
         this.queryService = queryService;
-        this.policyKnowledgeTools = policyKnowledgeTools;
+        this.ragService = ragService;
         this.procedureCoordinator = procedureCoordinator;
         this.chatOptionsFactory = chatOptionsFactory;
         this.turnMetrics = turnMetrics;
+        this.auditService = auditService;
     }
 
     public String respond(ConversationSession session, String currentUserMessage) {
@@ -123,11 +138,14 @@ public class SupportAgent {
             tierLabel = selection.tier().name();
             modelLabel = modelSelector.modelFor(selection.tier());
             turnMetrics.recordModelSelection(tierLabel, modelLabel, selection.reason());
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.MODEL_SELECTED,
+                    "tier=" + tierLabel + " model=" + modelLabel + " reason=" + selection.reason());
             log.info("event=model_selected sessionId={} tier={} model={} reason={}", session.getSessionId(), tierLabel, modelLabel, selection.reason());
 
             var history = contextBuilder.buildHistory(session);
-            var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity(), turnMetrics);
+            var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity(), session, turnMetrics, auditService);
             var procedureTools = new ProcedureRequestTools(procedureCoordinator, session);
+            var policyTools = new PolicyKnowledgeTools(ragService, turnMetrics, session, auditService);
             String systemPrompt = buildSystemPrompt(session);
 
             log.info("event=support_agent_call_start sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
@@ -136,7 +154,7 @@ public class SupportAgent {
                     .system(systemPrompt)
                     .messages(history)
                     .options(chatOptionsFactory.forModel(modelLabel))
-                    .tools(customerTools, policyKnowledgeTools, procedureTools)
+                    .tools(customerTools, policyTools, procedureTools)
                     .call()
                     .chatResponse();
 
@@ -185,21 +203,14 @@ public class SupportAgent {
             prompt.append("\n\nRecent activity in this conversation, for resolving references like \"how will I get the "
                             + "money\" or \"what about my other order\": ").append(recentActivity)
                     .append(" These are historical facts only, to help you understand what the customer is referring to - they are NOT"
-                            + " necessarily still accurate right now. If the customer asks about the CURRENT status of any of these, use the"
-                            + " matching tool (getMyRefundStatus, getMyReturnStatus, getMyTicketStatus, etc.) rather than treating this note as current.");
+                            + " necessarily still accurate right now. If the customer asks about the CURRENT status of any of these, use"
+                            + " getMyOrderContext for anything order-related (refund, return, cancellation) or getMyTicketStatus for a support"
+                            + " ticket, rather than treating this note as current.");
         }
 
         return prompt.toString();
     }
 
-    /**
-     * Core Improvement #3. Makes an in-progress procedure explicit rather than something the
-     * model has to infer from scrollback - and explicitly instructs it not to drop the thread on
-     * a side question, which is the concrete behavior spec asks for ("side questions must not
-     * silently abandon an active procedure"). Reuses pendingDescription (already a clean,
-     * customer-safe natural-language sentence set when the procedure began) rather than exposing
-     * raw collectedData values like a SKU or an enum name.
-     */
     String buildActiveProcedureContext(ConversationSession session) {
         StringBuilder sb = new StringBuilder();
         session.getActiveProcedure().ifPresent(p -> sb.append(describeActive(p)));

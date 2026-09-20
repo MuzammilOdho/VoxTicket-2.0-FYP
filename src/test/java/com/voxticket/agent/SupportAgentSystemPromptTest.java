@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
@@ -14,7 +15,7 @@ import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureState;
 import com.voxticket.procedure.ProcedureType;
-import com.voxticket.rag.PolicyKnowledgeTools;
+import com.voxticket.rag.RagService;
 import com.voxticket.service.CustomerOrderQueryService;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -32,8 +33,8 @@ class SupportAgentSystemPromptTest {
         when(builder.build()).thenReturn(mock(ChatClient.class));
         return new SupportAgent(
                 builder, mock(ContextBuilder.class), mock(ModelSelector.class),
-                mock(CustomerOrderQueryService.class), mock(PolicyKnowledgeTools.class),
-                mock(ProcedureCoordinator.class), mock(ChatOptionsFactory.class), mock(TurnMetrics.class));
+                mock(CustomerOrderQueryService.class), mock(RagService.class),
+                mock(ProcedureCoordinator.class), mock(ChatOptionsFactory.class), mock(TurnMetrics.class), mock(ConversationAuditService.class));
     }
 
     private VerifiedOrderRef dummyRef(String orderNumber) {
@@ -82,16 +83,15 @@ class SupportAgentSystemPromptTest {
     @Test
     void anActiveProcedureAwaitingConfirmationIsDescribedWithoutLeakingRawInternalValues() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        ProcedureState procedure = new ProcedureState(ProcedureType.RETURN, dummyRef("ORD-10001"), Map.of("itemReference", "SKU-1", "reason", "DAMAGED"), IdentityAssurance.OTP_VERIFIED);
-        procedure.setPendingDescription("start a return for Running Shoes from order ORD-10001");
+        ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"), Map.of("itemReference", "SKU-1", "reason", "DAMAGED"), IdentityAssurance.PHONE_MATCHED);
+        procedure.setPendingDescription("file a claim for Running Shoes on order ORD-10001 (damaged)");
         session.beginProcedure(procedure);
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("start a return for Running Shoes from order ORD-10001");
+        assertThat(prompt).contains("file a claim for Running Shoes on order ORD-10001 (damaged)");
         assertThat(prompt).contains("explicitly say yes or no");
         assertThat(prompt).contains("Do not abandon or forget this");
-        // No raw internal values (SKU, enum name) should leak into the model's context.
         assertThat(prompt).doesNotContain("SKU-1");
         assertThat(prompt).doesNotContain("DAMAGED");
     }
@@ -101,7 +101,6 @@ class SupportAgentSystemPromptTest {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
         procedure.setPendingDescription("cancel order ORD-10001");
-        // beginProcedure defaults to AWAITING_CONFIRMATION; simulate the verification-pending state directly.
         procedure.setStatus(com.voxticket.procedure.ProcedureStatus.AWAITING_VERIFICATION);
         session.beginProcedure(procedure);
 
@@ -122,8 +121,8 @@ class SupportAgentSystemPromptTest {
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("start a return for Cotton T-Shirt from order ORD-20002"); // active
-        assertThat(prompt).contains("file a claim for Running Shoes on order ORD-10001 (damaged)"); // paused
+        assertThat(prompt).contains("start a return for Cotton T-Shirt from order ORD-20002");
+        assertThat(prompt).contains("file a claim for Running Shoes on order ORD-10001 (damaged)");
         assertThat(prompt).contains("paused");
     }
 
@@ -136,5 +135,12 @@ class SupportAgentSystemPromptTest {
         String prompt = agent.buildSystemPrompt(session);
 
         assertThat(prompt).contains("ORD-10001 was cancelled").contains("CLM-00001");
+    }
+
+    @Test
+    void hypotheticalQuestionsAreDistinguishedFromRealIncidentsInThePromptGuidance() {
+        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
+
+        assertThat(prompt).contains("hypothetical").contains("do NOT call requestCancellation, requestReturn, or reportOrderProblem");
     }
 }

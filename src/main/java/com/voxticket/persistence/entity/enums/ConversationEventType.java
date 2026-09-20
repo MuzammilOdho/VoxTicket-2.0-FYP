@@ -1,0 +1,17 @@
+package com.voxticket.persistence.entity.enums;
+
+public enum ConversationEventType {
+    MODEL_SELECTED,
+    TOOL_CALLED,
+    RAG_SEARCH,
+    PROCEDURE_STARTED,
+    PROCEDURE_COMPLETED,
+    PROCEDURE_FAILED,
+    OTP_ISSUED,
+    OTP_VERIFIED,
+    OTP_FAILED,
+    EXECUTION_SUCCEEDED,
+    EXECUTION_FAILED,
+    ESCALATED,
+    SAFETY_BLOCKED
+}
