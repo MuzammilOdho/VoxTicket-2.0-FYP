@@ -38,6 +38,7 @@ public class PolicyKnowledgeTools {
             + "for something; getMyOrderContext already tells you cancellation eligibility, and requestReturn reports return "
             + "eligibility itself if it isn't eligible.")
     public Object searchPolicy(@ToolParam(description = "A natural-language question about company policy") String query) {
+        session.markToolInvoked();
         long start = System.nanoTime();
         List<RagService.PolicySnippet> results = ragService.searchPolicy(query);
         long durationMs = (System.nanoTime() - start) / 1_000_000;
@@ -45,7 +46,7 @@ public class PolicyKnowledgeTools {
         turnMetrics.recordToolCall(Duration.ofMillis(durationMs), "searchPolicy", "OK");
         String categories = results.stream().map(RagService.PolicySnippet::category).distinct().reduce((a, b) -> a + "," + b).orElse("none");
         auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.RAG_SEARCH,
-                "resultCount=" + results.size() + " categories=" + categories);
+                "resultCount=" + results.size() + " categories=" + categories + " durationMs=" + durationMs);
         return results;
     }
 }

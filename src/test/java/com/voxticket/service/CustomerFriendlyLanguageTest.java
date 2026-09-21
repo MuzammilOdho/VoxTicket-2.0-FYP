@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.voxticket.persistence.entity.enums.OrderStatus;
 import com.voxticket.persistence.entity.enums.PaymentStatus;
+import com.voxticket.persistence.entity.enums.ReturnStatus;
 import com.voxticket.persistence.entity.enums.ShipmentStatus;
 import org.junit.jupiter.api.Test;
 
@@ -30,5 +31,10 @@ class CustomerFriendlyLanguageTest {
         for (ShipmentStatus status : ShipmentStatus.values()) {
             assertThat(CustomerFriendlyLanguage.describe(status)).isNotBlank().isNotEqualTo(status.name());
         }
+    }
+    @Test
+    void returnRequestedStatusIsUnambiguousAboutWhoseTurnItIs() {
+        String description = CustomerFriendlyLanguage.describe(ReturnStatus.REQUESTED);
+        assertThat(description).contains("awaiting approval");
     }
 }

@@ -32,6 +32,9 @@ public class ConversationSession {
     private ProcedureState pausedProcedure;
     private boolean escalated;
     private UUID pendingVerificationChallengeId;
+    private ConversationFocus focus;
+    private boolean toolInvokedThisTurn;
+
 
     private ConversationSession(String sessionId, Channel channel) {
         this.sessionId = sessionId;
@@ -118,7 +121,6 @@ public class ConversationSession {
         return escalated;
     }
 
-    /** Spec §6 "pendingVerification" - a lightweight reference only; the VerificationChallenge row in the database is the authoritative record. */
     public void setPendingVerificationChallengeId(UUID challengeId) {
         this.pendingVerificationChallengeId = challengeId;
     }
@@ -129,6 +131,24 @@ public class ConversationSession {
 
     public void clearPendingVerification() {
         this.pendingVerificationChallengeId = null;
+    }
+
+    /** Switching to a genuinely different order clears any item pinned under the previous one. */
+    public void recordFocusOrder(String orderNumber) {
+        if (orderNumber == null) {
+            return;
+        }
+        if (focus == null || !orderNumber.equals(focus.orderNumber())) {
+            focus = ConversationFocus.ofOrder(orderNumber);
+        }
+    }
+
+    public void recordFocusItem(String itemSku, String itemDisplayName) {
+        focus = focus == null ? new ConversationFocus(null, itemSku, itemDisplayName) : focus.withItem(itemSku, itemDisplayName);
+    }
+
+    public Optional<ConversationFocus> getFocus() {
+        return Optional.ofNullable(focus);
     }
 
     public void touch() {
@@ -185,5 +205,20 @@ public class ConversationSession {
 
     public Instant getLastActivityAt() {
         return lastActivityAt;
+    }
+
+
+
+    /** Diagnostic only (proposal #3): lets ConversationRuntime detect a response that claims a system failure with no tool ever attempted. */
+    public void resetToolInvokedFlag() {
+        toolInvokedThisTurn = false;
+    }
+
+    public void markToolInvoked() {
+        toolInvokedThisTurn = true;
+    }
+
+    public boolean wasToolInvokedThisTurn() {
+        return toolInvokedThisTurn;
     }
 }

@@ -17,6 +17,7 @@ public class ProcedureRequestTools {
     @Tool(description = "Begin a cancellation request for one of the customer's own orders. This starts a guarded process - "
             + "it does NOT cancel the order by itself. The customer must still explicitly confirm afterward.")
     public Object requestCancellation(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
+        session.markToolInvoked();
         return procedureCoordinator.startCancellation(session, orderReference);
     }
 
@@ -28,6 +29,7 @@ public class ProcedureRequestTools {
                     + "distinguishing detail. NEVER a SKU or internal ID. Leave blank if the order only has one item or the customer hasn't said yet.")
             String itemReference,
             @ToolParam(description = "Why the customer is returning it, in their own words. Leave blank if they haven't said yet.") String reason) {
+        session.markToolInvoked();
         return procedureCoordinator.startReturn(session, orderReference, itemReference, reason);
     }
 
@@ -39,12 +41,14 @@ public class ProcedureRequestTools {
                     + "distinguishing detail. NEVER a SKU or internal ID. Leave blank if the order only has one item or the customer hasn't said yet.")
             String itemReference,
             @ToolParam(description = "Description of the problem, in the customer's own words. Leave blank if they haven't said yet.") String problem) {
+        session.markToolInvoked();
         return procedureCoordinator.startClaim(session, orderReference, itemReference, problem);
     }
 
     @Tool(description = "Escalate to a human support agent. Use this when the customer explicitly asks for a person, a supervisor, "
             + "or says this system can't help them.")
     public Object requestHumanSupport(@ToolParam(description = "Brief reason for the escalation") String reason) {
+        session.markToolInvoked();
         return procedureCoordinator.requestHumanSupport(session, reason);
     }
 }

@@ -9,6 +9,7 @@ import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
+import com.voxticket.service.dto.OrderContextView;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -45,7 +46,11 @@ public class CustomerReadTools {
             + "eligibility, and any related returns, refunds, or claims - all in one call, already in plain language. This is the "
             + "only way to look up anything about an order.")
     public Object getMyOrderContext(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
-        return safely("getMyOrderContext", orderReference, () -> queryService.getOrderContext(identity, orderReference));
+        Object result = safely("getMyOrderContext", orderReference, () -> queryService.getOrderContext(identity, orderReference));
+        if (result instanceof OrderContextView context) {
+            session.recordFocusOrder(context.orderNumber());
+        }
+        return result;
     }
 
     @Tool(description = "Get the status of one of the customer's own support tickets.")
@@ -54,6 +59,7 @@ public class CustomerReadTools {
     }
 
     private Object safely(String toolName, String reference, Supplier<Object> call) {
+        session.markToolInvoked();
         long start = System.nanoTime();
         try {
             Object result = call.get();
@@ -61,13 +67,15 @@ public class CustomerReadTools {
             String resultCode = (result instanceof ToolError toolError) ? toolError.code() : "OK";
             log.info("event=tool_call tool={} reference={} durationMs={} result={}", toolName, safeReference(reference), durationMs, resultCode);
             turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, resultCode);
-            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED, "tool=" + toolName + " result=" + resultCode);
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
+                    "tool=" + toolName + " result=" + resultCode + " durationMs=" + durationMs);
             return result;
         } catch (ResourceNotFoundForAccountException e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=NOT_FOUND_FOR_ACCOUNT", toolName, safeReference(reference), durationMs);
             turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, "NOT_FOUND_FOR_ACCOUNT");
-            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED, "tool=" + toolName + " result=NOT_FOUND_FOR_ACCOUNT");
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
+                    "tool=" + toolName + " result=NOT_FOUND_FOR_ACCOUNT durationMs=" + durationMs);
             return new ToolError(
                     "NOT_FOUND_FOR_ACCOUNT",
                     "That reference doesn't match any of the customer's own records. Do not guess or invent an "
@@ -76,7 +84,8 @@ public class CustomerReadTools {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=IDENTITY_NOT_VERIFIED", toolName, safeReference(reference), durationMs);
             turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, "IDENTITY_NOT_VERIFIED");
-            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED, "tool=" + toolName + " result=IDENTITY_NOT_VERIFIED");
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
+                    "tool=" + toolName + " result=IDENTITY_NOT_VERIFIED durationMs=" + durationMs);
             return new ToolError(
                     "IDENTITY_NOT_VERIFIED",
                     "The customer's phone number could not be matched to an account, so their own order data cannot be looked up yet.");

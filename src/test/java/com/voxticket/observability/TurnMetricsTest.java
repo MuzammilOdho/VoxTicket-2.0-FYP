@@ -45,4 +45,15 @@ class TurnMetricsTest {
         assertThat(registry.find("voxticket.prompt_guard.duration").timer()).isNotNull();
         assertThat(registry.find("voxticket.prompt_guard.outcome").counter()).isNotNull();
     }
+
+    @Test
+    void recordTurnEnablesPercentileQueriesAfterEnoughSamples() {
+        for (int i = 1; i <= 20; i++) {
+            metrics.recordTurn(Duration.ofMillis(i * 5L), "CHAT", "normal");
+        }
+
+        var timer = registry.find("voxticket.turn.duration").tag("channel", "CHAT").tag("outcome", "normal").timer();
+        assertThat(timer).isNotNull();
+        assertThat(timer.percentile(0.5, java.util.concurrent.TimeUnit.MILLISECONDS)).isGreaterThan(0.0);
+    }
 }

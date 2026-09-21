@@ -34,12 +34,8 @@ public class OwnedOrderItemResolver {
             return exactSku.get();
         }
 
-        // FIX: natural phrasing like "the t-shirt" or "my shoes" was failing a plain substring
-        // check against "Cotton T-Shirt" - "the"/"my" aren't part of the product name. Stripping
-        // a small set of common leading filler words before matching handles the single most
-        // common real phrasing pattern without building a full NLP/stopword pipeline.
         String needle = stripLeadingFillerWords(trimmed).toLowerCase(Locale.ROOT);
-        List<OrderItem> nameMatches = items.stream().filter(i -> i.getProductName().toLowerCase(Locale.ROOT).contains(needle)).toList();
+        List<OrderItem> nameMatches = items.stream().filter(i -> matchesDescription(i.getProductName(), needle)).toList();
         if (nameMatches.size() == 1) {
             return nameMatches.get(0);
         }
@@ -47,6 +43,22 @@ public class OwnedOrderItemResolver {
             throw new ResourceNotFoundForAccountException("ORDER_ITEM", itemDescription);
         }
         throw new AmbiguousItemException(nameMatches);
+    }
+
+    /**
+     * FIX: a plain substring check missed simple plural/singular mismatches - "bedsheets" is not
+     * a substring of "Cotton Bedsheet Set" because of the space before "Set". Tries the singular
+     * form (strip trailing 's') and the plural form (add trailing 's') as fallbacks.
+     */
+    private boolean matchesDescription(String productName, String needle) {
+        String normalized = productName.toLowerCase(Locale.ROOT);
+        if (normalized.contains(needle)) {
+            return true;
+        }
+        if (needle.endsWith("s") && normalized.contains(needle.substring(0, needle.length() - 1))) {
+            return true;
+        }
+        return normalized.contains(needle + "s");
     }
 
     private String stripLeadingFillerWords(String text) {

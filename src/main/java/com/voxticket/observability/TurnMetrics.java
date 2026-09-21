@@ -6,14 +6,6 @@ import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import org.springframework.stereotype.Component;
 
-/**
- * A thin facade over Micrometer's existing MeterRegistry (on the classpath
- * since Phase 1 via spring-boot-starter-actuator + micrometer-registry-
- * prometheus) - not a new observability framework, just consistent metric
- * names/tags so every part of the app records the same shape of data,
- * exported automatically through the already-configured Prometheus
- * endpoint. No tracing, no spans, no custom platform.
- */
 @Component
 public class TurnMetrics {
 
@@ -23,8 +15,23 @@ public class TurnMetrics {
         this.registry = registry;
     }
 
+    /**
+     * CORRECTION from last round: minimumExpectedValue/maximumExpectedValue only affect
+     * publishPercentileHistogram() bucket generation for external aggregation systems - they do
+     * NOT affect the client-side .percentile() value this app reads directly. Verified against
+     * Micrometer issue #3298: a Timer's client-side percentile estimate decays to 0.0 after its
+     * distribution-statistic window expires, while count()/max() persist far longer - exactly the
+     * observed symptom (0 despite non-zero turns). distributionStatisticExpiry is the real,
+     * documented knob for that window.
+     */
     public void recordTurn(Duration duration, String channel, String outcome) {
-        Timer.builder("voxticket.turn.duration").tag("channel", channel).tag("outcome", outcome).register(registry).record(duration);
+        Timer.builder("voxticket.turn.duration")
+                .tag("channel", channel)
+                .tag("outcome", outcome)
+                .publishPercentiles(0.5, 0.95)
+                .distributionStatisticExpiry(Duration.ofMinutes(30))
+                .register(registry)
+                .record(duration);
     }
 
     public void recordModelSelection(String tier, String model, String reason) {

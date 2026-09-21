@@ -18,12 +18,8 @@ import com.voxticket.persistence.entity.enums.OrderStatus;
 import com.voxticket.persistence.entity.enums.PaymentMethod;
 import com.voxticket.persistence.entity.enums.PaymentStatus;
 import com.voxticket.persistence.entity.enums.ShipmentStatus;
-import com.voxticket.persistence.repository.CustomerRepository;
-import com.voxticket.persistence.repository.OrderClaimRepository;
-import com.voxticket.persistence.repository.OrderRepository;
-import com.voxticket.persistence.repository.PaymentRepository;
-import com.voxticket.persistence.repository.ShipmentRepository;
-import com.voxticket.persistence.repository.SupportTicketRepository;
+import com.voxticket.persistence.repository.*;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -65,6 +61,11 @@ class ProcedureCoordinatorIntegrationTest {
     private OrderClaimRepository orderClaimRepository;
     @Autowired
     private SupportTicketRepository supportTicketRepository;
+
+    @Autowired
+    private ConversationSessionRecordRepository sessionRecordRepository;
+    @Autowired
+    private ConversationEventRecordRepository eventRecordRepository;
 
     private Customer customer;
 
@@ -360,6 +361,48 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(outcome.code()).isEqualTo("PROBLEM_REQUIRED");
         assertThat(session.getActiveProcedure()).isEmpty();
     }
+    @Test
+    void establishingAnItemDuringOneReturnAttemptLetsALaterYesResolveItWithoutRepeatingTheDescription() {
+        Order order = newOrder(BigDecimal.valueOf(1000));
+        order.addItem(new OrderItem("Running Shoes", "SKU-EXTRA-" + java.util.UUID.randomUUID(), 1, BigDecimal.valueOf(500), true, false));
+        orderRepository.saveAndFlush(order);
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        Shipment shipment = new Shipment(order, "TCS", "TCS-1", ShipmentStatus.DELIVERED);
+        shipment.setDeliveredAt(Instant.now());
+        shipmentRepository.save(shipment);
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
 
+        // First attempt names the item explicitly and successfully establishes focus.
+        procedureCoordinator.startReturn(session, order.getOrderNumber(), "test product", "damaged");
+        assertThat(session.getFocus()).isPresent();
+        assertThat(session.getFocus().get().itemSku()).isNotBlank();
+
+        // Simulate the customer's "yes, I want to return it" on a LATER attempt with no item
+        // text at all - this is a multi-item order, so blank text would normally be ambiguous.
+        // The focus fallback must resolve it to the SAME item without asking again.
+        ProcedureOutcome secondAttempt = procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "changed my mind");
+
+        assertThat(secondAttempt.code()).isNotEqualTo("ITEM_REQUIRED");
+    }
+    @Test
+    void aFailedReturnDueToStaleStateAfterOtpIssuanceIsCaughtAtExecutionTime() {
+        Order order = newOrder(BigDecimal.valueOf(500));
+        paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        Shipment shipment = new Shipment(order, "TCS", "TCS-1", ShipmentStatus.DELIVERED);
+        shipment.setDeliveredAt(Instant.now());
+        shipmentRepository.save(shipment);
+        ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
+
+        procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "damaged");
+        String code = procedureCoordinator.resendVerificationCode(session).metadata().get("devOtp");
+
+        // Simulate the item becoming non-returnable between OTP issuance and verification.
+        order.getItems().get(0).setReturnable(false);
+        orderRepository.saveAndFlush(order);
+
+        assertThatThrownBy(() -> procedureCoordinator.submitVerificationCode(session, code))
+                .isInstanceOf(com.voxticket.policy.ReturnNotEligibleException.class);
+        assertThat(session.getActiveProcedure()).isEmpty();
+    }
 
 }

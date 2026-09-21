@@ -54,7 +54,7 @@ voxticket:
     returns:
       window-days: 30
   ai:
-    tier1-model: openai/gpt-oss-20b
+    tier1-model: qwen/qwen3.8-27b
     tier2-model: openai/gpt-oss-120b
     temperature: 0.3
     suppress-reasoning: true

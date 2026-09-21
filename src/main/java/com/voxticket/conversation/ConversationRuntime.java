@@ -20,6 +20,8 @@ import com.voxticket.safety.SafeLogging;
 import com.voxticket.verification.OtpInputClassifier;
 import com.voxticket.verification.OtpInputResult;
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -37,6 +39,10 @@ public class ConversationRuntime {
     private static final String TOO_LONG_MESSAGE = "That message was too long for me to process - could you break it into shorter messages?";
     private static final String REDACTED_FLAGGED_PLACEHOLDER = "[message withheld - flagged by security filter]";
     private static final String PROCEDURE_FAILURE_MESSAGE = "Something went wrong while processing that - please try again, or ask for a human agent.";
+
+    /** Phase 10 gap-fix (proposal #3): a small, evidence-grounded set of phrases observed fabricating a failure with no tool ever attempted. Diagnostic only - never changes behavior. */
+    private static final List<String> FABRICATION_SIGNAL_PHRASES = List.of(
+            "having trouble", "technical issue", "technical problem", "system issue", "system problem", "couldn't start", "couldn't process");
 
     private final SessionStore sessionStore;
     private final IdentityService identityService;
@@ -129,7 +135,7 @@ public class ConversationRuntime {
                     turnMetadata = outcome.metadata();
                     outcomeLabel = "verification";
                 } else {
-                    responseText = supportAgent.respond(session, normalizedText);
+                    responseText = respondViaAgent(session, normalizedText);
                     outcomeLabel = "verification_unclear";
                 }
             } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
@@ -139,13 +145,13 @@ public class ConversationRuntime {
                 responseText = switch (decision) {
                     case YES -> confirmWithSafeFallback(session);
                     case NO -> procedureCoordinator.declineActive(session).message();
-                    case UNCLEAR -> supportAgent.respond(session, normalizedText);
+                    case UNCLEAR -> respondViaAgent(session, normalizedText);
                 };
                 outcomeLabel = "confirmation_" + decision.name().toLowerCase();
             } else {
                 turnNumber = session.recordUserMessage(normalizedText);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
-                responseText = supportAgent.respond(session, normalizedText);
+                responseText = respondViaAgent(session, normalizedText);
                 outcomeLabel = "normal";
             }
             session.recordAssistantMessage(responseText);
@@ -157,6 +163,25 @@ public class ConversationRuntime {
             completeTurn(session, turnNumber, startNanos, outcomeLabel);
             return new AssistantTurn(responseText, false, stillWaiting, stateView(session, turnNumber), turnMetadata);
         });
+    }
+
+    /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
+    private String respondViaAgent(ConversationSession session, String normalizedText) {
+        session.resetToolInvokedFlag();
+        String responseText = supportAgent.respond(session, normalizedText);
+        checkForSuspectedFabrication(session, responseText);
+        return responseText;
+    }
+
+    private void checkForSuspectedFabrication(ConversationSession session, String responseText) {
+        if (session.wasToolInvokedThisTurn() || responseText == null) {
+            return;
+        }
+        String lower = responseText.toLowerCase(Locale.ROOT);
+        if (FABRICATION_SIGNAL_PHRASES.stream().anyMatch(lower::contains)) {
+            log.warn("event=suspected_fabrication sessionId={}", session.getSessionId());
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.SUSPECTED_FABRICATION, "no tool was invoked this turn");
+        }
     }
 
     private String confirmWithSafeFallback(ConversationSession session) {

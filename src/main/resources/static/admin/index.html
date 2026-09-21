@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VoxTicket Admin</title>
+    <style>
+        body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; background: #f4f5f7; color: #1a1a1a; }
+        h1 { font-size: 20px; margin-bottom: 4px; }
+        .subtitle { color: #666; margin-bottom: 24px; font-size: 13px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .card { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .card .value { font-size: 26px; font-weight: 600; }
+        .card .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+        th { background: #fafafa; color: #666; font-weight: 500; }
+        section { margin-bottom: 32px; }
+        section h2 { font-size: 15px; margin-bottom: 8px; }
+        button.inspect { font-size: 12px; padding: 4px 10px; cursor: pointer; border: 1px solid #ccc; background: white; border-radius: 4px; }
+        #inspector { display: none; }
+        .timeline-entry { padding: 8px 12px; border-left: 3px solid #ddd; margin-bottom: 6px; background: white; border-radius: 0 6px 6px 0; }
+        .timeline-entry.MESSAGE.USER { border-left-color: #4a90d9; }
+        .timeline-entry.MESSAGE.ASSISTANT { border-left-color: #52b788; }
+        .timeline-entry.EVENT { border-left-color: #e0a83e; }
+        .timeline-meta { font-size: 11px; color: #888; margin-bottom: 2px; }
+        .timeline-text { font-size: 13px; white-space: pre-wrap; }
+        .back-link { cursor: pointer; color: #4a90d9; font-size: 13px; margin-bottom: 12px; display: inline-block; }
+        .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; background: #eee; }
+    </style>
+</head>
+<body>
+
+<h1>VoxTicket Admin</h1>
+<div class="subtitle">Dev/test only - not authenticated.</div>
+
+<div id="dashboard">
+    <div class="cards" id="summaryCards"></div>
+
+    <section>
+        <h2>Model tier usage</h2>
+        <table id="tierTable"><thead><tr><th>Tier</th><th>Calls</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Token usage</h2>
+        <table id="tokenTable"><thead><tr><th>Type</th><th>Tokens</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Tool metrics</h2>
+        <table id="toolTable"><thead><tr><th>Tool</th><th>Calls</th><th>Mean duration (ms)</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>RAG</h2>
+        <table id="ragTable"><thead><tr><th>Searches</th><th>Mean duration (ms)</th><th>Mean results returned</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Recent conversations</h2>
+        <table id="conversationsTable">
+            <thead><tr><th>Session</th><th>Channel</th><th>Identity</th><th>Escalated</th><th>Last activity</th><th></th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
+</div>
+
+<div id="inspector">
+    <span class="back-link" onclick="showDashboard()">&larr; Back to dashboard</span>
+    <h2 id="inspectorTitle"></h2>
+    <div id="inspectorMeta" class="subtitle"></div>
+    <div id="timeline"></div>
+</div>
+
+<script>
+    async function loadDashboard() {
+        const summary = await (await fetch('/api/v1/admin/summary')).json();
+        const cards = document.getElementById('summaryCards');
+        cards.innerHTML = '';
+        const cardData = [
+            ['Total conversations', summary.totalConversations],
+            ['Active sessions', summary.activeSessions],
+            ['Procedure successes', summary.procedureSuccessCount],
+            ['Procedure failures', summary.procedureFailureCount],
+            ['Clarification requests', summary.procedureClarificationCount],
+            ['Escalations', summary.escalationCount],
+            ['Total turns processed', summary.totalTurnsProcessed],
+            ['Turn latency p50 (ms)', summary.normalTurnLatencyP50Ms !== null ? summary.normalTurnLatencyP50Ms.toFixed(0) : 'n/a'],
+            ['Turn latency p95 (ms)', summary.normalTurnLatencyP95Ms !== null ? summary.normalTurnLatencyP95Ms.toFixed(0) : 'n/a'],
+        ];
+        for (const [label, value] of cardData) {
+            cards.innerHTML += `<div class="card"><div class="value">${value}</div><div class="label">${label}</div></div>`;
+        }
+
+        fillTable('tierTable', Object.entries(summary.modelTierUsage), (tier, count) => [tier, count]);
+        fillTable('tokenTable', Object.entries(summary.tokenUsage), (type, count) => [type, count]);
+        fillTable('toolTable', Object.entries(summary.toolMetrics), (tool, m) => [tool, m.callCount, m.meanDurationMs.toFixed(1)]);
+
+        const ragBody = document.querySelector('#ragTable tbody');
+        ragBody.innerHTML = `<tr><td>${summary.ragMetric.searchCount}</td><td>${summary.ragMetric.meanDurationMs.toFixed(1)}</td><td>${summary.ragMetric.meanRetrievedCount.toFixed(1)}</td></tr>`;
+
+        const conversations = await (await fetch('/api/v1/admin/conversations?limit=50')).json();
+        const convBody = document.querySelector('#conversationsTable tbody');
+        convBody.innerHTML = '';
+        for (const c of conversations) {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${c.sessionId}</td><td>${c.channel}</td><td>${c.identityAssurance}</td>` +
+                `<td>${c.escalated ? '<span class="badge">yes</span>' : ''}</td><td>${new Date(c.lastActivityAt).toLocaleString()}</td>` +
+                `<td><button class="inspect" data-session="${c.sessionId}">Inspect</button></td>`;
+            convBody.appendChild(row);
+        }
+        document.querySelectorAll('button.inspect').forEach(btn => {
+            btn.addEventListener('click', () => inspectSession(btn.dataset.session));
+        });
+    }
+
+    function fillTable(tableId, entries, rowFn) {
+        const body = document.querySelector('#' + tableId + ' tbody');
+        body.innerHTML = '';
+        for (const [key, value] of entries) {
+            const cells = rowFn(key, value);
+            body.innerHTML += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+        }
+    }
+
+    async function inspectSession(sessionId) {
+        const res = await fetch('/api/v1/admin/conversations/' + encodeURIComponent(sessionId));
+        if (!res.ok) { alert('Session not found.'); return; }
+        const data = await res.json();
+
+        document.getElementById('inspectorTitle').textContent = 'Session ' + data.sessionId;
+        document.getElementById('inspectorMeta').textContent =
+            `Channel: ${data.channel} \u00b7 Identity: ${data.identityAssurance} \u00b7 Escalated: ${data.escalated} \u00b7 ` +
+            `Started: ${new Date(data.startedAt).toLocaleString()} \u00b7 Last activity: ${new Date(data.lastActivityAt).toLocaleString()}`;
+
+        const timeline = document.getElementById('timeline');
+        timeline.innerHTML = '';
+        for (const entry of data.timeline) {
+            const div = document.createElement('div');
+            const roleClass = entry.role ? entry.kind + ' ' + entry.role : entry.kind;
+            div.className = 'timeline-entry ' + roleClass;
+            const label = entry.kind === 'MESSAGE' ? entry.role : entry.eventType;
+            const meta = document.createElement('div');
+            meta.className = 'timeline-meta';
+            meta.textContent = `Turn ${entry.turnNumber ?? '-'} \u00b7 ${label} \u00b7 ${new Date(entry.timestamp).toLocaleTimeString()}`;
+            const text = document.createElement('div');
+            text.className = 'timeline-text';
+            text.textContent = entry.text ?? '';
+            div.appendChild(meta);
+            div.appendChild(text);
+            timeline.appendChild(div);
+        }
+
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('inspector').style.display = 'block';
+    }
+
+    function showDashboard() {
+        document.getElementById('inspector').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        loadDashboard();
+    }
+
+    loadDashboard();
+</script>
+</body>
+</html>

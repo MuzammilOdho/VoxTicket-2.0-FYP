@@ -82,4 +82,13 @@ class OwnedOrderItemResolverTest {
 
         assertThatThrownBy(() -> resolver.resolve(ref, "nonexistent product")).isInstanceOf(ResourceNotFoundForAccountException.class);
     }
+
+    @Test
+    void pluralProductDescriptionResolvesAgainstASingularProductName() {
+        OrderItem bedsheetSet = item("Cotton Bedsheet Set", "SKU-1");
+        OrderItem shoes = item("Running Shoes", "SKU-2");
+        when(orderItemRepository.findByOrderId(ref.orderId())).thenReturn(List.of(bedsheetSet, shoes));
+
+        assertThat(resolver.resolve(ref, "bedsheets")).isSameAs(bedsheetSet);
+    }
 }

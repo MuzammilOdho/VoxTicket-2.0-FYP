@@ -75,7 +75,7 @@ public final class CustomerFriendlyLanguage {
 
     public static String describe(ReturnStatus status) {
         return switch (status) {
-            case REQUESTED -> "requested";
+            case REQUESTED -> "requested and awaiting approval";
             case APPROVED -> "approved";
             case REJECTED -> "rejected";
             case IN_TRANSIT -> "on its way back to us";

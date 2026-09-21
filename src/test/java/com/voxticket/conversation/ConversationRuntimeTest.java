@@ -216,4 +216,26 @@ class ConversationRuntimeTest {
             return null;
         });
     }
+
+    @Test
+    void aFabricatedFailureWithNoToolCallIsFlaggedInTheAuditTrail() {
+        when(supportAgent.respond(any(), any())).thenReturn("I'm sorry, I'm having trouble starting the return right now.");
+
+        runtime.processTurn(new UserTurn("s16", Channel.CHAT, "I want to return the bedsheets because I don't like the quality", null, Instant.now(), Map.of()));
+
+        verify(auditService).recordEvent(any(), any(), eq(ConversationEventType.SUSPECTED_FABRICATION), any());
+    }
+
+    @Test
+    void aGenuineToolFailureIsNeverFlaggedAsFabrication() {
+        when(supportAgent.respond(any(), any())).thenAnswer(invocation -> {
+            ConversationSession session = invocation.getArgument(0);
+            session.markToolInvoked();
+            return "I'm sorry, I'm having trouble starting the return right now.";
+        });
+
+        runtime.processTurn(new UserTurn("s17", Channel.CHAT, "return it", null, Instant.now(), Map.of()));
+
+        verify(auditService, never()).recordEvent(any(), any(), eq(ConversationEventType.SUSPECTED_FABRICATION), any());
+    }
 }

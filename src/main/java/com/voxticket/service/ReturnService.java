@@ -10,6 +10,7 @@ import com.voxticket.persistence.entity.ReturnRequest;
 import com.voxticket.persistence.entity.enums.RefundReason;
 import com.voxticket.persistence.entity.enums.ReturnReason;
 import com.voxticket.persistence.entity.enums.ReturnStatus;
+import com.voxticket.persistence.repository.OrderItemRepository;
 import com.voxticket.persistence.repository.OrderRepository;
 import com.voxticket.persistence.repository.PaymentRepository;
 import com.voxticket.persistence.repository.ReturnRequestRepository;
@@ -45,6 +46,7 @@ public class ReturnService {
     private final RefundService refundService;
     private final PaymentRepository paymentRepository;
     private final ReferenceNumberGenerator referenceNumberGenerator;
+    private final OrderItemRepository orderItemRepository;
 
     public ReturnService(
             OrderRepository orderRepository,
@@ -53,7 +55,7 @@ public class ReturnService {
             ReturnPolicyService returnPolicyService,
             RefundService refundService,
             PaymentRepository paymentRepository,
-            ReferenceNumberGenerator referenceNumberGenerator) {
+            ReferenceNumberGenerator referenceNumberGenerator, OrderItemRepository orderItemRepository) {
         this.orderRepository = orderRepository;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.returnRequestRepository = returnRequestRepository;
@@ -61,20 +63,28 @@ public class ReturnService {
         this.refundService = refundService;
         this.paymentRepository = paymentRepository;
         this.referenceNumberGenerator = referenceNumberGenerator;
+        this.orderItemRepository = orderItemRepository;
     }
 
     public ReturnRequest requestReturn(VerifiedOrderRef orderRef, String sku, int quantity, ReturnReason reason) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("quantity must be positive");
         }
-        Order order = orderRepository.findById(orderRef.orderId()).orElseThrow();
-        OrderItem item = ownedOrderItemResolver.resolveBySku(orderRef, sku);
 
-        ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
-        if (!eligibility.eligible()) {
-            throw new ReturnNotEligibleException(order.getOrderNumber(), eligibility.denialReason());
+        // Gap-fix: authoritative revalidation at execution time, mirroring CancellationService's
+        // existing pattern - the eligibility check ProcedureCoordinator ran earlier must not be
+        // trusted as still valid by the time this actually executes.
+        Order order = orderRepository.findById(orderRef.orderId()).orElseThrow();
+        OrderItem item = orderItemRepository.findByOrderId(orderRef.orderId()).stream()
+                .filter(i -> i.getSku().equalsIgnoreCase(sku))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Item not found during return execution: " + sku));
+        ReturnEligibility recheck = returnPolicyService.evaluate(order, item);
+        if (!recheck.eligible()) {
+            throw new ReturnNotEligibleException(orderRef.orderNumber() + " is no longer eligible for return: " , recheck.denialReason());
         }
-        if (quantity > eligibility.maxReturnableQuantity()) {
+
+        if (quantity > recheck.maxReturnableQuantity()) {
             throw new ReturnNotEligibleException(order.getOrderNumber(), com.voxticket.policy.ReturnDenialReason.NO_REMAINING_RETURNABLE_QUANTITY);
         }
 

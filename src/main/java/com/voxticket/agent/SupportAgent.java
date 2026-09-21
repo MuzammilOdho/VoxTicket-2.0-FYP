@@ -1,18 +1,22 @@
 package com.voxticket.agent;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.conversation.ConversationFocus;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
+import com.voxticket.policy.PaymentConsequence;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureRequestTools;
 import com.voxticket.procedure.ProcedureState;
+import com.voxticket.procedure.ProcedureStatus;
 import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.rag.RagService;
 import com.voxticket.service.CustomerOrderQueryService;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +28,7 @@ import org.springframework.stereotype.Service;
 public class SupportAgent {
 
     private static final Logger log = LoggerFactory.getLogger(SupportAgent.class);
+    private static final String GENERIC_BLANK_FALLBACK = "Sorry, could you say that again?";
 
     private static final String SYSTEM_PROMPT_BASE = """
             You are VoxTicket, an AI customer-support assistant for an e-commerce store.
@@ -45,10 +50,21 @@ public class SupportAgent {
             returns/refunds/claims all come back together, already in plain language. Never guess, invent, or
             assume order numbers, amounts, dates, or statuses.
 
-            Use the policy search tool for general "how does X work" questions. It explains policy in general terms -
-            it does NOT tell you whether one specific order is eligible for something. getMyOrderContext already tells
-            you cancellation eligibility directly; for returns, don't pre-check eligibility separately - just use
-            requestReturn, and if the item isn't eligible it will tell you why.
+            Use searchPolicy for any question about a PROCESS - what happens next, what the customer needs to do,
+            how a refund or return actually works, timing, notifications, labels, drop-off, or similar. Do this even
+            if you think you already know the answer - your own general knowledge of e-commerce is not necessarily
+            how THIS store's policy actually works. If searchPolicy returns something relevant, explain it naturally
+            in your own words. If it does NOT return anything specific to what was asked, do not invent specific
+            mechanisms, timeframes, or promises - no "prepaid label was emailed," no specific drop-off method, no
+            exact number of business days - unless a tool or policy search actually said so. Instead say that our
+            team will provide those details, or that you don't have that specific information right now.
+            For whether a SPECIFIC order/item is currently eligible for something, use getMyOrderContext or the
+            procedure tools directly - never use policy search to answer an eligibility question.
+
+            A return status of "requested and awaiting approval" means the customer's return has ALREADY been
+            submitted - there is nothing further for the customer to confirm about an existing return. Only say a
+            customer needs to "confirm" something when a tool you just called is actually asking them to (a fresh
+            requestCancellation/requestReturn/reportOrderProblem call, or a verification code).
 
             Never ask the customer for a SKU, product ID, or any internal reference. When a return or claim needs
             to know which item, describe the items naturally (by name) and let the customer pick in their own
@@ -60,12 +76,14 @@ public class SupportAgent {
             and do NOT call requestCancellation, requestReturn, or reportOrderProblem. Only use those tools when the
             customer is actually asking you to start that process now.
 
-            To cancel an order, start a return, or file a claim about a damaged/wrong/missing item, use
-            requestCancellation, requestReturn, or reportOrderProblem. These are real, available actions - never tell
-            the customer that cancellation, returns, or claims are unavailable. You don't need every detail before
-            starting the conversation about one of these - if the customer hasn't said which order, which item, or
-            why yet, ask naturally, one thing at a time, rather than listing everything you need up front. Never say
-            you "can't process this" just because one detail is still missing - ask for it instead.
+            When the customer clearly wants to cancel, return, or report a problem with a NAMED order, call the
+            matching tool right away - even if you don't yet know which item or the reason - rather than asking
+            about those in your own words first. The tool will tell you exactly what's still missing, in a natural
+            clarifying question you can relay directly; calling it early also means the system already knows which
+            order you're discussing for later turns, so "yes, I want to return it" works without repeating anything.
+            These are real, available actions - never tell the customer that cancellation, returns, or claims are
+            unavailable. Never say you "can't process this" just because one detail is still missing - the tool will
+            ask for it.
 
             Each tool only STARTS the process; it does not complete the action by itself. The tool's response tells
             you exactly what to say next, in your own natural words:
@@ -79,6 +97,9 @@ public class SupportAgent {
               explain that plainly - do not retry the tool or guess a workaround.
             Never say verification, cancellation, returns, or claims are "not available" in this system - they are
             all available through these tools; only a specific order might not be eligible, which the tool will tell you.
+            Never say there was a system issue, a technical problem, or that you're "having trouble" unless a tool
+            call actually returned an error - if you're not sure what to do next, ask the customer a clarifying
+            question instead of inventing a failure that didn't happen.
 
             If the customer's response to a pending confirmation wasn't a plain yes or no (for example it also asked
             something else, or seemed to correct which order was meant), do not assume they confirmed or declined.
@@ -162,6 +183,12 @@ public class SupportAgent {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, modelLabel, "success");
             recordTokenUsage(chatResponse, modelLabel);
+
+            if (content == null || content.isBlank()) {
+                log.warn("event=support_agent_blank_response sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
+                return blankResponseFallback(session);
+            }
+
             log.info("event=support_agent_call_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
             return content;
         } catch (Exception e) {
@@ -171,6 +198,17 @@ public class SupportAgent {
                     session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
             return "I'm having trouble processing that right now - please try again in a moment.";
         }
+    }
+
+    String blankResponseFallback(ConversationSession session) {
+        Optional<ProcedureState> active = session.getActiveProcedure();
+        if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
+            return "Sorry, could you say that again? I still need a yes or no on whether you'd like to " + active.get().getPendingDescription() + ".";
+        }
+        if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
+            return "Sorry, could you repeat that? I'm still waiting for the verification code.";
+        }
+        return GENERIC_BLANK_FALLBACK;
     }
 
     private void recordTokenUsage(ChatResponse chatResponse, String model) {
@@ -198,6 +236,11 @@ public class SupportAgent {
             prompt.append("\n\n").append(procedureContext);
         }
 
+        String focusContext = buildFocusContext(session);
+        if (!focusContext.isBlank()) {
+            prompt.append("\n\n").append(focusContext);
+        }
+
         String recentActivity = describeRecentActions(session);
         if (!recentActivity.isBlank()) {
             prompt.append("\n\nRecent activity in this conversation, for resolving references like \"how will I get the "
@@ -209,6 +252,22 @@ public class SupportAgent {
         }
 
         return prompt.toString();
+    }
+
+    String buildFocusContext(ConversationSession session) {
+        Optional<ConversationFocus> focus = session.getFocus();
+        if (focus.isEmpty() || focus.get().orderNumber() == null) {
+            return "";
+        }
+        ConversationFocus f = focus.get();
+        StringBuilder sb = new StringBuilder("The most recently discussed order is " + f.orderNumber() + ".");
+        if (f.itemDisplayName() != null) {
+            sb.append(" The most recently discussed item on it is \"").append(f.itemDisplayName()).append("\".");
+        }
+        sb.append(" If the customer refers back to \"it\", \"that item\", \"the [product]\", or similar without repeating the order "
+                + "number, use this order (and item, if noted) directly rather than asking again or calling getMyRecentOrders again - "
+                + "only ask again if what they say is genuinely ambiguous or seems to refer to something else.");
+        return sb.toString();
     }
 
     String buildActiveProcedureContext(ConversationSession session) {
@@ -245,7 +304,7 @@ public class SupportAgent {
 
     private String describeAction(RecentAction action) {
         return switch (action.type()) {
-            case ORDER_CANCELLED -> "Order " + action.target() + " was cancelled.";
+            case ORDER_CANCELLED -> "Order " + action.target() + " was cancelled. " + describeCancellationConsequence(action.status());
             case REFUND_INITIATED -> "A refund of " + formatAmount(action.amount()) + " (reference " + action.reference() + ") was initiated for order " + action.target() + ".";
             case REFUND_SUCCEEDED -> "Refund " + action.reference() + " for order " + action.target() + " succeeded.";
             case REFUND_FAILED -> "Refund " + action.reference() + " for order " + action.target() + " failed.";
@@ -255,6 +314,20 @@ public class SupportAgent {
             case CLAIM_RESOLVED -> "Claim " + action.reference() + " for order " + action.target() + " was resolved.";
             case ESCALATED -> "The conversation was escalated to human support, ticket " + action.reference() + ".";
         };
+    }
+
+    /** FIX: makes the payment consequence of a cancellation a stable, statable fact - this is what stops "will I get a refund?" from contradicting what was already correctly said. */
+    private String describeCancellationConsequence(String paymentConsequenceName) {
+        try {
+            return switch (PaymentConsequence.valueOf(paymentConsequenceName)) {
+                case NO_REFUND_REQUIRED -> "No payment had been collected, so no refund is needed.";
+                case VOID_AUTHORIZATION -> "The payment was only authorized and not captured, so no refund is needed - the authorization was simply voided.";
+                case REFUND_REQUIRED -> "A refund was initiated for the full amount.";
+                case MANUAL_REVIEW_REQUIRED -> "The payment needed manual review before any refund decision.";
+            };
+        } catch (IllegalArgumentException e) {
+            return "";
+        }
     }
 
     private String formatAmount(BigDecimal amount) {

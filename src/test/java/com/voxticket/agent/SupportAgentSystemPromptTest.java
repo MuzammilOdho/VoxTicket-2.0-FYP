@@ -14,6 +14,7 @@ import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureState;
+import com.voxticket.procedure.ProcedureStatus;
 import com.voxticket.procedure.ProcedureType;
 import com.voxticket.rag.RagService;
 import com.voxticket.service.CustomerOrderQueryService;
@@ -142,5 +143,76 @@ class SupportAgentSystemPromptTest {
         String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
 
         assertThat(prompt).contains("hypothetical").contains("do NOT call requestCancellation, requestReturn, or reportOrderProblem");
+    }
+    @Test
+    void focusOrderAndItemAreSurfacedForFollowUpReferenceResolution() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordFocusOrder("ORD-10001");
+        session.recordFocusItem("SKU-1", "Cotton Bedsheet Set");
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("ORD-10001").contains("Cotton Bedsheet Set");
+        assertThat(prompt).contains("without repeating the order number");
+        // The internal SKU is Java's own bookkeeping - it must never leak into the model's context.
+        assertThat(prompt).doesNotContain("SKU-1");
+    }
+
+    @Test
+    void blankResponseFallbackReferencesAPendingConfirmationRatherThanAGenericMessage() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        ProcedureState procedure = new ProcedureState(ProcedureType.RETURN, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
+        procedure.setPendingDescription("start a return for Cotton Bedsheet Set from order ORD-10001");
+        session.beginProcedure(procedure);
+
+        String fallback = agent.blankResponseFallback(session);
+
+        assertThat(fallback).contains("start a return for Cotton Bedsheet Set from order ORD-10001");
+    }
+
+    @Test
+    void blankResponseFallbackReferencesAPendingVerificationRatherThanAGenericMessage() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
+        procedure.setPendingDescription("cancel order ORD-10001");
+        procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
+        session.beginProcedure(procedure);
+
+        String fallback = agent.blankResponseFallback(session);
+
+        assertThat(fallback).contains("verification code");
+    }
+
+    @Test
+    void blankResponseFallbackIsGenericWithNoActiveProcedure() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+
+        assertThat(agent.blankResponseFallback(session)).isEqualTo("Sorry, could you say that again?");
+    }
+
+    @Test
+    void aVoidAuthorizationCancellationExplainsWhyNoRefundIsNeededAsAStableFact() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10003",
+                com.voxticket.policy.PaymentConsequence.VOID_AUTHORIZATION.name(), null, "ORD-10003", Instant.now()));
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("no refund is needed").contains("authorization was simply voided");
+    }
+
+    @Test
+    void promptInstructsCallingTheProcedureToolEarlyRatherThanGatheringDetailsInFreeTextFirst() {
+        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
+
+        assertThat(prompt).contains("call the matching tool right away");
+    }
+
+    @Test
+    void promptForbidsInventingProcessDetailsWhenPolicySearchIsSilent() {
+        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
+
+        assertThat(prompt).contains("do not invent specific mechanisms, timeframes, or promises");
+        assertThat(prompt).contains("awaiting approval");
     }
 }
