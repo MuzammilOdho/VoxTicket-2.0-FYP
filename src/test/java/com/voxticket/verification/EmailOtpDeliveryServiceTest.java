@@ -4,13 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.entity.enums.OtpDeliveryChannel;
 import com.voxticket.persistence.entity.enums.VerificationPurpose;
 import org.junit.jupiter.api.Test;
+import org.junit.platform.commons.logging.LoggerFactory;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.Logger;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+
+import java.util.List;
 
 /**
  * Production OTP delivery behavior: the code is emailed only to the
@@ -54,4 +60,6 @@ class EmailOtpDeliveryServiceTest {
     void channelIsEmail() {
         assertThat(service.channel()).isEqualTo(OtpDeliveryChannel.EMAIL);
     }
+    
+
 }

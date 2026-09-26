@@ -25,7 +25,7 @@ class TierChatClientRegistryTest {
 
     private static AiProvidersProperties allEnabledWithKeys() {
         return providers(
-                provider(true, "google-key", "https://generativelanguage.googleapis.com/v1beta/openai"),
+                provider(true, "google-key", null),
                 provider(true, "groq-key", "https://api.groq.com/openai/v1"),
                 provider(true, "cerebras-key", "https://api.cerebras.ai/v1"));
     }
@@ -43,7 +43,7 @@ class TierChatClientRegistryTest {
         var registry = new TierChatClientRegistry(
                 allEnabledWithKeys(),
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ChatOptionsFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
 
         assertThat(registry.resolutionFor(ModelTier.TIER_1))
                 .isEqualTo(new TierChatClientRegistry.TierResolution(AiProvider.GROQ, "openai/gpt-oss-20b"));
@@ -61,25 +61,25 @@ class TierChatClientRegistryTest {
         // the same registry code resolves the new provider from properties.
         var registry = new TierChatClientRegistry(
                 allEnabledWithKeys(),
-                tiers(tier(AiProvider.GOOGLE, "gemini-3.8-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ChatOptionsFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                tiers(tier(AiProvider.GOOGLE, "gemini-3.6-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
 
         assertThat(registry.resolutionFor(ModelTier.TIER_1).provider()).isEqualTo(AiProvider.GOOGLE);
-        assertThat(registry.resolutionFor(ModelTier.TIER_1).model()).isEqualTo("gemini-3.8-flash");
+        assertThat(registry.resolutionFor(ModelTier.TIER_1).model()).isEqualTo("gemini-3.6-flash");
         assertThat(registry.clientFor(ModelTier.TIER_1)).isNotNull();
     }
 
     @Test
     void disabledProviderReferencedByATierFailsClearly() {
         var providers = providers(
-                provider(true, "google-key", "https://generativelanguage.googleapis.com/v1beta/openai"),
+                provider(true, "google-key", null),
                 provider(false, "groq-key", "https://api.groq.com/openai/v1"),
                 provider(true, "cerebras-key", "https://api.cerebras.ai/v1"));
 
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ChatOptionsFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TIER_1")
                 .hasMessageContaining("GROQ")
@@ -89,14 +89,14 @@ class TierChatClientRegistryTest {
     @Test
     void missingApiKeyForATierProviderFailsClearlyNamingTheEnvVar() {
         var providers = providers(
-                provider(true, "google-key", "https://generativelanguage.googleapis.com/v1beta/openai"),
+                provider(true, "google-key", null),
                 provider(true, "", "https://api.groq.com/openai/v1"),
                 provider(true, "cerebras-key", "https://api.cerebras.ai/v1"));
 
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ChatOptionsFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TIER_1")
                 .hasMessageContaining("GROQ")
@@ -106,14 +106,14 @@ class TierChatClientRegistryTest {
     @Test
     void missingBaseUrlForATierProviderFailsClearly() {
         var providers = providers(
-                provider(true, "google-key", "https://generativelanguage.googleapis.com/v1beta/openai"),
+                provider(true, "google-key", null),
                 provider(true, "groq-key", "https://api.groq.com/openai/v1"),
                 provider(true, "cerebras-key", ""));
 
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ChatOptionsFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TIER_2")
                 .hasMessageContaining("CEREBRAS")
@@ -123,17 +123,49 @@ class TierChatClientRegistryTest {
     @Test
     void unreferencedProviderWithoutApiKeyDoesNotFail() {
         var providers = providers(
-                provider(true, "", "https://generativelanguage.googleapis.com/v1beta/openai"),
+                provider(true, "", null),
                 provider(true, "groq-key", "https://api.groq.com/openai/v1"),
                 provider(true, "cerebras-key", "https://api.cerebras.ai/v1"));
 
         var registry = new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ChatOptionsFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
 
         assertThat(registry.clientFor(ModelTier.TIER_1)).isNotNull();
         assertThat(registry.clientFor(ModelTier.TIER_2)).isNotNull();
+    }
+
+    @Test
+    void googleTierDoesNotRequireABaseUrl() {
+        // The native GenAI SDK in API-key mode has the endpoint built in.
+        var providers = providers(
+                provider(true, "google-key", null),
+                provider(true, "groq-key", "https://api.groq.com/openai/v1"),
+                provider(true, "cerebras-key", "https://api.cerebras.ai/v1"));
+
+        var registry = new TierChatClientRegistry(
+                providers,
+                tiers(tier(AiProvider.GOOGLE, "gemini-3.6-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+
+        assertThat(registry.resolutionFor(ModelTier.TIER_1).provider()).isEqualTo(AiProvider.GOOGLE);
+        assertThat(registry.clientFor(ModelTier.TIER_1)).isNotNull();
+    }
+
+    @Test
+    void googleTierWithUnsupportedModelIdFailsClearly() {
+        var registryProviders = providers(
+                provider(true, "google-key", null),
+                provider(true, "groq-key", "https://api.groq.com/openai/v1"),
+                provider(true, "cerebras-key", "https://api.cerebras.ai/v1"));
+
+        assertThatThrownBy(() -> new TierChatClientRegistry(
+                registryProviders,
+                tiers(tier(AiProvider.GOOGLE, "gemini-3.8-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("gemini-3.8-flash");
     }
 
     @Test

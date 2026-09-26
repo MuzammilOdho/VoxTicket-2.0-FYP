@@ -13,7 +13,15 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
-@TestPropertySource(properties = {"voxticket.otp.delivery=email", "spring.mail.host=localhost"})
+@TestPropertySource(properties = {
+        "voxticket.otp.delivery=email",
+        "spring.mail.host=localhost",
+        // No active profile on purpose: the context must still satisfy
+        // TierChatClientRegistry's fail-fast provider validation, so dummy
+        // keys are supplied here. No live provider call ever occurs.
+        "voxticket.ai.providers.google.api-key=test-google-key",
+        "voxticket.ai.providers.groq.api-key=test-groq-key",
+        "voxticket.ai.providers.cerebras.api-key=test-cerebras-key"})
 @SpringBootTest
 class AdminControllerProfileGatingTest {
 

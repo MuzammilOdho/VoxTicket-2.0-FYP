@@ -13,10 +13,10 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * {@code ChatClient} from exactly these values.
  *
  * <p>{@code reasoningEffort} is {@code none} (the default), {@code low},
- * {@code medium} or {@code high}. {@code none} keeps the long-standing
- * behavior of suppressing provider-emitted reasoning (spec: never expose
- * chain-of-thought); any other value is passed through as the OpenAI-style
- * {@code reasoning_effort} request parameter.
+ * {@code medium} or {@code high}. Its exact meaning is provider-specific -
+ * see {@link ProviderChatModelFactory} for the per-provider mapping. In all
+ * cases the long-standing spec behavior holds: provider-emitted reasoning is
+ * never exposed to the customer.
  */
 public record TierChatProperties(
         @DefaultValue("GROQ") AiProvider provider,

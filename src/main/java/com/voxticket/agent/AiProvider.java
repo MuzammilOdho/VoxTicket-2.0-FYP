@@ -1,16 +1,18 @@
 package com.voxticket.agent;
 
 /**
- * The chat-completion providers VoxTicket can talk to. Every provider here
- * exposes an OpenAI-compatible {@code /chat/completions} API, so a single
- * Spring AI {@code OpenAiChatModel} code path serves all of them - the only
- * per-provider differences are base URL and API key, and both come from
- * configuration, never from Java code.
+ * The chat-completion providers VoxTicket can talk to.
  *
- * <p>Base URLs (verified 2026-09-26):
+ * <p>GOOGLE is served by the native Spring AI Google GenAI integration
+ * ({@code GoogleGenAiChatModel} on the official GenAI SDK, API-key mode) -
+ * it needs no base URL. GROQ and CEREBRAS expose OpenAI-compatible
+ * {@code /chat/completions} APIs and share the {@code OpenAiChatModel} code
+ * path, differing only by base URL and API key. Both differences come from
+ * configuration, never from Java code - see {@link ProviderChatModelFactory},
+ * the one place provider-specific construction lives.
+ *
+ * <p>OpenAI-compatible base URLs (verified 2026-09-26):
  * <ul>
- *   <li>GOOGLE - Google's OpenAI-compatible Gemini endpoint
- *       ({@code https://generativelanguage.googleapis.com/v1beta/openai})</li>
  *   <li>GROQ - GroqCloud OpenAI-compatible endpoint
  *       ({@code https://api.groq.com/openai/v1})</li>
  *   <li>CEREBRAS - Cerebras OpenAI-compatible endpoint
@@ -35,5 +37,17 @@ public enum AiProvider {
     /** The {@code voxticket.ai.providers.*} config section for this provider. */
     public String configKey() {
         return name().toLowerCase();
+    }
+
+    /**
+     * Whether the provider needs a configured base URL. GOOGLE is served by
+     * the native Google GenAI SDK in API-key mode, which has the Gemini
+     * endpoint built in - no base URL is required (or used) for it.
+     */
+    public boolean requiresBaseUrl() {
+        return switch (this) {
+            case GOOGLE -> false;
+            case GROQ, CEREBRAS -> true;
+        };
     }
 }

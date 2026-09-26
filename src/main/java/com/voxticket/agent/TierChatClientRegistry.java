@@ -1,18 +1,12 @@
 package com.voxticket.agent;
 
-import com.openai.client.OpenAIClient;
-import com.openai.client.OpenAIClientAsync;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
-import java.time.Duration;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.setup.OpenAiSetup;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,22 +16,25 @@ import org.springframework.stereotype.Component;
  * ModelSelector          -> decides the TIER only (never the provider)
  * AiTiersProperties      -> tier configuration: provider + model + options
  * AiProvidersProperties  -> provider connection details (base URL, API key)
- * TierChatClientRegistry -> builds one configured ChatClient per tier (this class)
+ * ProviderChatModelFactory -> builds the provider-specific ChatModel
+ * TierChatClientRegistry -> one configured ChatClient per tier (this class)
  * </pre>
  *
- * <p>All three providers (GOOGLE, GROQ, CEREBRAS) expose an OpenAI-compatible
- * chat-completions API, so every tier is served by a Spring AI
- * {@code OpenAiChatModel} built on the official OpenAI Java client pointed at
- * the provider's base URL with the provider's API key. There is deliberately
- * no fallback, no retry routing, no replay and no failure classifier here -
- * a provider/model failure surfaces as an exception and the caller
- * (SupportAgent) answers with the existing safe generic failure response.
+ * <p>GOOGLE tiers are served by the native Spring AI Google GenAI integration
+ * ({@code GoogleGenAiChatModel} on the official GenAI SDK); GROQ and CEREBRAS
+ * tiers by Spring AI {@code OpenAiChatModel} pointed at their OpenAI-compatible
+ * endpoints. There is deliberately no fallback, no retry routing, no replay
+ * and no failure classifier here - a provider/model failure surfaces as an
+ * exception and the caller (SupportAgent) answers with the existing safe
+ * generic failure response.
  *
- * <p>Validation is fail-fast at startup: a tier whose provider is disabled,
- * has no API key, or has no base URL prevents the application from starting,
- * with a message that names the exact property and environment variable.
- * Providers no tier references are not validated, so an unconfigured Google
- * key is fine while no tier uses Google.
+ * <p>Validation is fail-fast at startup: a tier whose provider is disabled or
+ * has no API key prevents the application from starting, with a message that
+ * names the exact property and environment variable. A base URL is required
+ * only for providers that need one ({@link AiProvider#requiresBaseUrl()}) -
+ * GOOGLE in native API-key mode does not. Providers no tier references are
+ * not validated, so an unconfigured Google key is fine while no tier uses
+ * Google.
  */
 @Component
 public class TierChatClientRegistry {
@@ -54,7 +51,7 @@ public class TierChatClientRegistry {
     public TierChatClientRegistry(
             AiProvidersProperties providers,
             AiTiersProperties tiers,
-            ChatOptionsFactory chatOptionsFactory,
+            ProviderChatModelFactory chatModelFactory,
             ObservationRegistry observationRegistry,
             MeterRegistry meterRegistry) {
         for (ModelTier tier : ModelTier.values()) {
@@ -62,7 +59,9 @@ public class TierChatClientRegistry {
             AiProvider provider = tierProperties.provider();
             ProviderProperties providerProperties = requireUsableProvider(tier, provider, providers);
 
-            ChatClient chatClient = buildClient(providerProperties, tierProperties, chatOptionsFactory, observationRegistry, meterRegistry);
+            ChatClient chatClient = ChatClient.builder(
+                            chatModelFactory.chatModelFor(provider, providerProperties, tierProperties, observationRegistry, meterRegistry))
+                    .build();
             clients.put(tier, chatClient);
             resolutions.put(tier, new TierResolution(provider, tierProperties.model()));
             log.info("event=tier_chat_client_ready tier={} provider={} model={} timeoutSeconds={}",
@@ -100,63 +99,10 @@ public class TierChatClientRegistry {
                     + ", but no API key is configured ('" + section + ".api-key' is empty). Set the "
                     + provider.environmentVariable() + " environment variable.");
         }
-        if (properties.baseUrl() == null || properties.baseUrl().isBlank()) {
+        if (provider.requiresBaseUrl() && (properties.baseUrl() == null || properties.baseUrl().isBlank())) {
             throw new IllegalStateException("Model tier " + tier + " is configured with provider " + provider
                     + ", but '" + section + ".base-url' is empty.");
         }
         return properties;
-    }
-
-    private ChatClient buildClient(
-            ProviderProperties providerProperties,
-            TierChatProperties tierProperties,
-            ChatOptionsFactory chatOptionsFactory,
-            ObservationRegistry observationRegistry,
-            MeterRegistry meterRegistry) {
-        // The supported Spring AI 2.0.1 construction path (also used by the
-        // OpenAI auto-configuration): builds the official OpenAI Java clients
-        // with their HTTP layer, then the chat model on top of them.
-        // The model builder always needs the async client; the sync one is
-        // supplied alongside it for completeness.
-        OpenAIClient openAIClient = OpenAiSetup.setupSyncClient(
-                providerProperties.baseUrl(),
-                providerProperties.apiKey(),
-                null, // credential
-                null, // microsoftDeploymentName
-                null, // microsoftFoundryServiceVersion
-                null, // organizationId
-                false, // microsoftFoundry
-                false, // gitHubModels
-                null, // project
-                Duration.ofSeconds(tierProperties.timeoutSeconds()),
-                3, // maxRetries - matches the Spring AI auto-configuration default
-                null, // proxy
-                Map.of(), // customHeaders
-                observationRegistry,
-                meterRegistry,
-                List.of()); // httpClientBuilderCustomizers
-        OpenAIClientAsync openAIClientAsync = OpenAiSetup.setupAsyncClient(
-                providerProperties.baseUrl(),
-                providerProperties.apiKey(),
-                null, // credential
-                null, // microsoftDeploymentName
-                null, // microsoftFoundryServiceVersion
-                null, // organizationId
-                false, // microsoftFoundry
-                false, // gitHubModels
-                null, // project
-                Duration.ofSeconds(tierProperties.timeoutSeconds()),
-                3, // maxRetries - matches the Spring AI auto-configuration default
-                null, // proxy
-                Map.of(), // customHeaders
-                observationRegistry,
-                meterRegistry,
-                List.of()); // httpClientBuilderCustomizers
-        OpenAiChatModel chatModel = OpenAiChatModel.builder()
-                .openAiClient(openAIClient)
-                .openAiClientAsync(openAIClientAsync)
-                .options(chatOptionsFactory.forTier(tierProperties))
-                .build();
-        return ChatClient.builder(chatModel).build();
     }
 }

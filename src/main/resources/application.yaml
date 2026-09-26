@@ -17,18 +17,35 @@ spring:
 
   ai:
     model:
-      chat: openai
+      # "none" disables every unused Spring AI model auto-configuration
+      # (openai, google-genai, ollama chat/image/speech/...). The exact
+      # condition properties were verified against the Spring AI 2.0.1 JARs:
+      #   spring.ai.model.chat=openai|google-genai|ollama (matchIfMissing)
+      #   spring.ai.model.embedding=openai|google-genai-text|ollama
+      #   spring.ai.model.image=openai|google-genai
+      #   spring.ai.model.audio.speech=openai
+      #   spring.ai.model.audio.transcription=openai
+      #   spring.ai.model.moderation=openai
+      # Conversation chat clients are constructed manually per tier from
+      # voxticket.ai.providers / voxticket.ai.tiers via TierChatClientRegistry
+      # and ProviderChatModelFactory - no auto-configured ChatModel is used.
+      # Embedding stays on Ollama (bge-m3).
+      chat: none
       embedding: ollama
+      audio:
+        speech: none
+        transcription: none
+      image: none
+      moderation: none
 
-    openai:
-      # Backs only the opt-in ML prompt guard (voxticket.safety.prompt-guard.provider=ml).
-      # The conversation chat path no longer uses this - it is wired per-tier from
-      # voxticket.ai.providers / voxticket.ai.tiers below via TierChatClientRegistry.
-      # The key comes only from the environment; empty is tolerated at startup
-      # (verified against the exact Spring AI 2.0.1 / openai-java client path -
-      # clients are built lazily and keys are only exercised on real requests).
-      base-url: https://api.groq.com/openai/v1
-      api-key: ${GROQ_API_KEY:}
+    chat:
+      client:
+        # The global ChatClient.Builder auto-configuration is disabled:
+        # every conversation client is built manually per tier by
+        # TierChatClientRegistry, and nothing injects the auto-configured
+        # builder (verified by codebase search). The opt-in ML prompt guard
+        # also builds its own client from ProviderChatModelFactory.
+        enabled: false
 
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
@@ -64,8 +81,16 @@ voxticket:
     # one provider and one model - switching either is a config-only change, no
     # Java changes, no fallback or cross-provider routing.
     #
-    # Provider base URLs verified 2026-09-26 (all OpenAI-compatible chat completions):
-    #   google   -> https://generativelanguage.googleapis.com/v1beta/openai
+    # GOOGLE tiers use the native Spring AI Google GenAI integration
+    # (GoogleGenAiChatModel on the official GenAI SDK, API-key mode) - NOT an
+    # OpenAI-compatible endpoint. No base-url is required or used for Google.
+    # The Google model must be one of GoogleGenAiChatModel.ChatModel's enum
+    # values, e.g. gemini-2.5-flash, gemini-3.5-flash, gemini-3.6-flash,
+    # gemini-2.5-pro (verified against the Spring AI 2.0.1 JARs) - anything
+    # else fails fast at startup with the supported list.
+    #
+    # GROQ and CEREBRAS tiers use OpenAiChatModel against their
+    # OpenAI-compatible endpoints:
     #   groq     -> https://api.groq.com/openai/v1
     #   cerebras -> https://api.cerebras.ai/v1
     #
@@ -74,7 +99,6 @@ voxticket:
       google:
         enabled: true
         api-key: ${GEMINI_API_KEY:}
-        base-url: https://generativelanguage.googleapis.com/v1beta/openai
       groq:
         enabled: true
         api-key: ${GROQ_API_KEY:}
@@ -84,23 +108,24 @@ voxticket:
         api-key: ${CEREBRAS_API_KEY:}
         base-url: https://api.cerebras.ai/v1
 
-    # Model IDs verified 2026-09-26:
-    #   groq     openai/gpt-oss-20b  - production, tool calling, 131K context
-    #   cerebras gpt-oss-120b        - production, tool calling, no deprecation date
-    #   google   gemini-3.8-flash    - GA 2026-09-02, no shutdown announced
+    # reasoning-effort semantics are provider-specific (see ProviderChatModelFactory):
+    #   groq:     none -> omit reasoning_effort + include_reasoning=false (Groq-only field)
+    #             low|medium|high -> reasoning_effort=<value> + include_reasoning=false
+    #   cerebras: none -> omit reasoning_effort; low|medium|high -> reasoning_effort=<value>
+    #             (never include_reasoning)
+    #   google:   none -> default thinking, thoughts suppressed; low|medium|high ->
+    #             native thinking level, thoughts never returned
     tiers:
       tier1:
         provider: GOOGLE
-        model: gemini-3.8-flash
+        model: gemini-3.6-flash
         temperature: 0.3
         max-output-tokens: 1024
-        # none | low | medium | high. none preserves the standing behavior of never
-        # exposing chain-of-thought; anything else is sent as reasoning_effort.
         reasoning-effort: none
         timeout-seconds: 20
       tier2:
         provider: GROQ
-        model: gpt-oss-120b
+        model: openai/gpt-oss-20b
         temperature: 0.3
         max-output-tokens: 1536
         reasoning-effort: high

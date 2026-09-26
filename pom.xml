@@ -52,10 +52,7 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
-
-        <!-- AI: OpenAI-compatible client, pointed at Groq (spec §54). Model IDs
-             stay configuration-driven per the resolved architecture decision -
-             see application.yml voxticket.ai.tier1-model/tier2-model. -->
+        
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
@@ -117,6 +114,12 @@
             <artifactId>spring-boot-configuration-processor</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-google-genai</artifactId>
+        </dependency>
+
 
     </dependencies>
 
