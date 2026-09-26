@@ -2,7 +2,6 @@ package com.voxticket.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
@@ -23,19 +22,16 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.client.ChatClient;
 
 class SupportAgentSystemPromptTest {
 
     private final SupportAgent agent = newAgent();
 
     private SupportAgent newAgent() {
-        ChatClient.Builder builder = mock(ChatClient.Builder.class);
-        when(builder.build()).thenReturn(mock(ChatClient.class));
         return new SupportAgent(
-                builder, mock(ContextBuilder.class), mock(ModelSelector.class),
+                mock(TierChatClientRegistry.class), mock(ContextBuilder.class), mock(ModelSelector.class),
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
-                mock(ProcedureCoordinator.class), mock(ChatOptionsFactory.class), mock(TurnMetrics.class), mock(ConversationAuditService.class));
+                mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class));
     }
 
     private VerifiedOrderRef dummyRef(String orderNumber) {
@@ -144,6 +140,7 @@ class SupportAgentSystemPromptTest {
 
         assertThat(prompt).contains("hypothetical").contains("do NOT call requestCancellation, requestReturn, or reportOrderProblem");
     }
+
     @Test
     void focusOrderAndItemAreSurfacedForFollowUpReferenceResolution() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
@@ -227,5 +224,4 @@ class SupportAgentSystemPromptTest {
         assertThat(prompt).doesNotContain("specific\nmechanisms");
         assertThat(prompt).doesNotContain("the\nmatching");
     }
-
 }

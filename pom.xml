@@ -109,6 +109,15 @@
             <artifactId>testcontainers-postgresql</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Generates spring-configuration-metadata.json for voxticket.*
+     @ConfigurationProperties (IDE completion / validation). Optional:
+     not needed at runtime and not shipped transitively. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
     </dependencies>
 
     <dependencyManagement>

@@ -15,15 +15,6 @@ public class TurnMetrics {
         this.registry = registry;
     }
 
-    /**
-     * CORRECTION from last round: minimumExpectedValue/maximumExpectedValue only affect
-     * publishPercentileHistogram() bucket generation for external aggregation systems - they do
-     * NOT affect the client-side .percentile() value this app reads directly. Verified against
-     * Micrometer issue #3298: a Timer's client-side percentile estimate decays to 0.0 after its
-     * distribution-statistic window expires, while count()/max() persist far longer - exactly the
-     * observed symptom (0 despite non-zero turns). distributionStatisticExpiry is the real,
-     * documented knob for that window.
-     */
     public void recordTurn(Duration duration, String channel, String outcome) {
         Timer.builder("voxticket.turn.duration")
                 .tag("channel", channel)
@@ -34,16 +25,22 @@ public class TurnMetrics {
                 .record(duration);
     }
 
-    public void recordModelSelection(String tier, String model, String reason) {
-        Counter.builder("voxticket.model.selection").tag("tier", tier).tag("model", model).tag("reason", reason).register(registry).increment();
+    public void recordModelSelection(String tier, String provider, String model, String reason) {
+        Counter.builder("voxticket.model.selection")
+                .tag("tier", tier).tag("provider", provider).tag("model", model).tag("reason", reason)
+                .register(registry).increment();
     }
 
-    public void recordLlmCall(Duration duration, String tier, String model, String outcome) {
-        Timer.builder("voxticket.llm.call.duration").tag("tier", tier).tag("model", model).tag("outcome", outcome).register(registry).record(duration);
+    public void recordLlmCall(Duration duration, String tier, String provider, String model, String outcome) {
+        Timer.builder("voxticket.llm.call.duration")
+                .tag("tier", tier).tag("provider", provider).tag("model", model).tag("outcome", outcome)
+                .register(registry).record(duration);
     }
 
-    public void recordTokenUsage(String model, String tokenType, long count) {
-        Counter.builder("voxticket.llm.tokens").tag("model", model).tag("type", tokenType).register(registry).increment(count);
+    public void recordTokenUsage(String provider, String model, String tokenType, long count) {
+        Counter.builder("voxticket.llm.tokens")
+                .tag("provider", provider).tag("model", model).tag("type", tokenType)
+                .register(registry).increment(count);
     }
 
     public void recordToolCall(Duration duration, String tool, String result) {

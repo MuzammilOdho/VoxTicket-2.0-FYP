@@ -61,16 +61,7 @@ class AdminDashboardServiceTest {
         assertThat(summary.procedureSuccessCount()).isGreaterThanOrEqualTo(1);
         assertThat(summary.procedureFailureCount()).isGreaterThanOrEqualTo(1);
     }
-
-    @Test
-    void summaryReflectsModelTierUsage() {
-        turnMetrics.recordModelSelection("TIER_1", "openai/gpt-oss-20b", "default");
-
-        var summary = dashboardService.getSummary();
-
-        assertThat(summary.modelTierUsage()).containsKey("TIER_1");
-        assertThat(summary.modelTierUsage().get("TIER_1")).isGreaterThanOrEqualTo(1L);
-    }
+    
 
     @Test
     void summaryComputesTurnLatencyPercentilesAfterEnoughSamples() {
@@ -168,4 +159,43 @@ class AdminDashboardServiceTest {
         // NOT_ELIGIBLE must still count as a real failure - only the three clarification codes are excluded.
         assertThat(summary.procedureFailureCount()).isGreaterThanOrEqualTo(1);
     }
+
+    @Test
+    void summaryReflectsProviderModelAndReasonUsage() {
+        turnMetrics.recordModelSelection("TIER_2", "CEREBRAS", "gpt-oss-120b", "test-reason-alpha");
+
+        var summary = dashboardService.getSummary();
+
+        assertThat(summary.modelProviderUsage()).containsKey("CEREBRAS");
+        assertThat(summary.modelProviderUsage().get("CEREBRAS")).isGreaterThanOrEqualTo(1L);
+        assertThat(summary.modelUsage()).containsKey("gpt-oss-120b");
+        assertThat(summary.modelUsage().get("gpt-oss-120b")).isGreaterThanOrEqualTo(1L);
+        assertThat(summary.modelSelectionReasons()).containsKey("test-reason-alpha");
+        assertThat(summary.modelSelectionReasons().get("test-reason-alpha")).isGreaterThanOrEqualTo(1L);
+    }
+
+    @Test
+    void llmCallMetricsTrackCallsLatencyAndErrorsPerTier() {
+        turnMetrics.recordLlmCall(Duration.ofMillis(150), "TIER_1", "GROQ", "openai/gpt-oss-20b", "success");
+        turnMetrics.recordLlmCall(Duration.ofMillis(250), "TIER_1", "GROQ", "openai/gpt-oss-20b", "error");
+
+        var summary = dashboardService.getSummary();
+
+        assertThat(summary.llmCallMetrics()).containsKey("TIER_1");
+        var metric = summary.llmCallMetrics().get("TIER_1");
+        assertThat(metric.callCount()).isGreaterThanOrEqualTo(2L);
+        assertThat(metric.errorCount()).isGreaterThanOrEqualTo(1L);
+        assertThat(metric.meanLatencyMs()).isGreaterThan(0.0);
+    }
+
+    @Test
+    void tokenUsageByProviderIsTracked() {
+        turnMetrics.recordTokenUsage("CEREBRAS", "gpt-oss-120b", "prompt", 17L);
+
+        var summary = dashboardService.getSummary();
+
+        assertThat(summary.tokenUsageByProvider()).containsKey("CEREBRAS");
+        assertThat(summary.tokenUsageByProvider().get("CEREBRAS")).isGreaterThanOrEqualTo(17L);
+    }
+
 }

@@ -3,7 +3,6 @@ package com.voxticket.config;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.voxticket.agent.ModelSelectorProperties;
-import com.voxticket.agent.ModelTierProperties;
 import com.voxticket.rag.RagProperties;
 import com.voxticket.safety.PromptGuardProperties;
 import org.junit.jupiter.api.Test;
@@ -39,22 +38,13 @@ class AiPropertiesBindingTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("pgvector/pgvector:pg16");
 
     @Autowired
-    private ModelTierProperties modelTierProperties;
-    @Autowired
     private ModelSelectorProperties modelSelectorProperties;
     @Autowired
     private RagProperties ragProperties;
     @Autowired
     private PromptGuardProperties promptGuardProperties;
 
-    @Test
-    void modelTierPropertiesAreOverriddenPurelyThroughConfiguration() {
-        assertThat(modelTierProperties.tier1Model()).isEqualTo("test/tier1-override");
-        assertThat(modelTierProperties.tier2Model()).isEqualTo("test/tier2-override");
-        assertThat(modelTierProperties.temperature()).isEqualTo(0.9);
-        assertThat(modelTierProperties.suppressReasoning()).isFalse();
-    }
-
+    
     @Test
     void modelSelectorThresholdsAreOverriddenPurelyThroughConfiguration() {
         assertThat(modelSelectorProperties.longMessageThreshold()).isEqualTo(50);

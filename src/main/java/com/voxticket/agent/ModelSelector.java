@@ -7,10 +7,13 @@ import org.springframework.stereotype.Component;
 
 /**
  * Spec §53/§54. A small number of deterministic, understandable complexity
- * signals - not another model call, and not one-model-per-intent. Model
- * names and routing thresholds are both externalized (ModelTierProperties,
- * ModelSelectorProperties) - this class contains no configuration values
- * of its own.
+ * signals - not another model call, and not one-model-per-intent.
+ *
+ * <p>Phase 1: this class decides ONLY the tier, never the provider. Which
+ * provider and model serve a tier is pure configuration
+ * ({@link AiTiersProperties} + {@link TierChatClientRegistry}) - the
+ * selection result carries the tier and the routing reason, and nothing
+ * provider- or model-specific.
  */
 @Component
 public class ModelSelector {
@@ -18,11 +21,9 @@ public class ModelSelector {
     private static final Pattern ORDER_REFERENCE = Pattern.compile("\\bORD-\\w+\\b", Pattern.CASE_INSENSITIVE);
     private static final List<String> CONDITIONAL_MARKERS = List.of(" unless ", " if ", " but only if", " otherwise ");
 
-    private final ModelTierProperties modelTierProperties;
     private final ModelSelectorProperties selectorProperties;
 
-    public ModelSelector(ModelTierProperties modelTierProperties, ModelSelectorProperties selectorProperties) {
-        this.modelTierProperties = modelTierProperties;
+    public ModelSelector(ModelSelectorProperties selectorProperties) {
         this.selectorProperties = selectorProperties;
     }
 
@@ -39,10 +40,6 @@ public class ModelSelector {
             return new ModelSelectionResult(ModelTier.TIER_2, "conditional_language");
         }
         return new ModelSelectionResult(ModelTier.TIER_1, "default");
-    }
-
-    public String modelFor(ModelTier tier) {
-        return tier == ModelTier.TIER_2 ? modelTierProperties.tier2Model() : modelTierProperties.tier1Model();
     }
 
     private long countDistinctOrderReferences(String text) {

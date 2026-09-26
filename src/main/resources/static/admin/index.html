@@ -11,6 +11,7 @@
         .card { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
         .card .value { font-size: 26px; font-weight: 600; }
         .card .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+        .note { font-size: 12px; color: #666; margin: 0 0 12px 0; }
         table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
         th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
         th { background: #fafafa; color: #666; font-weight: 500; }
@@ -38,12 +39,38 @@
 
     <section>
         <h2>Model tier usage</h2>
+        <p class="note">Live in-memory aggregates - reset on restart. Per-turn tier/provider/model/reason detail is persisted in the audit log (see the conversation inspector below).</p>
         <table id="tierTable"><thead><tr><th>Tier</th><th>Calls</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Provider routing</h2>
+        <table id="providerTable"><thead><tr><th>Provider</th><th>Selections</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Model usage</h2>
+        <table id="modelTable"><thead><tr><th>Model</th><th>Selections</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Routing reasons</h2>
+        <table id="reasonTable"><thead><tr><th>Reason</th><th>Selections</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>LLM calls</h2>
+        <table id="llmTable"><thead><tr><th>Tier</th><th>Calls</th><th>Mean latency (ms)</th><th>Errors</th></tr></thead><tbody></tbody></table>
     </section>
 
     <section>
         <h2>Token usage</h2>
         <table id="tokenTable"><thead><tr><th>Type</th><th>Tokens</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section>
+        <h2>Token usage by provider</h2>
+        <table id="tokenProviderTable"><thead><tr><th>Provider</th><th>Tokens</th></tr></thead><tbody></tbody></table>
     </section>
 
     <section>
@@ -95,6 +122,14 @@
         fillTable('tierTable', Object.entries(summary.modelTierUsage), (tier, count) => [tier, count]);
         fillTable('tokenTable', Object.entries(summary.tokenUsage), (type, count) => [type, count]);
         fillTable('toolTable', Object.entries(summary.toolMetrics), (tool, m) => [tool, m.callCount, m.meanDurationMs.toFixed(1)]);
+        fillTable('tierTable', Object.entries(summary.modelTierUsage), (tier, count) => [tier, count]);
+        fillTable('providerTable', Object.entries(summary.modelProviderUsage), (provider, count) => [provider, count]);
+        fillTable('modelTable', Object.entries(summary.modelUsage), (model, count) => [model, count]);
+        fillTable('reasonTable', Object.entries(summary.modelSelectionReasons), (reason, count) => [reason, count]);
+        fillTable('llmTable', Object.entries(summary.llmCallMetrics),
+            (tier, m) => [tier, m.callCount, m.meanLatencyMs.toFixed(1), m.errorCount]);
+        fillTable('tokenTable', Object.entries(summary.tokenUsage), (type, count) => [type, count]);
+        fillTable('tokenProviderTable', Object.entries(summary.tokenUsageByProvider), (provider, count) => [provider, count]);
 
         const ragBody = document.querySelector('#ragTable tbody');
         ragBody.innerHTML = `<tr><td>${summary.ragMetric.searchCount}</td><td>${summary.ragMetric.meanDurationMs.toFixed(1)}</td><td>${summary.ragMetric.meanRetrievedCount.toFixed(1)}</td></tr>`;

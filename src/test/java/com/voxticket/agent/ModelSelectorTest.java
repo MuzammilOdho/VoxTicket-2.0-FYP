@@ -6,11 +6,11 @@ import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 class ModelSelectorTest {
 
-    private final ModelSelector modelSelector = new ModelSelector(
-            new ModelTierProperties("openai/gpt-oss-20b", "openai/gpt-oss-120b", 0.3, true),
-            new ModelSelectorProperties(300, 2));
+    private final ModelSelector modelSelector = new ModelSelector(new ModelSelectorProperties(300, 2));
 
     @Test
     void shortSimpleMessageStaysOnTierOneWithDefaultReason() {
@@ -47,28 +47,29 @@ class ModelSelectorTest {
     }
 
     @Test
-    void modelForReturnsTheConfiguredModelNames() {
-        assertThat(modelSelector.modelFor(ModelTier.TIER_1)).isEqualTo("openai/gpt-oss-20b");
-        assertThat(modelSelector.modelFor(ModelTier.TIER_2)).isEqualTo("openai/gpt-oss-120b");
+    void selectionResultCarriesOnlyTierAndRoutingReason() {
+        var result = modelSelector.select(ConversationSession.newSession("s1", Channel.CHAT), "Where is my order?");
+
+        assertThat(result).isInstanceOf(ModelSelectionResult.class);
+        assertThat(ModelSelectionResult.class.getRecordComponents())
+                .extracting(c -> c.getName())
+                .containsExactly("tier", "reason");
     }
 
     @Test
-    void differentConfiguredModelNamesAreUsedWithoutAnyCodeChange() {
-        ModelSelector customSelector = new ModelSelector(
-                new ModelTierProperties("custom/tier1", "custom/tier2", 0.5, false), new ModelSelectorProperties(300, 2));
-
-        assertThat(customSelector.modelFor(ModelTier.TIER_1)).isEqualTo("custom/tier1");
-        assertThat(customSelector.modelFor(ModelTier.TIER_2)).isEqualTo("custom/tier2");
+    void selectorExposesNoProviderOrModelLookup() {
+        assertThat(Arrays.stream(ModelSelector.class.getMethods()).map(m -> m.getName()))
+                .doesNotContain("modelFor", "providerFor", "model", "provider");
     }
 
     @Test
-    void selectorThresholdsAreConfigurableIndependentlyOfModelNames() {
-        ModelSelector tightSelector = new ModelSelector(
-                new ModelTierProperties("openai/gpt-oss-20b", "openai/gpt-oss-120b", 0.3, true), new ModelSelectorProperties(10, 2));
+    void selectorThresholdsAreConfigurableIndependentlyOfTiers() {
+        ModelSelector tightSelector = new ModelSelector(new ModelSelectorProperties(10, 2));
 
         var result = tightSelector.select(ConversationSession.newSession("s1", Channel.CHAT), "This message is definitely over ten characters.");
 
         assertThat(result.tier()).isEqualTo(ModelTier.TIER_2);
         assertThat(result.reason()).isEqualTo("long_message");
     }
+    
 }

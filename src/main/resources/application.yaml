@@ -21,8 +21,14 @@ spring:
       embedding: ollama
 
     openai:
+      # Backs only the opt-in ML prompt guard (voxticket.safety.prompt-guard.provider=ml).
+      # The conversation chat path no longer uses this - it is wired per-tier from
+      # voxticket.ai.providers / voxticket.ai.tiers below via TierChatClientRegistry.
+      # The key comes only from the environment; empty is tolerated at startup
+      # (verified against the exact Spring AI 2.0.1 / openai-java client path -
+      # clients are built lazily and keys are only exercised on real requests).
       base-url: https://api.groq.com/openai/v1
-      api-key: ${GROQ_API_KEY:test-key-placeholder}
+      api-key: ${GROQ_API_KEY:}
 
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
@@ -54,10 +60,52 @@ voxticket:
     returns:
       window-days: 30
   ai:
-    tier1-model: qwen/qwen3.8-27b
-    tier2-model: openai/gpt-oss-120b
-    temperature: 0.3
-    suppress-reasoning: true
+    # Phase 1 provider/model configuration. Each tier independently names exactly
+    # one provider and one model - switching either is a config-only change, no
+    # Java changes, no fallback or cross-provider routing.
+    #
+    # Provider base URLs verified 2026-09-26 (all OpenAI-compatible chat completions):
+    #   google   -> https://generativelanguage.googleapis.com/v1beta/openai
+    #   groq     -> https://api.groq.com/openai/v1
+    #   cerebras -> https://api.cerebras.ai/v1
+    #
+    # API keys come ONLY from environment variables, never from config files.
+    providers:
+      google:
+        enabled: true
+        api-key: ${GEMINI_API_KEY:}
+        base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      groq:
+        enabled: true
+        api-key: ${GROQ_API_KEY:}
+        base-url: https://api.groq.com/openai/v1
+      cerebras:
+        enabled: true
+        api-key: ${CEREBRAS_API_KEY:}
+        base-url: https://api.cerebras.ai/v1
+
+    # Model IDs verified 2026-09-26:
+    #   groq     openai/gpt-oss-20b  - production, tool calling, 131K context
+    #   cerebras gpt-oss-120b        - production, tool calling, no deprecation date
+    #   google   gemini-3.8-flash    - GA 2026-09-02, no shutdown announced
+    tiers:
+      tier1:
+        provider: GOOGLE
+        model: gemini-3.8-flash
+        temperature: 0.3
+        max-output-tokens: 1024
+        # none | low | medium | high. none preserves the standing behavior of never
+        # exposing chain-of-thought; anything else is sent as reasoning_effort.
+        reasoning-effort: none
+        timeout-seconds: 20
+      tier2:
+        provider: GROQ
+        model: gpt-oss-120b
+        temperature: 0.3
+        max-output-tokens: 1536
+        reasoning-effort: high
+        timeout-seconds: 20
+
     selector:
       long-message-threshold: 300
       min-order-references-for-tier2: 2

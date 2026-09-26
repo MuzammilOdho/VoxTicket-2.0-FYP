@@ -1,0 +1,12 @@
+# Test profile only. Dummy provider keys satisfy the TierChatClientRegistry
+# startup validation so @SpringBootTest contexts can boot without real
+# credentials. No test ever makes a live provider call.
+voxticket:
+  ai:
+    providers:
+      google:
+        api-key: test-google-key
+      groq:
+        api-key: test-groq-key
+      cerebras:
+        api-key: test-cerebras-key

@@ -19,16 +19,7 @@ class TurnMetricsTest {
         assertThat(timer).isNotNull();
         assertThat(timer.count()).isEqualTo(1);
     }
-
-    @Test
-    void recordModelSelectionRegistersACounterWithReason() {
-        metrics.recordModelSelection("TIER_1", "openai/gpt-oss-20b", "default");
-
-        var counter = registry.find("voxticket.model.selection").tag("tier", "TIER_1").tag("reason", "default").counter();
-        assertThat(counter).isNotNull();
-        assertThat(counter.count()).isEqualTo(1.0);
-    }
-
+    
     @Test
     void recordProcedureOutcomeRegistersACounterTaggedBySuccess() {
         metrics.recordProcedureOutcome("CANCELLATION", "CANCELLED", true);
@@ -56,4 +47,38 @@ class TurnMetricsTest {
         assertThat(timer).isNotNull();
         assertThat(timer.percentile(0.5, java.util.concurrent.TimeUnit.MILLISECONDS)).isGreaterThan(0.0);
     }
+
+    @Test
+    void recordModelSelectionRegistersACounterWithTierProviderModelAndReason() {
+        metrics.recordModelSelection("TIER_1", "GROQ", "openai/gpt-oss-20b", "default");
+
+        var counter = registry.find("voxticket.model.selection")
+                .tag("tier", "TIER_1").tag("provider", "GROQ").tag("model", "openai/gpt-oss-20b").tag("reason", "default")
+                .counter();
+        assertThat(counter).isNotNull();
+        assertThat(counter.count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void recordLlmCallRegistersATimerTaggedWithTierProviderModelAndOutcome() {
+        metrics.recordLlmCall(Duration.ofMillis(120), "TIER_2", "CEREBRAS", "gpt-oss-120b", "success");
+
+        var timer = registry.find("voxticket.llm.call.duration")
+                .tag("tier", "TIER_2").tag("provider", "CEREBRAS").tag("model", "gpt-oss-120b").tag("outcome", "success")
+                .timer();
+        assertThat(timer).isNotNull();
+        assertThat(timer.count()).isEqualTo(1L);
+    }
+
+    @Test
+    void recordTokenUsageRegistersACounterTaggedWithProviderModelAndType() {
+        metrics.recordTokenUsage("GROQ", "openai/gpt-oss-20b", "prompt", 42L);
+
+        var counter = registry.find("voxticket.llm.tokens")
+                .tag("provider", "GROQ").tag("model", "openai/gpt-oss-20b").tag("type", "prompt")
+                .counter();
+        assertThat(counter).isNotNull();
+        assertThat(counter.count()).isEqualTo(42.0);
+    }
+
 }

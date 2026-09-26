@@ -66,15 +66,19 @@ public class AdminDashboardService {
         long activeSessions = sessionRepository.countByLastActivityAtAfter(activeCutoff);
 
         long procedureSuccess = sumCountersWhereTag("voxticket.procedure.outcome", "success", "true");
-        // FIX (proposal #8): ITEM_REQUIRED/REASON_REQUIRED/PROBLEM_REQUIRED are normal
-        // clarification requests, not failures - a completely healthy multi-turn return
-        // otherwise inflates this count as if something broke.
+
+        Map<String, Long> modelTierUsage = sumCountersByTag("voxticket.model.selection", "tier");
+        Map<String, Long> modelProviderUsage = sumCountersByTag("voxticket.model.selection", "provider");
+        Map<String, Long> modelUsage = sumCountersByTag("voxticket.model.selection", "model");
+        Map<String, Long> modelSelectionReasons = sumCountersByTag("voxticket.model.selection", "reason");
+        Map<String, Long> tokenUsage = sumCountersByTag("voxticket.llm.tokens", "type");
+        Map<String, Long> tokenUsageByProvider = sumCountersByTag("voxticket.llm.tokens", "provider");
+        Map<String, AdminDashboardSummary.LlmCallMetric> llmCallMetrics = computeLlmCallMetrics();
+
+
         long procedureFailure = sumCountersWhereTagExcludingCodes("voxticket.procedure.outcome", "success", "false", CLARIFICATION_CODES);
         long procedureClarification = sumCountersWhereCodeIn("voxticket.procedure.outcome", CLARIFICATION_CODES);
         long escalationCount = sumCountersWhereTagPair("voxticket.procedure.outcome", "type", "ESCALATION", "success", "true");
-
-        Map<String, Long> modelTierUsage = sumCountersByTag("voxticket.model.selection", "tier");
-        Map<String, Long> tokenUsage = sumCountersByTag("voxticket.llm.tokens", "type");
 
         Timer normalTurnTimer = findTimer("voxticket.turn.duration", Map.of("channel", "CHAT", "outcome", "normal"));
         Double p50 = extractReliablePercentile(normalTurnTimer, 0.5);
@@ -91,11 +95,13 @@ public class AdminDashboardService {
 
         return new AdminDashboardSummary(
                 totalConversations, activeSessions, procedureSuccess, procedureFailure, procedureClarification, escalationCount,
-                modelTierUsage, tokenUsage, p50, p95, totalTurns, toolMetrics,
+                modelTierUsage, modelProviderUsage, modelUsage, modelSelectionReasons,
+                tokenUsage, tokenUsageByProvider, llmCallMetrics,
+                p50, p95, totalTurns, toolMetrics,
                 new AdminDashboardSummary.RagMetric(ragCount, ragMeanMs, ragMeanRetrieved));
     }
 
-    private long sumCountersWhereTagExcludingCodes(String meterName, String tagKey, String tagValue, Set<String> excludedCodes) {
+        private long sumCountersWhereTagExcludingCodes(String meterName, String tagKey, String tagValue, Set<String> excludedCodes) {
         return (long) meterRegistry.find(meterName).meters().stream()
                 .filter(meter -> tagValue.equals(meter.getId().getTag(tagKey)))
                 .filter(meter -> !excludedCodes.contains(meter.getId().getTag("code")))
@@ -233,6 +239,47 @@ public class AdminDashboardService {
 
         return result;
     }
+
+    /**
+     * Phase 1 provider/model visibility. Aggregates the voxticket.llm.call.duration
+     * timers by tier - calls, mean latency, and error outcomes. Pure read of
+     * existing metric tags; no routing logic lives here.
+     */
+    private Map<String, AdminDashboardSummary.LlmCallMetric> computeLlmCallMetrics() {
+        Map<String, long[]> counts = new LinkedHashMap<>();
+        Map<String, double[]> totalMs = new LinkedHashMap<>();
+        Map<String, long[]> errors = new LinkedHashMap<>();
+
+        for (Meter meter : meterRegistry.find("voxticket.llm.call.duration").meters()) {
+            if (meter instanceof Timer timer) {
+                String tier = meter.getId().getTag("tier");
+                if (tier == null) {
+                    continue;
+                }
+                long count = timer.count();
+                counts.computeIfAbsent(tier, key -> new long[1])[0] += count;
+                totalMs.computeIfAbsent(tier, key -> new double[1])[0] += timer.totalTime(TimeUnit.MILLISECONDS);
+                if ("error".equals(meter.getId().getTag("outcome"))) {
+                    errors.computeIfAbsent(tier, key -> new long[1])[0] += count;
+                }
+            }
+        }
+
+        Map<String, AdminDashboardSummary.LlmCallMetric> result = new LinkedHashMap<>();
+        for (String tier : counts.keySet()) {
+            long count = counts.get(tier)[0];
+            double sumMs = totalMs.get(tier)[0];
+            long errorCount = errors.containsKey(tier) ? errors.get(tier)[0] : 0;
+            result.put(
+                    tier,
+                    new AdminDashboardSummary.LlmCallMetric(
+                            count,
+                            count == 0 ? 0.0 : sumMs / count,
+                            errorCount));
+        }
+        return result;
+    }
+
 
     private ConversationSummaryView toSummaryView(
             ConversationSessionRecord record) {
