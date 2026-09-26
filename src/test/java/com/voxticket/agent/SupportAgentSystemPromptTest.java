@@ -215,4 +215,17 @@ class SupportAgentSystemPromptTest {
         assertThat(prompt).contains("do not invent specific mechanisms, timeframes, or promises");
         assertThat(prompt).contains("awaiting approval");
     }
+
+    @Test
+    void keyGuardrailPhrasesAreContiguousAcrossSourceLineBoundaries() {
+        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
+
+        // Regression test for the missing-space defect: these phrases must survive
+        // Java text-block line boundaries as single contiguous strings.
+        assertThat(prompt).contains("do not invent specific mechanisms, timeframes, or promises");
+        assertThat(prompt).contains("call the matching tool right away");
+        assertThat(prompt).doesNotContain("specific\nmechanisms");
+        assertThat(prompt).doesNotContain("the\nmatching");
+    }
+
 }

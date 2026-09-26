@@ -238,4 +238,50 @@ class ConversationRuntimeTest {
 
         verify(auditService, never()).recordEvent(any(), any(), eq(ConversationEventType.SUSPECTED_FABRICATION), any());
     }
+
+    @Test
+    void awaitingVerificationTurnSetsRequiresVerificationAndNotRequiresConfirmation() {
+        String sessionId = "s20";
+        seedAwaitingVerification(sessionId);
+
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "still thinking", null, Instant.now(), Map.of()));
+
+        assertThat(response.requiresVerification()).isTrue();
+        assertThat(response.requiresConfirmation()).isFalse();
+    }
+
+    @Test
+    void awaitingConfirmationTurnSetsRequiresConfirmationAndNotRequiresVerification() {
+        String sessionId = "s21";
+        seedAwaitingConfirmation(sessionId);
+
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "hmm, let me think", null, Instant.now(), Map.of()));
+
+        assertThat(response.requiresConfirmation()).isTrue();
+        assertThat(response.requiresVerification()).isFalse();
+    }
+
+    @Test
+    void noActiveProcedureLeavesBothRequirementFlagsFalse() {
+        AssistantTurn response = runtime.processTurn(new UserTurn("s22", Channel.CHAT, "hello", null, Instant.now(), Map.of()));
+
+        assertThat(response.requiresVerification()).isFalse();
+        assertThat(response.requiresConfirmation()).isFalse();
+    }
+
+    @Test
+    void executedProcedureClearsBothRequirementFlags() {
+        String sessionId = "s23";
+        seedAwaitingVerification(sessionId);
+        sessionStore.withSession(sessionId, Channel.CHAT, session -> {
+            session.getActiveProcedure().ifPresent(p -> p.setStatus(ProcedureStatus.EXECUTED));
+            return null;
+        });
+
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "thanks", null, Instant.now(), Map.of()));
+
+        assertThat(response.requiresVerification()).isFalse();
+        assertThat(response.requiresConfirmation()).isFalse();
+    }
+
 }

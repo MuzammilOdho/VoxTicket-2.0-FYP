@@ -8,8 +8,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface OrderRepository extends JpaRepository<Order, UUID> {
-    Optional<Order> findByOrderNumber(String orderNumber);
-
     /** The IDOR-safe lookup (spec §10): ownership is enforced in the SQL WHERE clause, not by filtering in Java afterward. */
     Optional<Order> findByOrderNumberAndCustomerId(String orderNumber, UUID customerId);
 

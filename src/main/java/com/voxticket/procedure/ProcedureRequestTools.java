@@ -15,14 +15,16 @@ public class ProcedureRequestTools {
     }
 
     @Tool(description = "Begin a cancellation request for one of the customer's own orders. This starts a guarded process - "
-            + "it does NOT cancel the order by itself. The customer must still explicitly confirm afterward.")
+            + "it does NOT cancel the order by itself. After the customer reads back the verification code that is sent, "
+            + "the cancellation executes immediately - there is no separate yes/no confirmation step for cancellation.")
     public Object requestCancellation(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
         session.markToolInvoked();
         return procedureCoordinator.startCancellation(session, orderReference);
     }
 
     @Tool(description = "Begin a return request for a specific item on one of the customer's own orders. This starts a guarded process - "
-            + "it does NOT create the return by itself. The customer must still explicitly confirm afterward.")
+            + "it does NOT create the return by itself. After the customer reads back the verification code that is sent, "
+            + "the return executes immediately - there is no separate yes/no confirmation step for a return.")
     public Object requestReturn(
             @ToolParam(description = "Order number, e.g. ORD-10001") String orderReference,
             @ToolParam(description = "Which item, described naturally in the customer's own words - product name, color, or any other "

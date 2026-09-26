@@ -157,13 +157,14 @@ public class ConversationRuntime {
             session.recordAssistantMessage(responseText);
             auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, responseText);
 
-            boolean stillWaiting = session.getActiveProcedure()
-                    .map(p -> p.getStatus() == ProcedureStatus.AWAITING_CONFIRMATION || p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION)
-                    .orElse(false);
+            ProcedureStatus activeStatus = session.getActiveProcedure().map(ProcedureState::getStatus).orElse(null);
+            boolean requiresVerification = activeStatus == ProcedureStatus.AWAITING_VERIFICATION;
+            boolean requiresConfirmation = activeStatus == ProcedureStatus.AWAITING_CONFIRMATION;
             completeTurn(session, turnNumber, startNanos, outcomeLabel);
-            return new AssistantTurn(responseText, false, stillWaiting, stateView(session, turnNumber), turnMetadata);
-        });
+            return new AssistantTurn(responseText, requiresVerification, requiresConfirmation, stateView(session, turnNumber), turnMetadata);
+        }); 
     }
+
 
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
     private String respondViaAgent(ConversationSession session, String normalizedText) {

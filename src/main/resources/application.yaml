@@ -5,7 +5,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/voxticket2.0}
     username: ${DB_USERNAME:muzammil}
-    password: ${DB_PASSWORD:6346}
+    password: ${DB_PASSWORD:local-dev-only-not-a-real-secret}
 
   flyway:
     enabled: true
