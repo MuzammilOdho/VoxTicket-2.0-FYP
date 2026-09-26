@@ -1,5 +1,6 @@
 package com.voxticket.admin;
 
+import com.voxticket.procedure.ProcedureOutcome;
 import com.voxticket.admin.dto.AdminDashboardSummary;
 import com.voxticket.admin.dto.ConversationInspectorView;
 import com.voxticket.admin.dto.ConversationSummaryView;
@@ -9,6 +10,7 @@ import com.voxticket.persistence.entity.ConversationSessionRecord;
 import com.voxticket.persistence.repository.ConversationEventRecordRepository;
 import com.voxticket.persistence.repository.ConversationMessageRecordRepository;
 import com.voxticket.persistence.repository.ConversationSessionRecordRepository;
+import com.voxticket.procedure.ProcedureOutcome;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -58,7 +60,10 @@ public class AdminDashboardService {
         this.activeSessionWindowMinutes = activeSessionWindowMinutes;
     }
 
-    private static final Set<String> CLARIFICATION_CODES = Set.of("ITEM_REQUIRED", "REASON_REQUIRED", "PROBLEM_REQUIRED");
+     // Clarification codes are defined once on ProcedureOutcome and shared with
+     // the audit-event classifier in ProcedureCoordinator; the metric tags
+     // recorded here are unchanged, so existing dashboard counts are preserved.
+    private static final Set<String> CLARIFICATION_CODES = ProcedureOutcome.CLARIFICATION_CODES;
 
     public AdminDashboardSummary getSummary() {
         long totalConversations = sessionRepository.count();

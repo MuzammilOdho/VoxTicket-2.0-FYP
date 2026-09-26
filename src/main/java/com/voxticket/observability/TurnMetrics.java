@@ -47,6 +47,11 @@ public class TurnMetrics {
         Timer.builder("voxticket.tool.call.duration").tag("tool", tool).tag("result", result).register(registry).record(duration);
     }
 
+    /** An unexpected tool exception, sanitized before reaching the model. Counted separately from normal tool results. */
+    public void recordToolError(String tool, String code) {
+        Counter.builder("voxticket.tool.error").tag("tool", tool).tag("code", code).register(registry).increment();
+    }
+
     public void recordRagSearch(Duration duration, int retrievedCount) {
         Timer.builder("voxticket.rag.search.duration").register(registry).record(duration);
         registry.summary("voxticket.rag.retrieved.count").record(retrievedCount);

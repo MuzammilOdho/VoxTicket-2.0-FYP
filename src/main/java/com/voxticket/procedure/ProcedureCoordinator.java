@@ -377,7 +377,12 @@ public class ProcedureCoordinator {
 
     private ConversationEventType classifyProcedureEvent(ProcedureOutcome outcome) {
         if (!outcome.success()) {
-            return ConversationEventType.PROCEDURE_FAILED;
+            // Clarification states (missing item/reason/problem) are not real
+            // failures - they get their own audit event so failure timelines
+            // and the Conversation Inspector stop crying wolf.
+            return ProcedureOutcome.CLARIFICATION_CODES.contains(outcome.code())
+                    ? ConversationEventType.PROCEDURE_CLARIFICATION
+                    : ConversationEventType.PROCEDURE_FAILED;
         }
         return STARTED_CODES.contains(outcome.code()) ? ConversationEventType.PROCEDURE_STARTED : ConversationEventType.PROCEDURE_COMPLETED;
     }
@@ -477,8 +482,9 @@ public class ProcedureCoordinator {
                 RecentActionType.RETURN_REQUESTED, procedure.getVerifiedTarget().orderNumber(), returnRequest.getStatus().name(),
                 null, returnRequest.getReturnNumber(), Instant.now()));
         return ProcedureOutcome.ok("RETURN_STARTED", "Return " + returnRequest.getReturnNumber() + " has been started for order "
-                + procedure.getVerifiedTarget().orderNumber() + ". I'll let you know what to do with the item next.");
+                + procedure.getVerifiedTarget().orderNumber() + ". It is now requested and awaiting approval.");
     }
+
 
     private ProcedureOutcome executeClaim(ConversationSession session, ProcedureState procedure) {
         Map<String, String> data = procedure.getCollectedData();

@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Spec §37. Unlike {@link CancellationPolicyService}, this one does read
@@ -45,6 +46,16 @@ public class ReturnPolicyService {
         this.returnWindowDays = returnWindowDays;
     }
 
+    /**
+     * Runs in its own read-only transaction: callers such as
+     * {@code ProcedureCoordinator.startReturn} are not transactional, and this
+     * method dereferences lazy {@code ReturnItem -> ReturnRequest} proxies.
+     * Without the transaction boundary that access throws
+     * {@code LazyInitializationException} ("Could not initialize proxy ... -
+     * no session"), which used to surface to the model as a non-JSON tool
+     * error and crash the native Google provider's request building.
+     */
+    @Transactional(readOnly = true)
     public ReturnEligibility evaluate(Order order, OrderItem item) {
         Instant deliveredAt = latestDeliveryDate(order);
         if (deliveredAt == null) {

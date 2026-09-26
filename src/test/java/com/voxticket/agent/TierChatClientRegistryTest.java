@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import com.voxticket.observability.TurnMetrics;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.client.DefaultChatClient;
+import org.springframework.ai.chat.client.advisor.api.ToolAdvisor;
 
 /**
  * Phase 1: each tier independently resolves exactly one provider and model
@@ -43,7 +46,8 @@ class TierChatClientRegistryTest {
         var registry = new TierChatClientRegistry(
                 allEnabledWithKeys(),
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())));
 
         assertThat(registry.resolutionFor(ModelTier.TIER_1))
                 .isEqualTo(new TierChatClientRegistry.TierResolution(AiProvider.GROQ, "openai/gpt-oss-20b"));
@@ -62,7 +66,8 @@ class TierChatClientRegistryTest {
         var registry = new TierChatClientRegistry(
                 allEnabledWithKeys(),
                 tiers(tier(AiProvider.GOOGLE, "gemini-3.6-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())));
 
         assertThat(registry.resolutionFor(ModelTier.TIER_1).provider()).isEqualTo(AiProvider.GOOGLE);
         assertThat(registry.resolutionFor(ModelTier.TIER_1).model()).isEqualTo("gemini-3.6-flash");
@@ -79,7 +84,8 @@ class TierChatClientRegistryTest {
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry()))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TIER_1")
                 .hasMessageContaining("GROQ")
@@ -96,7 +102,8 @@ class TierChatClientRegistryTest {
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry()))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TIER_1")
                 .hasMessageContaining("GROQ")
@@ -113,7 +120,8 @@ class TierChatClientRegistryTest {
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry()))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("TIER_2")
                 .hasMessageContaining("CEREBRAS")
@@ -130,7 +138,8 @@ class TierChatClientRegistryTest {
         var registry = new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GROQ, "openai/gpt-oss-20b"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())));
 
         assertThat(registry.clientFor(ModelTier.TIER_1)).isNotNull();
         assertThat(registry.clientFor(ModelTier.TIER_2)).isNotNull();
@@ -147,7 +156,8 @@ class TierChatClientRegistryTest {
         var registry = new TierChatClientRegistry(
                 providers,
                 tiers(tier(AiProvider.GOOGLE, "gemini-3.6-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry());
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())));
 
         assertThat(registry.resolutionFor(ModelTier.TIER_1).provider()).isEqualTo(AiProvider.GOOGLE);
         assertThat(registry.clientFor(ModelTier.TIER_1)).isNotNull();
@@ -163,7 +173,8 @@ class TierChatClientRegistryTest {
         assertThatThrownBy(() -> new TierChatClientRegistry(
                 registryProviders,
                 tiers(tier(AiProvider.GOOGLE, "gemini-3.8-flash"), tier(AiProvider.CEREBRAS, "gpt-oss-120b")),
-                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry()))
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry()))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("gemini-3.8-flash");
     }
@@ -173,5 +184,25 @@ class TierChatClientRegistryTest {
         assertThat(AiProvider.GOOGLE.environmentVariable()).isEqualTo("GEMINI_API_KEY");
         assertThat(AiProvider.GROQ.environmentVariable()).isEqualTo("GROQ_API_KEY");
         assertThat(AiProvider.CEREBRAS.environmentVariable()).isEqualTo("CEREBRAS_API_KEY");
+    }
+
+    @Test
+    void eachTierClientCarriesExactlyOneSharedToolAdvisor() {
+        var registry = new TierChatClientRegistry(
+                allEnabledWithKeys(),
+                tiers(tier(AiProvider.GOOGLE, "gemini-3.6-flash"), tier(AiProvider.GROQ, "openai/gpt-oss-20b")),
+                new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())));
+
+        // The advisor is a default advisor on each ChatClient (configured once
+        // in the registry, never per-prompt), so the framework skips its own
+        // auto-registration and every turn runs exactly one ToolCallingAdvisor.
+        for (ModelTier tier : ModelTier.values()) {
+            var advisors = ((DefaultChatClient.DefaultChatClientRequestSpec) registry.clientFor(tier).prompt())
+                    .getAdvisors();
+            var toolAdvisors = advisors.stream().filter(a -> a instanceof ToolAdvisor).toList();
+            assertThat(toolAdvisors).hasSize(1);
+            assertThat(toolAdvisors.get(0)).isSameAs(registry.toolCallingAdvisor());
+        }
     }
 }

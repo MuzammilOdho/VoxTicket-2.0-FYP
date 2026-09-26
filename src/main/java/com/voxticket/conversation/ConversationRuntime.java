@@ -1,5 +1,6 @@
 package com.voxticket.conversation;
 
+import com.voxticket.agent.AgentResponse;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
@@ -135,24 +136,32 @@ public class ConversationRuntime {
                     turnMetadata = outcome.metadata();
                     outcomeLabel = "verification";
                 } else {
-                    responseText = respondViaAgent(session, normalizedText);
-                    outcomeLabel = "verification_unclear";
+                    AgentResponse agentResponse = respondViaAgent(session, normalizedText);
+                    responseText = agentResponse.text();
+                    outcomeLabel = agentResponse.outcome().toTurnLabel("verification_unclear");
                 }
             } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
                 turnNumber = session.recordUserMessage(normalizedText);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
                 ConfirmationDecision decision = confirmationClassifier.classify(normalizedText);
+                AgentResponse unclearResponse = null;
                 responseText = switch (decision) {
                     case YES -> confirmWithSafeFallback(session);
                     case NO -> procedureCoordinator.declineActive(session).message();
-                    case UNCLEAR -> respondViaAgent(session, normalizedText);
+                    case UNCLEAR -> {
+                        unclearResponse = respondViaAgent(session, normalizedText);
+                        yield unclearResponse.text();
+                    }
                 };
-                outcomeLabel = "confirmation_" + decision.name().toLowerCase();
+                outcomeLabel = unclearResponse != null
+                        ? unclearResponse.outcome().toTurnLabel("confirmation_unclear")
+                        : "confirmation_" + decision.name().toLowerCase();
             } else {
                 turnNumber = session.recordUserMessage(normalizedText);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
-                responseText = respondViaAgent(session, normalizedText);
-                outcomeLabel = "normal";
+                AgentResponse agentResponse = respondViaAgent(session, normalizedText);
+                responseText = agentResponse.text();
+                outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
             }
             session.recordAssistantMessage(responseText);
             auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, responseText);
@@ -162,16 +171,16 @@ public class ConversationRuntime {
             boolean requiresConfirmation = activeStatus == ProcedureStatus.AWAITING_CONFIRMATION;
             completeTurn(session, turnNumber, startNanos, outcomeLabel);
             return new AssistantTurn(responseText, requiresVerification, requiresConfirmation, stateView(session, turnNumber), turnMetadata);
-        }); 
+        });
     }
 
 
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
-    private String respondViaAgent(ConversationSession session, String normalizedText) {
+    private AgentResponse respondViaAgent(ConversationSession session, String normalizedText) {
         session.resetToolInvokedFlag();
-        String responseText = supportAgent.respond(session, normalizedText);
-        checkForSuspectedFabrication(session, responseText);
-        return responseText;
+        AgentResponse response = supportAgent.respond(session, normalizedText);
+        checkForSuspectedFabrication(session, response.text());
+        return response;
     }
 
     private void checkForSuspectedFabrication(ConversationSession session, String responseText) {

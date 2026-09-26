@@ -3,10 +3,14 @@ package com.voxticket.agent;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
+import org.springframework.ai.model.tool.DefaultToolCallingManager;
+import org.springframework.ai.tool.resolution.DelegatingToolCallbackResolver;
 import org.springframework.stereotype.Component;
 
 /**
@@ -47,13 +51,23 @@ public class TierChatClientRegistry {
 
     private final Map<ModelTier, ChatClient> clients = new EnumMap<>(ModelTier.class);
     private final Map<ModelTier, TierResolution> resolutions = new EnumMap<>(ModelTier.class);
+    private final ToolCallingAdvisor toolCallingAdvisor;
 
     public TierChatClientRegistry(
             AiProvidersProperties providers,
             AiTiersProperties tiers,
             ProviderChatModelFactory chatModelFactory,
             ObservationRegistry observationRegistry,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            SanitizedToolExecutionExceptionProcessor exceptionProcessor) {
+        // One shared tool-calling advisor for every tier, configured here -
+        // never per-prompt in SupportAgent. Because a ToolAdvisor is already
+        // present, the framework skips its own default auto-registration, so
+        // each turn runs exactly one ToolCallingAdvisor. The 3-arg manager
+        // constructor leaves tool-name resolution fallback disabled.
+        var toolCallingManager = new DefaultToolCallingManager(
+                observationRegistry, new DelegatingToolCallbackResolver(List.of()), exceptionProcessor);
+        this.toolCallingAdvisor = ToolCallingAdvisor.builder().toolCallingManager(toolCallingManager).build();
         for (ModelTier tier : ModelTier.values()) {
             TierChatProperties tierProperties = tiers.forTier(tier);
             AiProvider provider = tierProperties.provider();
@@ -61,6 +75,7 @@ public class TierChatClientRegistry {
 
             ChatClient chatClient = ChatClient.builder(
                             chatModelFactory.chatModelFor(provider, providerProperties, tierProperties, observationRegistry, meterRegistry))
+                    .defaultAdvisors(toolCallingAdvisor)
                     .build();
             clients.put(tier, chatClient);
             resolutions.put(tier, new TierResolution(provider, tierProperties.model()));
@@ -76,6 +91,15 @@ public class TierChatClientRegistry {
             throw new IllegalStateException("No chat client configured for model tier " + tier);
         }
         return client;
+    }
+
+    /**
+     * The shared tool-calling advisor configured on every tier's ChatClient.
+     * Exposed for tests and diagnostics; agent turns must not attach it
+     * per-prompt - it is already a default advisor on each client.
+     */
+    public ToolCallingAdvisor toolCallingAdvisor() {
+        return toolCallingAdvisor;
     }
 
     /** Provider and model a tier resolved to - for metrics, audit and logging. Never exposes keys. */

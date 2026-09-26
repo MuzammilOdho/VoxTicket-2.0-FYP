@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.agent.AgentResponse;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
@@ -51,7 +52,8 @@ class ConversationRuntimeTest {
 
     @BeforeEach
     void stubSupportAgent() {
-        when(supportAgent.respond(any(), any())).thenReturn("stubbed agent response");
+        when(supportAgent.respond(any(), any()))
+                .thenReturn(new AgentResponse("stubbed agent response", AgentResponse.Outcome.SUCCESS));
     }
 
     @Test
@@ -219,7 +221,8 @@ class ConversationRuntimeTest {
 
     @Test
     void aFabricatedFailureWithNoToolCallIsFlaggedInTheAuditTrail() {
-        when(supportAgent.respond(any(), any())).thenReturn("I'm sorry, I'm having trouble starting the return right now.");
+        when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
+                "I'm sorry, I'm having trouble starting the return right now.", AgentResponse.Outcome.SUCCESS));
 
         runtime.processTurn(new UserTurn("s16", Channel.CHAT, "I want to return the bedsheets because I don't like the quality", null, Instant.now(), Map.of()));
 
@@ -231,7 +234,8 @@ class ConversationRuntimeTest {
         when(supportAgent.respond(any(), any())).thenAnswer(invocation -> {
             ConversationSession session = invocation.getArgument(0);
             session.markToolInvoked();
-            return "I'm sorry, I'm having trouble starting the return right now.";
+            return new AgentResponse("I'm sorry, I'm having trouble starting the return right now.",
+                    AgentResponse.Outcome.SUCCESS);
         });
 
         runtime.processTurn(new UserTurn("s17", Channel.CHAT, "return it", null, Instant.now(), Map.of()));
@@ -282,6 +286,35 @@ class ConversationRuntimeTest {
 
         assertThat(response.requiresVerification()).isFalse();
         assertThat(response.requiresConfirmation()).isFalse();
+    }
+
+    @Test
+    void successfulAgentTurnIsRecordedAsNormal() {
+        runtime.processTurn(new UserTurn("s24", Channel.CHAT, "hello", null, Instant.now(), Map.of()));
+
+        verify(turnMetrics).recordTurn(any(), eq("CHAT"), eq("normal"));
+    }
+
+    @Test
+    void recoveredAgentErrorIsNotRecordedAsNormalTurn() {
+        when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
+                "I'm having trouble processing that right now - please try again in a moment.",
+                AgentResponse.Outcome.MODEL_ERROR));
+
+        AssistantTurn response = runtime.processTurn(new UserTurn("s25", Channel.CHAT, "hello", null, Instant.now(), Map.of()));
+
+        assertThat(response.text()).contains("try again in a moment");
+        verify(turnMetrics).recordTurn(any(), eq("CHAT"), eq("agent_error_recovered"));
+    }
+
+    @Test
+    void blankAgentFallbackIsRecordedAsBlankFallbackTurn() {
+        when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
+                "Sorry, could you say that again?", AgentResponse.Outcome.BLANK_FALLBACK));
+
+        runtime.processTurn(new UserTurn("s26", Channel.CHAT, "hello", null, Instant.now(), Map.of()));
+
+        verify(turnMetrics).recordTurn(any(), eq("CHAT"), eq("blank_fallback"));
     }
 
 }

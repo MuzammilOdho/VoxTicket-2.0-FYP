@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.agent.AgentResponse;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.repository.CustomerRepository;
@@ -47,7 +48,8 @@ class ChatControllerIntegrationTest {
 
     @BeforeEach
     void stubSupportAgent() {
-        when(supportAgent.respond(any(), any())).thenReturn("stubbed agent response");
+        when(supportAgent.respond(any(), any()))
+                .thenReturn(new AgentResponse("stubbed agent response", AgentResponse.Outcome.SUCCESS));
     }
 
     @Test

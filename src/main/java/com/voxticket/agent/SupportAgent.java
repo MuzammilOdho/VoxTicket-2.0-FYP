@@ -141,7 +141,7 @@ public class SupportAgent {
     }
 
 
-    public String respond(ConversationSession session, String currentUserMessage) {
+    public AgentResponse respond(ConversationSession session, String currentUserMessage) {
         long start = System.nanoTime();
         String tierLabel = "UNKNOWN";
         String providerLabel = "unknown";
@@ -165,6 +165,10 @@ public class SupportAgent {
 
             log.info("event=support_agent_call_start sessionId={} tier={} provider={} model={}", session.getSessionId(), tierLabel, providerLabel, modelLabel);
 
+            // No per-prompt advisors: the tool-calling advisor is a default
+            // advisor on each tier's ChatClient (configured once in
+            // TierChatClientRegistry), so the framework's own default is not
+            // auto-registered and each turn runs exactly one ToolCallingAdvisor.
             ChatClient chatClient = clientRegistry.clientFor(selection.tier());
             ChatResponse chatResponse = chatClient.prompt()
                     .system(systemPrompt)
@@ -175,22 +179,27 @@ public class SupportAgent {
 
             String content = chatResponse.getResult().getOutput().getText();
             long durationMs = (System.nanoTime() - start) / 1_000_000;
-            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel, "success");
             recordTokenUsage(chatResponse, providerLabel, modelLabel);
 
             if (content == null || content.isBlank()) {
                 log.warn("event=support_agent_blank_response sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
-                return blankResponseFallback(session);
+                turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                        AgentResponse.Outcome.BLANK_FALLBACK.toLlmMetricLabel());
+                return new AgentResponse(blankResponseFallback(session), AgentResponse.Outcome.BLANK_FALLBACK);
             }
 
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                    AgentResponse.Outcome.SUCCESS.toLlmMetricLabel());
             log.info("event=support_agent_call_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
-            return content;
+            return new AgentResponse(content, AgentResponse.Outcome.SUCCESS);
         } catch (Exception e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
-            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel, "error");
-            log.error("event=support_agent_call_end sessionId={} outcome=error errorType={} durationMs={}",
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                    AgentResponse.Outcome.MODEL_ERROR.toLlmMetricLabel());
+            log.error("event=support_agent_call_end sessionId={} outcome=model_error errorType={} durationMs={}",
                     session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
-            return "I'm having trouble processing that right now - please try again in a moment.";
+            return new AgentResponse("I'm having trouble processing that right now - please try again in a moment.",
+                    AgentResponse.Outcome.MODEL_ERROR);
         }
     }
     String blankResponseFallback(ConversationSession session) {

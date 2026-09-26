@@ -69,7 +69,7 @@ public class ReturnRequest extends BaseEntity {
     private Instant completedAt;
 
     @OneToMany(mappedBy = "returnRequest", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private final List<ReturnItem> items = new ArrayList<>();
+    private List<ReturnItem> items = new ArrayList<>();
 
     protected ReturnRequest() {
         // JPA
