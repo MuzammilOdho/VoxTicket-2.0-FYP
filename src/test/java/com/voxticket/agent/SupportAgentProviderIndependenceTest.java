@@ -13,6 +13,7 @@ import com.voxticket.service.CustomerOrderQueryService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.model.tool.ToolCallLimitBehavior;
 
 /**
  * SupportAgent stays provider-agnostic: it only ever receives the
@@ -33,7 +34,7 @@ class SupportAgentProviderIndependenceTest {
                 new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20));
         var registry = new TierChatClientRegistry(
                 providers, tiers, new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
-                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())));
+                new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())), new ToolCallLimitsProperties(5, 10, ToolCallLimitBehavior.THROW));
 
         var agent = new SupportAgent(
                 registry, mock(ContextBuilder.class), mock(ModelSelector.class),

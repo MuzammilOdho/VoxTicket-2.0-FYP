@@ -94,6 +94,14 @@ public class VerificationService {
         OtpDeliveryChannel channel = otpDeliveryService.channel();
         String maskedDestination = mask(customer, channel);
 
+        // Only the newest code for a procedure may be valid. A prior unconsumed
+        // challenge can exist when the user asked for a resend, or when this
+        // procedure was paused (another procedure's challenge replaced the
+        // session's single pending-challenge pointer) and later resumed:
+        // without this, the stale code would stay usable alongside the new one.
+        repository.findByProcedureIdAndConsumedFalse(procedureId)
+                .forEach(VerificationChallenge::markConsumedWithoutVerification);
+
         VerificationChallenge challenge = repository.save(new VerificationChallenge(
                 customer, session.getSessionId(), purpose, channel, maskedDestination, hash, salt, procedureId, orderNumber, Instant.now().plus(expiry)));
 

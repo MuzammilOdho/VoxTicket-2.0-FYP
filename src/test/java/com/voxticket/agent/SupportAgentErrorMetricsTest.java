@@ -18,6 +18,7 @@ import io.micrometer.observation.ObservationRegistry;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.model.tool.ToolCallLimitBehavior;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -57,7 +58,7 @@ class SupportAgentErrorMetricsTest {
                 new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20));
         var registry = new TierChatClientRegistry(providers, tiers, factory,
                 ObservationRegistry.NOOP, meterRegistry,
-                new SanitizedToolExecutionExceptionProcessor(turnMetrics));
+                new SanitizedToolExecutionExceptionProcessor(turnMetrics), new ToolCallLimitsProperties(5, 10, ToolCallLimitBehavior.THROW));
 
         var modelSelector = mock(ModelSelector.class);
         when(modelSelector.select(any(), any())).thenReturn(new ModelSelectionResult(ModelTier.TIER_1, "test"));

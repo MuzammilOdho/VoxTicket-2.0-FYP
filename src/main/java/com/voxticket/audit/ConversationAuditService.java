@@ -12,7 +12,9 @@ import com.voxticket.persistence.repository.ConversationSessionRecordRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Phase 8 (Conversation Audit). The single injection point for durable
@@ -37,44 +39,63 @@ public class ConversationAuditService {
     private final ConversationSessionRecordRepository sessionRepository;
     private final ConversationMessageRecordRepository messageRepository;
     private final ConversationEventRecordRepository eventRepository;
+    private final TransactionTemplate auditTransaction;
 
     public ConversationAuditService(
             ConversationSessionRecordRepository sessionRepository,
             ConversationMessageRecordRepository messageRepository,
-            ConversationEventRecordRepository eventRepository) {
+            ConversationEventRecordRepository eventRepository,
+            PlatformTransactionManager transactionManager) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.eventRepository = eventRepository;
+        this.auditTransaction = new TransactionTemplate(transactionManager);
+        // Independent transaction: an audit-write failure rolls back only the
+        // audit transaction itself and can never mark the caller's business
+        // transaction rollback-only.
+        this.auditTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Transactional
+    /**
+     * Best-effort and non-throwing: a failed audit write must never break the
+     * actual conversation. The try/catch covers the whole programmatic
+     * transaction (repository calls AND commit), so a persistence exception -
+     * or a commit-time failure - is logged and swallowed instead of surfacing
+     * as an UnexpectedRollbackException or poisoning the caller's transaction.
+     */
     public void recordSessionTouch(ConversationSession session) {
         try {
-            ConversationSessionRecord record = findOrCreateSession(session);
-            record.touch(session.getCustomerIdentity().customerId(), session.getCustomerIdentity().assuranceLevel(), session.isEscalated());
-            sessionRepository.save(record);
+            auditTransaction.executeWithoutResult(status -> {
+                ConversationSessionRecord record = findOrCreateSession(session);
+                record.touch(session.getCustomerIdentity().customerId(), session.getCustomerIdentity().assuranceLevel(), session.isEscalated());
+                sessionRepository.save(record);
+            });
         } catch (Exception e) {
             log.warn("event=audit_write_failed table=conversation_sessions sessionId={} errorType={}",
                     session.getSessionId(), e.getClass().getSimpleName());
         }
     }
 
-    @Transactional
+    /** Independent transaction - see {@link #recordSessionTouch(ConversationSession)}. */
     public void recordMessage(ConversationSession session, int turnNumber, MessageRole role, String text) {
         try {
-            ConversationSessionRecord record = findOrCreateSession(session);
-            messageRepository.save(new ConversationMessageRecord(record, turnNumber, role, text));
+            auditTransaction.executeWithoutResult(status -> {
+                ConversationSessionRecord record = findOrCreateSession(session);
+                messageRepository.save(new ConversationMessageRecord(record, turnNumber, role, text));
+            });
         } catch (Exception e) {
             log.warn("event=audit_write_failed table=conversation_messages sessionId={} errorType={}",
                     session.getSessionId(), e.getClass().getSimpleName());
         }
     }
 
-    @Transactional
+    /** Independent transaction - see {@link #recordSessionTouch(ConversationSession)}. */
     public void recordEvent(ConversationSession session, Integer turnNumber, ConversationEventType type, String detail) {
         try {
-            ConversationSessionRecord record = findOrCreateSession(session);
-            eventRepository.save(new ConversationEventRecord(record, turnNumber, type, truncate(detail)));
+            auditTransaction.executeWithoutResult(status -> {
+                ConversationSessionRecord record = findOrCreateSession(session);
+                eventRepository.save(new ConversationEventRecord(record, turnNumber, type, truncate(detail)));
+            });
         } catch (Exception e) {
             log.warn("event=audit_write_failed table=conversation_events eventType={} sessionId={} errorType={}",
                     type, session.getSessionId(), e.getClass().getSimpleName());

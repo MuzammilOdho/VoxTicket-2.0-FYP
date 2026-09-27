@@ -59,15 +59,31 @@ public class TierChatClientRegistry {
             ProviderChatModelFactory chatModelFactory,
             ObservationRegistry observationRegistry,
             MeterRegistry meterRegistry,
-            SanitizedToolExecutionExceptionProcessor exceptionProcessor) {
+            SanitizedToolExecutionExceptionProcessor exceptionProcessor,
+            ToolCallLimitsProperties toolCallLimits) {
         // One shared tool-calling advisor for every tier, configured here -
         // never per-prompt in SupportAgent. Because a ToolAdvisor is already
         // present, the framework skips its own default auto-registration, so
-        // each turn runs exactly one ToolCallingAdvisor. The 3-arg manager
-        // constructor leaves tool-name resolution fallback disabled.
-        var toolCallingManager = new DefaultToolCallingManager(
-                observationRegistry, new DelegatingToolCallbackResolver(List.of()), exceptionProcessor);
+        // each turn runs exactly one ToolCallingAdvisor.
+        //
+        // The manager is built explicitly (the framework's own tool
+        // auto-configuration does not apply to a manually constructed
+        // manager), so the configured spring.ai.tools.limits values are
+        // honored instead of the framework's 40-per-tool / 150-total defaults.
+        // Tool-name resolution fallback stays disabled, as before.
+        var toolCallingManager = DefaultToolCallingManager.builder()
+                .observationRegistry(observationRegistry)
+                .toolCallbackResolver(new DelegatingToolCallbackResolver(List.of()))
+                .toolExecutionExceptionProcessor(exceptionProcessor)
+                .maxCallsPerTool(toolCallLimits.maxCallsPerToolDefault())
+                .maxTotalToolCalls(toolCallLimits.maxTotalToolCalls())
+                .onLimitExceeded(toolCallLimits.onLimitExceeded())
+                .resolutionFallbackEnabled(false)
+                .build();
         this.toolCallingAdvisor = ToolCallingAdvisor.builder().toolCallingManager(toolCallingManager).build();
+        log.info("event=tool_call_limits maxCallsPerToolDefault={} maxTotalToolCalls={} onLimitExceeded={}",
+                toolCallLimits.maxCallsPerToolDefault(), toolCallLimits.maxTotalToolCalls(),
+                toolCallLimits.onLimitExceeded());
         for (ModelTier tier : ModelTier.values()) {
             TierChatProperties tierProperties = tiers.forTier(tier);
             AiProvider provider = tierProperties.provider();

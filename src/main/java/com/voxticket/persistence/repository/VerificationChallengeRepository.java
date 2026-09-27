@@ -10,4 +10,6 @@ public interface VerificationChallengeRepository extends JpaRepository<Verificat
     Optional<VerificationChallenge> findFirstBySessionIdOrderByCreatedAtDesc(String sessionId);
     long countByCustomerIdAndCreatedAtAfter(UUID customerId, Instant cutoff);
     long countBySessionIdAndCreatedAtAfter(String sessionId, Instant cutoff);
+    /** Prior unconsumed challenges for a procedure - invalidated when a new code is issued for it. */
+    java.util.List<VerificationChallenge> findByProcedureIdAndConsumedFalse(UUID procedureId);
 }

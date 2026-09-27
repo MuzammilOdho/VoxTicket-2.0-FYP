@@ -19,10 +19,7 @@ public class ConversationSession {
 
     private final String sessionId;
     private final Channel channel;
-    private String providerSessionId;
-    private String language;
     private CustomerIdentity customerIdentity;
-    private final EntityContext entityContext = new EntityContext();
     private final Deque<RecentAction> recentActions = new ArrayDeque<>();
     private final List<ConversationMessage> recentMessages = new ArrayList<>();
     private int turnCount = 0;
@@ -163,28 +160,8 @@ public class ConversationSession {
         return channel;
     }
 
-    public String getProviderSessionId() {
-        return providerSessionId;
-    }
-
-    public void setProviderSessionId(String providerSessionId) {
-        this.providerSessionId = providerSessionId;
-    }
-
-    public String getLanguage() {
-        return language;
-    }
-
-    public void setLanguage(String language) {
-        this.language = language;
-    }
-
     public CustomerIdentity getCustomerIdentity() {
         return customerIdentity;
-    }
-
-    public EntityContext getEntityContext() {
-        return entityContext;
     }
 
     public List<RecentAction> getRecentActions() {

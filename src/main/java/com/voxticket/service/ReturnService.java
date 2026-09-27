@@ -73,8 +73,10 @@ public class ReturnService {
 
         // Gap-fix: authoritative revalidation at execution time, mirroring CancellationService's
         // existing pattern - the eligibility check ProcedureCoordinator ran earlier must not be
-        // trusted as still valid by the time this actually executes.
-        Order order = orderRepository.findById(orderRef.orderId()).orElseThrow();
+        // trusted as still valid by the time this actually executes. Row-locked fetch:
+        // concurrent return requests for the same order serialize here instead of
+        // both passing the eligibility check and creating duplicate returns.
+        Order order = orderRepository.findByIdForUpdate(orderRef.orderId()).orElseThrow();
         OrderItem item = orderItemRepository.findByOrderId(orderRef.orderId()).stream()
                 .filter(i -> i.getSku().equalsIgnoreCase(sku))
                 .findFirst()

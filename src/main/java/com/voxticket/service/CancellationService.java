@@ -62,7 +62,10 @@ public class CancellationService {
     }
 
     public CancellationResult cancel(VerifiedOrderRef orderRef) {
-        Order order = orderRepository.findById(orderRef.orderId()).orElseThrow();
+        // Row-locked fetch: concurrent cancellations of the same order from
+        // different sessions serialize here instead of both passing the
+        // eligibility check and creating duplicate refunds.
+        Order order = orderRepository.findByIdForUpdate(orderRef.orderId()).orElseThrow();
         Payment payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(order.getId())
                 .orElseThrow(() -> new IllegalStateException("Order has no payment record: " + order.getOrderNumber()));
 
