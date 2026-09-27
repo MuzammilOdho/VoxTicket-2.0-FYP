@@ -94,6 +94,22 @@ class SupportAgentErrorMetricsTest {
     }
 
     @Test
+    void quotaExceededReturnsSafeFallbackWithModelError() {
+        // A provider-side quota/rate-limit failure (e.g. HTTP 429) is a model error like any
+        // other: the existing safe generic recovery is returned, with no retry and no fallback
+        // to another provider.
+        when(chatModel.call(any(Prompt.class)))
+                .thenThrow(new RuntimeException("429 Too Many Requests: quota exceeded for model"));
+
+        AgentResponse response = agent.respond(ConversationSession.newSession("s4", Channel.CHAT), "where is my order");
+
+        assertThat(response.outcome()).isEqualTo(AgentResponse.Outcome.MODEL_ERROR);
+        assertThat(response.text()).isEqualTo("I'm having trouble processing that right now - please try again in a moment.");
+        assertThat(llmCallCount("model_error")).isEqualTo(1);
+        assertThat(llmCallCount("success")).isZero();
+    }
+
+    @Test
     void successRecordsSuccessMetric() {
         when(chatModel.call(any(Prompt.class))).thenReturn(textResponse("Your order is on its way."));
 

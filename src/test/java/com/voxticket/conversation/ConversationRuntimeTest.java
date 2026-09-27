@@ -308,6 +308,51 @@ class ConversationRuntimeTest {
     }
 
     @Test
+    void providerQuotaFailureKeepsSafeResponseAndIsNeverFlaggedAsFabrication() {
+        // Mirrors what SupportAgent returns when the provider fails (e.g. HTTP 429 quota
+        // exceeded): the safe generic text contains "having trouble", which must NOT be
+        // misread as fabrication - a provider failure is not evidence of fabrication.
+        when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
+                "I'm having trouble processing that right now - please try again in a moment.",
+                AgentResponse.Outcome.MODEL_ERROR));
+
+        AssistantTurn response = runtime.processTurn(new UserTurn("s30", Channel.CHAT, "where is my order", null, Instant.now(), Map.of()));
+
+        assertThat(response.text()).isEqualTo("I'm having trouble processing that right now - please try again in a moment.");
+        verify(auditService, never()).recordEvent(any(), any(), eq(ConversationEventType.SUSPECTED_FABRICATION), any());
+        verify(turnMetrics).recordTurn(any(), eq("CHAT"), eq("agent_error_recovered"));
+        // No business behavior change: the failure starts no procedure and mutates nothing.
+        Boolean hasProcedure = sessionStore.withSession("s30", Channel.CHAT,
+                session -> session.getActiveProcedure().isPresent());
+        assertThat(hasProcedure).isFalse();
+    }
+
+    @Test
+    void providerTimeoutFailureKeepsSafeRecoveryAndIsNeverFlaggedAsFabrication() {
+        when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
+                "I'm having trouble processing that right now - please try again in a moment.",
+                AgentResponse.Outcome.MODEL_ERROR));
+
+        AssistantTurn response = runtime.processTurn(new UserTurn("s31", Channel.CHAT, "cancel my order", null, Instant.now(), Map.of()));
+
+        assertThat(response.text()).contains("try again in a moment");
+        verify(auditService, never()).recordEvent(any(), any(), eq(ConversationEventType.SUSPECTED_FABRICATION), any());
+        verify(turnMetrics).recordTurn(any(), eq("CHAT"), eq("agent_error_recovered"));
+    }
+
+    @Test
+    void blankFallbackIsNeverFlaggedAsFabrication() {
+        // BLANK_FALLBACK text is a static re-prompt, not model output eligible for
+        // grounding validation, so the fabrication check must not run for it either.
+        when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
+                "Sorry, could you say that again?", AgentResponse.Outcome.BLANK_FALLBACK));
+
+        runtime.processTurn(new UserTurn("s32", Channel.CHAT, "hello", null, Instant.now(), Map.of()));
+
+        verify(auditService, never()).recordEvent(any(), any(), eq(ConversationEventType.SUSPECTED_FABRICATION), any());
+    }
+
+    @Test
     void blankAgentFallbackIsRecordedAsBlankFallbackTurn() {
         when(supportAgent.respond(any(), any())).thenReturn(new AgentResponse(
                 "Sorry, could you say that again?", AgentResponse.Outcome.BLANK_FALLBACK));

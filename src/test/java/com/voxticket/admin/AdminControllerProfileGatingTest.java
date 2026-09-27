@@ -19,9 +19,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
         // No active profile on purpose: the context must still satisfy
         // TierChatClientRegistry's fail-fast provider validation, so dummy
         // keys are supplied here. No live provider call ever occurs.
+        // Phase 2: pin the rule-only router - with no profile the strategy
+        // would default to HYBRID, which fail-fast requires routing model
+        // files that tests must never need.
         "voxticket.ai.providers.google.api-key=test-google-key",
         "voxticket.ai.providers.groq.api-key=test-groq-key",
-        "voxticket.ai.providers.cerebras.api-key=test-cerebras-key"})
+        "voxticket.ai.providers.cerebras.api-key=test-cerebras-key",
+        "voxticket.ai.selector.strategy=RULE_ONLY"})
 @SpringBootTest
 class AdminControllerProfileGatingTest {
 

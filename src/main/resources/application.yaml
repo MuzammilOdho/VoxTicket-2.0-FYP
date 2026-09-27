@@ -117,25 +117,43 @@ voxticket:
     #             native thinking level, thoughts never returned
     tiers:
       tier1:
-        provider: GOOGLE
-        model: gemini-3.6-flash
-        temperature: 0.3
-        max-output-tokens: 1024
-        reasoning-effort: none
-        timeout-seconds: 20
-        max-retries: 0
-      tier2:
         provider: GROQ
         model: openai/gpt-oss-20b
         temperature: 0.3
+        max-output-tokens: 1024
+        reasoning-effort: none
+        timeout-seconds: 60
+        max-retries: 0
+      tier2:
+        provider: GROQ
+        model: openai/gpt-oss-120b
+        temperature: 0.3
         max-output-tokens: 1536
         reasoning-effort: high
-        timeout-seconds: 20
+        timeout-seconds: 60
         max-retries: 0
 
     selector:
-      long-message-threshold: 300
-      min-order-references-for-tier2: 2
+      # Phase 2: the router decides ONLY the tier (TIER_1/TIER_2) - never provider/model.
+      # HYBRID = structural strong signals, then local multilingual-e5 semantic scoring.
+      # HYBRID requires the routing model artifacts: set ROUTING_MODEL_PATH to a directory
+      # containing model.onnx + tokenizer.json (download once from
+      # https://huggingface.co/intfloat/multilingual-e5-small/tree/main/onnx).
+      # Startup fails fast with an actionable error if they are missing.
+      strategy: HYBRID
+      structural:
+        long-message-threshold: 300
+        min-order-references-for-tier2: 2
+      semantic:
+        enabled: true
+        model: intfloat/multilingual-e5-small
+        model-path: ${ROUTING_MODEL_PATH:}
+        examples: classpath:routing/examples-v1.json
+        top-k-per-class: 3
+        # Temporary placeholder margins - NOT scientifically calibrated.
+        # Threshold calibration belongs to Phase 3; do not tune to make examples pass.
+        complex-margin: 0.02
+        simple-margin: 0.02
   rag:
     top-k: 3
     similarity-threshold: 0.5

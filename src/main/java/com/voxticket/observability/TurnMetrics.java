@@ -31,6 +31,27 @@ public class TurnMetrics {
                 .register(registry).increment();
     }
 
+    /**
+     * Phase 2: the router's own decision, recorded with bounded-cardinality tags only.
+     * The margin distribution skips non-semantic decisions (NaN) - recording zeros would
+     * corrupt the distribution.
+     */
+    public void recordRoutingDecision(String strategy, String tier, String reason, double margin) {
+        Counter.builder("voxticket.routing.decision")
+                .tag("strategy", strategy).tag("tier", tier).tag("reason", reason)
+                .register(registry).increment();
+        if (!Double.isNaN(margin)) {
+            // Margin is signed (complex - simple); the direction is already encoded in the
+            // reason tag (SEMANTIC_SIMPLE/COMPLEX/AMBIGUOUS), so the distribution records the
+            // non-negative confidence magnitude. Raw scores/margins never become tags.
+            io.micrometer.core.instrument.DistributionSummary.builder("voxticket.routing.margin")
+                    .tag("strategy", strategy)
+                    .publishPercentiles(0.5, 0.95)
+                    .distributionStatisticExpiry(Duration.ofMinutes(30))
+                    .register(registry).record(Math.abs(margin));
+        }
+    }
+
     public void recordLlmCall(Duration duration, String tier, String provider, String model, String outcome) {
         Timer.builder("voxticket.llm.call.duration")
                 .tag("tier", tier).tag("provider", provider).tag("model", model).tag("outcome", outcome)

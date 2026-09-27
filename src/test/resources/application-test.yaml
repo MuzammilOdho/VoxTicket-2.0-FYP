@@ -34,3 +34,8 @@ voxticket:
         enabled: true
         api-key: test-cerebras-key
         base-url: https://api.cerebras.ai/v1
+    # Phase 2: tests run the deterministic rule-only router so no routing
+    # model artifacts are needed to boot the context. Focused routing tests
+    # construct the semantic components directly with stub embeddings.
+    selector:
+      strategy: RULE_ONLY

@@ -179,15 +179,23 @@ public class ConversationRuntime {
     private AgentResponse respondViaAgent(ConversationSession session, String normalizedText) {
         session.resetToolInvokedFlag();
         AgentResponse response = supportAgent.respond(session, normalizedText);
-        checkForSuspectedFabrication(session, response.text());
+        checkForSuspectedFabrication(session, response);
         return response;
     }
 
-    private void checkForSuspectedFabrication(ConversationSession session, String responseText) {
-        if (session.wasToolInvokedThisTurn() || responseText == null) {
+    private void checkForSuspectedFabrication(ConversationSession session, AgentResponse response) {
+        // Fabrication detection applies ONLY to successful model responses: a provider/model
+        // failure (MODEL_ERROR) or a blank fallback (BLANK_FALLBACK) is never evidence of
+        // fabrication - the safe recovery text is static, never model output eligible for
+        // grounding validation. Gating on the outcome (not the fallback text) keeps a real
+        // provider outage from being mislabeled as suspected fabrication.
+        if (response.outcome() != AgentResponse.Outcome.SUCCESS) {
             return;
         }
-        String lower = responseText.toLowerCase(Locale.ROOT);
+        if (session.wasToolInvokedThisTurn() || response.text() == null) {
+            return;
+        }
+        String lower = response.text().toLowerCase(Locale.ROOT);
         if (FABRICATION_SIGNAL_PHRASES.stream().anyMatch(lower::contains)) {
             log.warn("event=suspected_fabrication sessionId={}", session.getSessionId());
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.SUSPECTED_FABRICATION, "no tool was invoked this turn");
