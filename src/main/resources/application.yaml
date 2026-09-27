@@ -123,6 +123,7 @@ voxticket:
         max-output-tokens: 1024
         reasoning-effort: none
         timeout-seconds: 20
+        max-retries: 0
       tier2:
         provider: GROQ
         model: openai/gpt-oss-20b
@@ -130,6 +131,7 @@ voxticket:
         max-output-tokens: 1536
         reasoning-effort: high
         timeout-seconds: 20
+        max-retries: 0
 
     selector:
       long-message-threshold: 300

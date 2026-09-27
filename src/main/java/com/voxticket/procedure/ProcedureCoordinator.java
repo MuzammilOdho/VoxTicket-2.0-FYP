@@ -53,7 +53,6 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProcedureCoordinator {
@@ -215,7 +214,15 @@ public class ProcedureCoordinator {
         return beginProcedure(session, ProcedureType.CLAIM, ref, data, false, description, startNanos);
     }
 
-    @Transactional
+    /**
+     * Escalation creates the support ticket through the repository's own
+     * transaction (committed on {@code save()} return) and only then mutates
+     * the in-memory session and records the durable audit event. There is
+     * deliberately no outer transaction here: recording {@code ESCALATED} in
+     * audit (which commits independently) or marking the session escalated
+     * before the ticket row is committed would leave a false success trail if
+     * the ticket insert later rolled back.
+     */
     public ProcedureOutcome requestHumanSupport(ConversationSession session, String reason) {
         CustomerIdentity identity = session.getCustomerIdentity();
         if (!identity.isAtLeast(IdentityAssurance.PHONE_MATCHED)) {
@@ -247,6 +254,10 @@ public class ProcedureCoordinator {
 
     // ---- Verification (called ONLY from ConversationRuntime, never from a tool) ----
 
+    // No outer transaction here either: verificationService.verify() and the
+    // domain service inside execute() each commit on return; the
+    // EXECUTION_SUCCEEDED audit and session updates below therefore always
+    // run after the domain state is durable.
     public ProcedureOutcome submitVerificationCode(ConversationSession session, String code) {
         long startNanos = System.nanoTime();
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
@@ -299,7 +310,16 @@ public class ProcedureCoordinator {
 
     // ---- Advancing a pending confirmation (CLAIM only - called ONLY from ConversationRuntime, never from a tool) ----
 
-    @Transactional
+    /**
+     * Executes the pending confirmed procedure. The domain service call
+     * ({@code cancellationService}/{@code returnService}/{@code claimService},
+     * each {@code @Transactional}) commits when it returns; only afterwards
+     * are the in-memory session state and the durable audit events
+     * ({@code EXECUTION_SUCCEEDED}, {@code PROCEDURE_COMPLETED}) updated.
+     * There is deliberately no outer transaction here: with one, the audit
+     * service's independent commit would record success before the domain
+     * transaction committed, leaving a false success trail on rollback.
+     */
     public ProcedureOutcome confirmActive(ConversationSession session) {
         long startNanos = System.nanoTime();
         ProcedureState procedure = session.getActiveProcedure().orElse(null);

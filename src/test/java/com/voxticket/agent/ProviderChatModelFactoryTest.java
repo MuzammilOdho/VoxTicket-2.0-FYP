@@ -27,7 +27,7 @@ class ProviderChatModelFactoryTest {
     private final ProviderChatModelFactory factory = new ProviderChatModelFactory();
 
     private static TierChatProperties tier(AiProvider provider, String model, String reasoningEffort) {
-        return new TierChatProperties(provider, model, 0.3, 1024, reasoningEffort, 20);
+        return new TierChatProperties(provider, model, 0.3, 1024, reasoningEffort, 20, 0);
     }
 
     private static ProviderProperties providerProps(String apiKey, String baseUrl) {

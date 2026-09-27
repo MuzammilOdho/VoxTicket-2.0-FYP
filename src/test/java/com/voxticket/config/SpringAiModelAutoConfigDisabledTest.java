@@ -164,18 +164,18 @@ class SpringAiModelAutoConfigDisabledTest {
         // clients down with them: every provider path still builds from
         // configuration alone, with no network I/O.
         ProviderChatModelFactory factory = new ProviderChatModelFactory();
-        var tier = new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20);
+        var tier = new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20, 0);
 
         assertThat(factory.chatModelFor(AiProvider.GOOGLE,
                 new ProviderProperties(true, "dummy", null),
-                new TierChatProperties(AiProvider.GOOGLE, "gemini-3.6-flash", 0.3, 1024, "none", 20),
+                new TierChatProperties(AiProvider.GOOGLE, "gemini-3.6-flash", 0.3, 1024, "none", 20, 0),
                 ObservationRegistry.NOOP, new SimpleMeterRegistry())).isNotNull();
         assertThat(factory.chatModelFor(AiProvider.GROQ,
                 new ProviderProperties(true, "dummy", "https://api.groq.com/openai/v1"),
                 tier, ObservationRegistry.NOOP, new SimpleMeterRegistry())).isNotNull();
         assertThat(factory.chatModelFor(AiProvider.CEREBRAS,
                 new ProviderProperties(true, "dummy", "https://api.cerebras.ai/v1"),
-                new TierChatProperties(AiProvider.CEREBRAS, "gpt-oss-120b", 0.3, 1024, "high", 20),
+                new TierChatProperties(AiProvider.CEREBRAS, "gpt-oss-120b", 0.3, 1024, "high", 20, 0),
                 ObservationRegistry.NOOP, new SimpleMeterRegistry())).isNotNull();
     }
 }

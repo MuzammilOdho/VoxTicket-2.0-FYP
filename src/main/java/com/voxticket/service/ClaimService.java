@@ -85,7 +85,9 @@ public class ClaimService {
     }
 
     public OrderClaim resolveWithRefund(UUID claimId, BigDecimal amount) {
-        OrderClaim claim = get(claimId);
+        // Pessimistic row lock: two concurrent resolutions must not both pass
+        // the OPEN/IN_REVIEW check and create duplicate refunds.
+        OrderClaim claim = getForUpdate(claimId);
         requireOpenOrInReview(claim);
         Payment payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(claim.getOrder().getId()).orElseThrow();
         refundService.initiateRefund(claim.getOrder(), payment, null, amount, RefundReason.CLAIM);
@@ -109,6 +111,10 @@ public class ClaimService {
 
     private OrderClaim get(UUID claimId) {
         return orderClaimRepository.findById(claimId).orElseThrow(() -> new IllegalArgumentException("Unknown claim: " + claimId));
+    }
+
+    private OrderClaim getForUpdate(UUID claimId) {
+        return orderClaimRepository.findByIdForUpdate(claimId).orElseThrow(() -> new IllegalArgumentException("Unknown claim: " + claimId));
     }
 
     private void requireStatus(OrderClaim claim, ClaimStatus expected) {

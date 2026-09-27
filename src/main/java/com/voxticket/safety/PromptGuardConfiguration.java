@@ -32,7 +32,7 @@ public class PromptGuardConfiguration {
         // same endpoint and key the old auto-configured client used.
         ProviderProperties groq = requireUsableGroq(providers);
         TierChatProperties guardTier = new TierChatProperties(
-                AiProvider.GROQ, properties.mlModel(), 0.7, properties.mlMaxTokens(), "none", 20);
+                AiProvider.GROQ, properties.mlModel(), 0.7, properties.mlMaxTokens(), "none", 20, 0);
         ChatModel guardModel = chatModelFactory.chatModelFor(
                 AiProvider.GROQ, groq, guardTier, observationRegistry, meterRegistry);
         return new GroqMlPromptGuard(ChatClient.builder(guardModel).build(), fallback, properties, turnMetrics);

@@ -18,6 +18,8 @@ import org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.setup.OpenAiSetup;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -96,8 +98,19 @@ public class ProviderChatModelFactory {
         return GoogleGenAiChatModel.builder()
                 .genAiClient(genAiClient)
                 .options(googleChatOptions(tierProperties))
+                .retryTemplate(retryTemplateFor(tierProperties.maxRetries()))
                 .observationRegistry(observationRegistry)
                 .build();
+    }
+
+    /**
+     * The explicit retry policy for a tier. The Phase 1 baseline uses zero
+     * automatic retries: provider SDKs must not hide failures behind retry
+     * loops - a failure surfaces immediately and SupportAgent answers with
+     * the safe generic failure response. Package-visible for tests.
+     */
+    static RetryTemplate retryTemplateFor(int maxRetries) {
+        return new RetryTemplate(RetryPolicy.withMaxRetries(maxRetries));
     }
 
     private GoogleGenAiChatOptions googleChatOptions(TierChatProperties tier) {
@@ -222,7 +235,7 @@ public class ProviderChatModelFactory {
                 false, // gitHubModels
                 null, // project
                 Duration.ofSeconds(tierProperties.timeoutSeconds()),
-                3, // maxRetries - matches the Spring AI auto-configuration default
+                tierProperties.maxRetries(), // explicit per-tier retry policy (Phase 1 baseline: 0)
                 null, // proxy
                 Map.of(), // customHeaders
                 observationRegistry,
@@ -239,7 +252,7 @@ public class ProviderChatModelFactory {
                 false, // gitHubModels
                 null, // project
                 Duration.ofSeconds(tierProperties.timeoutSeconds()),
-                3, // maxRetries - matches the Spring AI auto-configuration default
+                tierProperties.maxRetries(), // explicit per-tier retry policy (Phase 1 baseline: 0)
                 null, // proxy
                 Map.of(), // customHeaders
                 observationRegistry,

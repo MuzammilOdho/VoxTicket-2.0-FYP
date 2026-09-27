@@ -97,6 +97,10 @@ public class TierChatClientRegistry {
             resolutions.put(tier, new TierResolution(provider, tierProperties.model()));
             log.info("event=tier_chat_client_ready tier={} provider={} model={} timeoutSeconds={}",
                     tier, provider, tierProperties.model(), tierProperties.timeoutSeconds());
+            // Retry behavior is explicit per tier (Phase 1 baseline: 0 - no
+            // hidden provider/SDK retry loops; failures surface immediately).
+            log.info("event=provider_retry_policy tier={} provider={} model={} maxRetries={}",
+                    tier, provider, tierProperties.model(), tierProperties.maxRetries());
         }
     }
 

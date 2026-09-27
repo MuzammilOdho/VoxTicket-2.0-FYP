@@ -17,6 +17,11 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * see {@link ProviderChatModelFactory} for the per-provider mapping. In all
  * cases the long-standing spec behavior holds: provider-emitted reasoning is
  * never exposed to the customer.
+ *
+ * <p>{@code maxRetries} is the number of automatic retries after the initial
+ * attempt (0 = no retries). The Phase 1 baseline disables provider retries
+ * entirely so a provider failure surfaces immediately instead of being
+ * hidden behind SDK retry loops.
  */
 public record TierChatProperties(
         @DefaultValue("GROQ") AiProvider provider,
@@ -24,5 +29,6 @@ public record TierChatProperties(
         @DefaultValue("0.3") double temperature,
         @DefaultValue("1024") int maxOutputTokens,
         @DefaultValue("none") String reasoningEffort,
-        @DefaultValue("20") int timeoutSeconds) {
+        @DefaultValue("20") int timeoutSeconds,
+        @DefaultValue("0") int maxRetries) {
 }

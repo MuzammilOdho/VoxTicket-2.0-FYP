@@ -120,7 +120,9 @@ public class ReturnService {
 
     /** Spec §37: inspection decides pass/fail; a pass here creates the resulting Refund (spec §36: do not refund before inspection). */
     public ReturnRequest completeInspection(UUID returnRequestId, boolean approvedForRefund) {
-        ReturnRequest returnRequest = get(returnRequestId);
+        // Pessimistic row lock: two concurrent approvals must not both pass the
+        // RECEIVED check and create duplicate refunds.
+        ReturnRequest returnRequest = getForUpdate(returnRequestId);
         requireStatus(returnRequest, ReturnStatus.RECEIVED);
         returnRequest.setInspectedAt(Instant.now());
 
@@ -153,6 +155,11 @@ public class ReturnService {
 
     private ReturnRequest get(UUID returnRequestId) {
         return returnRequestRepository.findById(returnRequestId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown return request: " + returnRequestId));
+    }
+
+    private ReturnRequest getForUpdate(UUID returnRequestId) {
+        return returnRequestRepository.findByIdForUpdate(returnRequestId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown return request: " + returnRequestId));
     }
 

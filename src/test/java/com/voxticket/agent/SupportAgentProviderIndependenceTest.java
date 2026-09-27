@@ -30,8 +30,8 @@ class SupportAgentProviderIndependenceTest {
                 new ProviderProperties(true, "groq-key", "https://api.groq.com/openai/v1"),
                 new ProviderProperties(true, "cerebras-key", "https://api.cerebras.ai/v1"));
         var tiers = new AiTiersProperties(
-                new TierChatProperties(AiProvider.GOOGLE, "gemini-3.6-flash", 0.3, 1024, "none", 20),
-                new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20));
+                new TierChatProperties(AiProvider.GOOGLE, "gemini-3.6-flash", 0.3, 1024, "none", 20, 0),
+                new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20, 0));
         var registry = new TierChatClientRegistry(
                 providers, tiers, new ProviderChatModelFactory(), ObservationRegistry.NOOP, new SimpleMeterRegistry(),
                 new SanitizedToolExecutionExceptionProcessor(new TurnMetrics(new SimpleMeterRegistry())), new ToolCallLimitsProperties(5, 10, ToolCallLimitBehavior.THROW));

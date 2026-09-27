@@ -35,7 +35,7 @@ class TierChatClientRegistryTest {
     }
 
     private static TierChatProperties tier(AiProvider provider, String model) {
-        return new TierChatProperties(provider, model, 0.3, 1024, "none", 20);
+        return new TierChatProperties(provider, model, 0.3, 1024, "none", 20, 0);
     }
 
     private static AiTiersProperties tiers(TierChatProperties tier1, TierChatProperties tier2) {
