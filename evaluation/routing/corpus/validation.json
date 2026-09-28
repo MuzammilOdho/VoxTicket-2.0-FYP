@@ -1,0 +1,1393 @@
+[
+  {
+    "id": "VAL-EN-T1-001",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Good morning! Has ORD-50112 shipped yet?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Single order-status intent combined with a greeting; directly answerable per the rubric."
+  },
+  {
+    "id": "VAL-EN-T1-002",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "What's the return window for sneakers?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Straightforward policy FAQ with a single intent."
+  },
+  {
+    "id": "VAL-EN-T1-003",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Is cash on delivery available in Faisalabad?",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "Direct payment-method FAQ; one intent, no condition."
+  },
+  {
+    "id": "VAL-EN-T1-004",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I want to cancel ORD-50344, please.",
+    "tags": [
+      "cancellation",
+      "simple-reference"
+    ],
+    "sourceNote": "Simple unconditional cancellation of one order; the rubric keeps protected mutations TIER_1."
+  },
+  {
+    "id": "VAL-EN-T1-005",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Please start a return for the damaged headphones in ORD-50771.",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "Simple single-order return request with no conditions or comparisons."
+  },
+  {
+    "id": "VAL-EN-T1-006",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "One item is missing from ORD-50902 — I need to file a claim.",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "Simple direct claim for one item; a protected mutation is not automatically TIER_2."
+  },
+  {
+    "id": "VAL-EN-T1-007",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "How long does a JazzCash refund take after approval?",
+    "tags": [
+      "payment-question",
+      "faq"
+    ],
+    "sourceNote": "Direct refund-timing question; single intent."
+  },
+  {
+    "id": "VAL-EN-T1-008",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Can I change the delivery address for ORD-51120 to my workplace?",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "One address change on one order; directly executable."
+  },
+  {
+    "id": "VAL-EN-T1-009",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "What time slots do you offer for same-day delivery?",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "Straightforward delivery FAQ; single intent."
+  },
+  {
+    "id": "VAL-EN-T1-010",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Does this voucher apply to sale items?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Direct policy question about voucher applicability."
+  },
+  {
+    "id": "VAL-EN-T1-011",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "The tracking for ORD-51463 hasn't updated in 4 days — is it still moving?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Direct single-order tracking lookup; one question about one reference."
+  },
+  {
+    "id": "VAL-EN-T1-012",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I paid by card; will the refund go back to the same card?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Single payment/refund routing question, directly answerable."
+  },
+  {
+    "id": "VAL-EN-T1-013",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Hello! Is ORD-51790 out for delivery yet?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting plus a direct order-status lookup; one intent."
+  },
+  {
+    "id": "VAL-EN-T1-014",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "What is the exchange process for a wrong-sized kurta?",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "Direct policy question about exchanges; no conditions."
+  },
+  {
+    "id": "VAL-EN-T1-015",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Is there a warranty on the electric kettle I ordered?",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "Straightforward product FAQ; single intent."
+  },
+  {
+    "id": "VAL-EN-T2-001",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Cancel ORD-52110 and update the delivery address on ORD-52111 to my office.",
+    "tags": [
+      "multi-intent",
+      "multi-order",
+      "cancellation"
+    ],
+    "sourceNote": "Two distinct mutations on two different orders in one turn."
+  },
+  {
+    "id": "VAL-EN-T2-002",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Which is cheaper to return — the cotton bedsheets or the polyester set?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Multi-item comparison requiring synthesis before answering."
+  },
+  {
+    "id": "VAL-EN-T2-003",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If my Easypaisa refund hasn't arrived by Friday, please escalate the case.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Conditional request branching on refund arrival."
+  },
+  {
+    "id": "VAL-EN-T2-004",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I said cancel ORD-52308, but actually I meant ORD-52309 — please fix that.",
+    "tags": [
+      "correction",
+      "reference-resolution"
+    ],
+    "sourceNote": "Correction of a previous request plus disambiguation between two order references."
+  },
+  {
+    "id": "VAL-EN-T2-005",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I need delivery tomorrow morning, but nobody will be home before noon.",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "Conflicting constraints that need resolution before the request can proceed."
+  },
+  {
+    "id": "VAL-EN-T2-006",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "That other order I placed last week — where is it now?",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Ambiguous cross-turn reference; the target order must be resolved first."
+  },
+  {
+    "id": "VAL-EN-T2-007",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "My order is 8 days late and your policy says refunds after 7 days — am I eligible?",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "Policy-plus-account synthesis: combines a policy rule with order facts."
+  },
+  {
+    "id": "VAL-EN-T2-008",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Following up on my return request — also add the cracked mug to it.",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "Compound follow-up that adds a new constraint to an existing request."
+  },
+  {
+    "id": "VAL-EN-T2-009",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If the blue variant is back in stock, exchange my red one; otherwise just refund me.",
+    "tags": [
+      "conditional",
+      "correction"
+    ],
+    "sourceNote": "Conditional branch on stock availability combined with an exchange correction."
+  },
+  {
+    "id": "VAL-EN-T2-010",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Should I return the air fryer or keep it and claim the missing accessory instead?",
+    "tags": [
+      "comparison",
+      "claim-request"
+    ],
+    "sourceNote": "Comparison across two resolution paths for one order."
+  },
+  {
+    "id": "VAL-EN-T2-011",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If the rider comes today I'll pay cash, but if he comes tomorrow I need to pay by card — can you note that?",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "Nested conditional instructions depending on delivery timing."
+  },
+  {
+    "id": "VAL-EN-T2-012",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Track ORD-52776 for me and tell me whether COD is available for my next order.",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "Two simultaneous intents: tracking lookup plus a payment-method FAQ."
+  },
+  {
+    "id": "VAL-EN-T2-013",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "The second parcel from my last order never arrived.",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "Ambiguous reference to an unspecified parcel requiring resolution."
+  },
+  {
+    "id": "VAL-EN-T2-014",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Change my refund method from bank transfer to JazzCash — I gave the wrong account earlier.",
+    "tags": [
+      "correction",
+      "payment-question"
+    ],
+    "sourceNote": "Correction of previously supplied payment details."
+  },
+  {
+    "id": "VAL-EN-T2-015",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I ordered two shirts; one arrived damaged. Can I get a refund for that one and keep the other?",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "Synthesis of a partial refund with a keep decision across items in one order."
+  },
+  {
+    "id": "VAL-UR-T1-001",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "السلام علیکم! میرا آرڈر ORD-53114 کہاں ہے؟",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "تحیت کے ساتھ ایک ہی آرڈر کا براہِ راست استفسار؛ واحد ارادہ۔"
+  },
+  {
+    "id": "VAL-UR-T1-002",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا آپ کراچی میں کیش آن ڈیلیوری دیتے ہیں؟",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "ادائیگی کے طریقے کا براہِ راست سوال؛ کوئی شرط نہیں۔"
+  },
+  {
+    "id": "VAL-UR-T1-003",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کپڑوں کو واپس کرنے کی آخری تاریخ کیا ہے؟",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "واپسی کی پالیسی کا سیدھا سوال؛ واحد ارادہ۔"
+  },
+  {
+    "id": "VAL-UR-T1-004",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "براہ کرم ORD-53390 منسوخ کر دیں۔",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "ایک آرڈر کی غیر مشروط منسوخی؛ محفوظ تبدیلی خودکار طور پر ٹیئر ۲ نہیں۔"
+  },
+  {
+    "id": "VAL-UR-T1-005",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-53521 میں ٹوٹا ہوا مگ آیا ہے، واپسی شروع کریں۔",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "ایک آرڈر کی سادہ واپسی کی درخواست؛ کوئی موازنہ یا شرط نہیں۔"
+  },
+  {
+    "id": "VAL-UR-T1-006",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میرے پارسل سے ایک چیز غائب ہے، دعویٰ درج کرنا ہے۔",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "ایک آئٹم کا براہِ راست دعویٰ؛ واحد ارادہ۔"
+  },
+  {
+    "id": "VAL-UR-T1-007",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "منظوری کے بعد جیزکیش رقم واپسی میں کتنا وقت لگتا ہے؟",
+    "tags": [
+      "payment-question",
+      "faq"
+    ],
+    "sourceNote": "رقم واپسی کے دورانیے کا سیدھا سوال۔"
+  },
+  {
+    "id": "VAL-UR-T1-008",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا میں ORD-53762 کا پتہ تبدیل کر سکتا ہوں؟",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "ایک آرڈر پر ایک پتہ کی تبدیلی؛ براہِ راست قابلِ عمل۔"
+  },
+  {
+    "id": "VAL-UR-T1-009",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "آج ہی ڈیلیوری کے لیے کون سے وقت دستیاب ہیں؟",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "ڈیلیوری کے اوقات کا سیدھا سوال؛ واحد ارادہ۔"
+  },
+  {
+    "id": "VAL-UR-T1-010",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا یہ واؤچر سیل والی اشیاء پر لگے گا؟",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "واؤچر کے اطلاق پر براہِ راست پالیسی سوال۔"
+  },
+  {
+    "id": "VAL-UR-T1-011",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-53911 کی ٹریکنگ چار دن سے اپ ڈیٹ نہیں ہوئی، کیا وہ راستے میں ہے؟",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "ایک حوالے کے بارے میں ایک سوال؛ براہِ راست ٹریکنگ استفسار۔"
+  },
+  {
+    "id": "VAL-UR-T1-012",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میں نے کارڈ سے ادائیگی کی تھی، کیا رقم اسی کارڈ پر واپس آئے گی؟",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "رقم واپسی کے طریقے کا واحد سوال۔"
+  },
+  {
+    "id": "VAL-UR-T1-013",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "السلام علیکم! کیا ORD-54127 آج ڈیلیور ہو جائے گا؟",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "تحیت کے ساتھ ڈیلیوری اسٹیٹس کا براہِ راست سوال۔"
+  },
+  {
+    "id": "VAL-UR-T1-014",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "غلط سائز کی قمیض تبدیل کرنے کا طریقہ کیا ہے؟",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "تبادلے کے طریقہ کار کا سیدھا پالیسی سوال۔"
+  },
+  {
+    "id": "VAL-UR-T1-015",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا الیکٹرک کیٹل پر وارنٹی ملتی ہے؟",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "مصنوعات کا سیدھا سوال؛ واحد ارادہ۔"
+  },
+  {
+    "id": "VAL-UR-T2-001",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "براہ کرم ORD-54210 کی رقم واپس کر دیں اور ORD-54211 کی ڈیلیوری کل تک تیز کر دیں۔",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "ایک ہی پیغام میں دو مختلف آرڈرز پر دو الگ درخواستیں۔"
+  },
+  {
+    "id": "VAL-UR-T2-002",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "روئی والے بیڈ شیٹس واپس کرنا سستا پڑے گا یا پالئیےسٹر والے سیٹ کا؟",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "دو آئٹمز کے درمیان موازنہ؛ ترکیب درکار ہے۔"
+  },
+  {
+    "id": "VAL-UR-T2-003",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر جمعے تک ایزی پیسہ ریفنڈ نہ آئے تو میرا کیس آگے بڑھا دیں۔",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "رقم واپسی کی آمد پر منحصر مشروط درخواست۔"
+  },
+  {
+    "id": "VAL-UR-T2-004",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں نے ORD-54402 منسوخ کرنے کو کہا تھا مگر اصل میں ORD-54403 تھا — درست کر دیں۔",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "پچھلی درخواست کی تصحیح اور دو حوالوں کے درمیان ابہام کا ازالہ۔"
+  },
+  {
+    "id": "VAL-UR-T2-005",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "مجھے کل صبح ڈیلیوری چاہیے مگر دوپہر سے پہلے گھر پر کوئی نہیں ہوگا۔",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "متضاد شرائط جن کا حل درخواست سے پہلے ضروری ہے۔"
+  },
+  {
+    "id": "VAL-UR-T2-006",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "پچھلے ہفتے والا دوسرا آرڈر کہاں ہے؟",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "مبہم حوالہ؛ پہلے متعلقہ آرڈر کی شناخت ضروری ہے۔"
+  },
+  {
+    "id": "VAL-UR-T2-007",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میرا آرڈر آٹھ دن لیٹ ہے اور آپ کی پالیسی سات دن کے بعد رقم واپسی کہتی ہے — کیا میں اہل ہوں؟",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "پالیسی اور اکاؤنٹ حقائق کی ترکیب۔"
+  },
+  {
+    "id": "VAL-UR-T2-008",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میری واپسی کی درخواست پر نظرثانی کریں — ٹوٹا ہوا مگ بھی اس میں شامل کر دیں۔",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "موجودہ درخواست میں نئی شرط شامل کرنے والا مرکب فالو اپ۔"
+  },
+  {
+    "id": "VAL-UR-T2-009",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر ڈیلیوری پیر سے پہلے ہو جائے تو میں کیش دوں گا ورنہ کارڈ سے ادائیگی کروں گا۔",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "ڈیلیوری کے وقت پر منحصر ادائیگی کی مشروط ہدایت۔"
+  },
+  {
+    "id": "VAL-UR-T2-010",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "کیا میں ائیر فرائر واپس کروں یا رکھ کر غائب اسیسری کا دعویٰ کروں؟",
+    "tags": [
+      "comparison",
+      "claim-request"
+    ],
+    "sourceNote": "ایک آرڈر کے لیے دو مختلف حل کے راستوں کا موازنہ۔"
+  },
+  {
+    "id": "VAL-UR-T2-011",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر رائیڈر آج آئے تو کیش دوں گا، اگر کل آئے تو کارڈ سے — یہ نوٹ کر لیں۔",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "وقت پر منحصر گہری مشروط ہدایات۔"
+  },
+  {
+    "id": "VAL-UR-T2-012",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-54618 ٹریک کر دیں اور بتائیں کہ اگلے آرڈر پر کیش آن ڈیلیوری ملے گی یا نہیں۔",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "دو بیک وقت ارادے: ٹریکنگ اور ادائیگی کا سوال۔"
+  },
+  {
+    "id": "VAL-UR-T2-013",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میرے پچھلے آرڈر کا دوسرا پارسل کبھی نہیں پہنچا۔",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "غیر متعین پارسل کا مبہم حوالہ؛ شناخت درکار ہے۔"
+  },
+  {
+    "id": "VAL-UR-T2-014",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "رقم واپسی کا طریقہ بینک سے جیزکیش کر دیں — میں نے پہلے غلط اکاؤنٹ دیا تھا۔",
+    "tags": [
+      "correction",
+      "payment-question"
+    ],
+    "sourceNote": "پہلے دی گئی ادائیگی کی تفصیل کی تصحیح۔"
+  },
+  {
+    "id": "VAL-UR-T2-015",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں نے دو قمیضیں منگوائیں؛ ایک خراب نکلی۔ کیا خراب والی کی رقم واپس لے کر دوسری رکھ سکتا ہوں؟",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "ایک آرڈر میں جزوی رقم واپسی اور رکھنے کے فیصلے کی ترکیب۔"
+  },
+  {
+    "id": "VAL-RU-T1-001",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "salam! mera order ORD-55112 kahan hai?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Seedha order status ka sawal; ek intent, koi condition nahin."
+  },
+  {
+    "id": "VAL-RU-T1-002",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya multan mein cash on delivery available hai?",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "Payment method ka seedha sawal; wahid maqsad."
+  },
+  {
+    "id": "VAL-RU-T1-003",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kapron ki wapsi ki aakhri tareekh kya hai?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Wapsi policy ka seedha sawal; ek intent."
+  },
+  {
+    "id": "VAL-RU-T1-004",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "please ORD-55308 cancel kar dein.",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "Ek order ki ghair mashroot cancellation; protected mutation automatically TIER_2 nahin."
+  },
+  {
+    "id": "VAL-RU-T1-005",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-55436 mein toota hua charger aaya hai, return start kar dein.",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "Ek order ki seedhi return request; koi shart ya mawazna nahin."
+  },
+  {
+    "id": "VAL-RU-T1-006",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "mere parcel se ek cheez missing hai, claim file karna hai.",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "Ek item ka seedha claim; wahid irada."
+  },
+  {
+    "id": "VAL-RU-T1-007",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "approval ke baad easypaisa refund mein kitna time lagta hai?",
+    "tags": [
+      "payment-question",
+      "faq"
+    ],
+    "sourceNote": "Refund timing ka seedha sawal."
+  },
+  {
+    "id": "VAL-RU-T1-008",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya main ORD-55677 ka address change kar sakta hoon?",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "Ek order par ek address change; seedha executable."
+  },
+  {
+    "id": "VAL-RU-T1-009",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "same-day delivery ke liye konsay time slots hain?",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "Delivery slots ka seedha FAQ."
+  },
+  {
+    "id": "VAL-RU-T1-010",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya yeh voucher sale items par chalega?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Voucher ke itlaaq par seedha policy sawal."
+  },
+  {
+    "id": "VAL-RU-T1-011",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-55890 ki tracking 4 din se update nahin hui, kya woh rastay mein hai?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Ek reference par ek sawal; seedha tracking inquiry."
+  },
+  {
+    "id": "VAL-RU-T1-012",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "maine card se payment ki thi, kya refund usi card par aayega?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Refund method ka wahid sawal."
+  },
+  {
+    "id": "VAL-RU-T1-013",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "hello! kya ORD-56014 aaj deliver ho jayega?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting ke saath delivery status ka seedha sawal."
+  },
+  {
+    "id": "VAL-RU-T1-014",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "ghalat size ki shirt exchange karne ka tareeqa kya hai?",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "Exchange process ka seedha policy sawal."
+  },
+  {
+    "id": "VAL-RU-T1-015",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya electric kettle par warranty milti hai?",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "Product ka seedha FAQ; ek intent."
+  },
+  {
+    "id": "VAL-RU-T2-001",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-56120 ka refund kar dein aur ORD-56121 ki delivery kal tak fast kar dein.",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "Ek turn mein do mukhtalif orders par do alag requests."
+  },
+  {
+    "id": "VAL-RU-T2-002",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "cotton bedsheets wapas karna sasta parega ya polyester set ka?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Do items ka mawazna; synthesis darkar hai."
+  },
+  {
+    "id": "VAL-RU-T2-003",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "agar jummay tak easypaisa refund na aaye to mera case escalate kar dein.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Refund ki aamad par conditional request."
+  },
+  {
+    "id": "VAL-RU-T2-004",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "maine ORD-56302 cancel karne ko kaha tha lekin asal mein ORD-56303 tha — theek kar dein.",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "Pichli request ki correction aur do references ka disambiguation."
+  },
+  {
+    "id": "VAL-RU-T2-005",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "mujhe kal subah delivery chahiye lekin dopehar se pehle ghar par koi nahin hoga.",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "Mutazaad sharait; pehle in ka hal zaroori hai."
+  },
+  {
+    "id": "VAL-RU-T2-006",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "pichlay haftay wala doosra order kahan hai?",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "Mubham reference; pehle order ki shanakht zaroori."
+  },
+  {
+    "id": "VAL-RU-T2-007",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "mera order 8 din late hai aur aap ki policy 7 din ke baad refund kehti hai — kya main eligible hoon?",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "Policy rule aur order facts ki tarkeeb."
+  },
+  {
+    "id": "VAL-RU-T2-008",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "meri return request par nazar-e-saani karein — toota hua mug bhi us mein add kar dein.",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "Existing request mein nayi shart jorne wala compound follow-up."
+  },
+  {
+    "id": "VAL-RU-T2-009",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "agar delivery peer se pehle ho jaye to main cash doon ga warna card se payment karoon ga.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Delivery timing par conditional payment hidayat."
+  },
+  {
+    "id": "VAL-RU-T2-010",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "kya main air fryer wapas karoon ya rakh kar missing accessory ka claim karoon?",
+    "tags": [
+      "comparison",
+      "claim-request"
+    ],
+    "sourceNote": "Ek order ke do hal ka mawazna."
+  },
+  {
+    "id": "VAL-RU-T2-011",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "agar rider aaj aaye to cash doon ga, agar kal aaye to card se — yeh note kar lein.",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "Waqt par munhasir nested conditional hidayat."
+  },
+  {
+    "id": "VAL-RU-T2-012",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-56518 track kar dein aur batayein ke aglay order par COD milega ya nahin.",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "Do ek saath intents: tracking aur payment ka sawal."
+  },
+  {
+    "id": "VAL-RU-T2-013",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "mere pichlay order ka doosra parcel kabhi nahin pahuncha.",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Ghair mutayyan parcel ka mubham hawala."
+  },
+  {
+    "id": "VAL-RU-T2-014",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "refund ka tareeqa bank se jazzcash kar dein — maine pehle ghalat account diya tha.",
+    "tags": [
+      "correction",
+      "payment-question"
+    ],
+    "sourceNote": "Pehle di gayi payment detail ki correction."
+  },
+  {
+    "id": "VAL-RU-T2-015",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "maine do shirts mangwayi thin; ek kharab nikli. kya kharab wali ka refund le kar doosri rakh sakta hoon?",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "Partial refund aur keep decision ki tarkeeb."
+  },
+  {
+    "id": "VAL-CS-T1-001",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Hi, mera order ORD-57130 kab deliver hoga?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Single delivery-status intent; language mixing does not add complexity."
+  },
+  {
+    "id": "VAL-CS-T1-002",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Kya COD available hai in Rawalpindi?",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "Direct payment FAQ; one intent."
+  },
+  {
+    "id": "VAL-CS-T1-003",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "What's the return policy for kurtis?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Straightforward policy FAQ."
+  },
+  {
+    "id": "VAL-CS-T1-004",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Please ORD-57344 cancel kar dein.",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "Simple one-order cancellation; protected mutations are not automatically TIER_2."
+  },
+  {
+    "id": "VAL-CS-T1-005",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Damaged headphones aaye hain in ORD-57419, return start kar dein.",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "Simple single-order return; no conditions."
+  },
+  {
+    "id": "VAL-CS-T1-006",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Ek item missing hai from my parcel, claim karna hai.",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "Direct single-item claim; one intent."
+  },
+  {
+    "id": "VAL-CS-T1-007",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "JazzCash refund kitne din mein aata hai after approval?",
+    "tags": [
+      "payment-question",
+      "faq"
+    ],
+    "sourceNote": "Single refund-timing question."
+  },
+  {
+    "id": "VAL-CS-T1-008",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Can I change the address for ORD-57602 to my office?",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "One address change on one order; directly executable."
+  },
+  {
+    "id": "VAL-CS-T1-009",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Same-day delivery ke slots kya hain?",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "Straightforward delivery FAQ."
+  },
+  {
+    "id": "VAL-CS-T1-010",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Yeh voucher sale items par apply hoga?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Direct voucher policy question."
+  },
+  {
+    "id": "VAL-CS-T1-011",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "ORD-57715 ki tracking stuck hai for 3 days, kya woh transit mein hai?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "One question about one order reference."
+  },
+  {
+    "id": "VAL-CS-T1-012",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Maine card se pay kiya tha, refund usi card par aayega?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Single refund-method question."
+  },
+  {
+    "id": "VAL-CS-T1-013",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Hello! ORD-57860 out for delivery hai kya?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting plus direct status lookup."
+  },
+  {
+    "id": "VAL-CS-T1-014",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Wrong size ki shirt exchange karne ka process kya hai?",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "Direct exchange-process policy question."
+  },
+  {
+    "id": "VAL-CS-T1-015",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Kya electric iron par warranty hai?",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "Simple product FAQ; one intent."
+  },
+  {
+    "id": "VAL-CS-T2-001",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "ORD-58112 ka refund process kar dein aur ORD-58113 ko kal tak deliver karwa dein.",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "Do orders, do alag intents — ek hi turn mein."
+  },
+  {
+    "id": "VAL-CS-T2-002",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Cotton wali bedsheets return karna cheaper hai ya polyester set ka?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Do items ka mawazna; synthesis chahiye."
+  },
+  {
+    "id": "VAL-CS-T2-003",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Agar Friday tak Easypaisa refund na aaye, please escalate my case.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Refund arrival par conditional request."
+  },
+  {
+    "id": "VAL-CS-T2-004",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "I said cancel ORD-58308, lekin actually I meant ORD-58309 — please correct karein.",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "Pichli request ki correction aur do order references ka disambiguation."
+  },
+  {
+    "id": "VAL-CS-T2-005",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Mujhe kal subah delivery chahiye, but no one will be home before 12.",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "Conflicting constraints; pehle resolution zaroori."
+  },
+  {
+    "id": "VAL-CS-T2-006",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Woh doosra order from last week — uska kya status hai?",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "Ambiguous cross-turn reference; pehle order resolve karna hoga."
+  },
+  {
+    "id": "VAL-CS-T2-007",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Order 8 days late hai, and policy kehta hai 7 days ke baad refund — am I eligible?",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "Policy + account facts ki synthesis."
+  },
+  {
+    "id": "VAL-CS-T2-008",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Meri return request update karein — cracked mug bhi add kar dein.",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "Nayi constraint jorne wala compound follow-up."
+  },
+  {
+    "id": "VAL-CS-T2-009",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Agar delivery Monday se pehle ho to cash doon ga, otherwise card payment.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Delivery timing par conditional payment instruction."
+  },
+  {
+    "id": "VAL-CS-T2-010",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Air fryer wapas karoon ya keep karke missing accessory ka claim karoon?",
+    "tags": [
+      "comparison",
+      "claim-request"
+    ],
+    "sourceNote": "Do resolution paths ka mawazna."
+  },
+  {
+    "id": "VAL-CS-T2-011",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Agar rider aaj aaye to cash, agar kal aaye to card — can you note this?",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "Nested conditional instructions on timing."
+  },
+  {
+    "id": "VAL-CS-T2-012",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "ORD-58577 track kar dein, and batayein next order par COD available hai?",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "Do simultaneous intents: tracking + payment FAQ."
+  },
+  {
+    "id": "VAL-CS-T2-013",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Last order ka second parcel kabhi deliver nahin hua.",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Unspecified parcel ka ambiguous reference."
+  },
+  {
+    "id": "VAL-CS-T2-014",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Refund method bank se JazzCash kar dein — I gave the wrong account earlier.",
+    "tags": [
+      "correction",
+      "payment-question"
+    ],
+    "sourceNote": "Pehle di gayi payment detail ki correction."
+  },
+  {
+    "id": "VAL-CS-T2-015",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Do shirts order ki thin, ek damaged nikli — can I refund that one and keep the other?",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "Partial refund aur keep decision ki synthesis."
+  }
+]

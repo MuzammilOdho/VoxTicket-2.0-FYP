@@ -1,0 +1,1382 @@
+[
+  {
+    "id": "TST-EN-T1-001",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Hi there! Has ORD-60231 been dispatched?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Single dispatch-status intent with a greeting; directly answerable."
+  },
+  {
+    "id": "TST-EN-T1-002",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Do you offer cash on delivery in Hyderabad?",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "Direct payment-method FAQ; one intent."
+  },
+  {
+    "id": "TST-EN-T1-003",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "How many days do I have to return a jacket?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Straightforward return-window policy question."
+  },
+  {
+    "id": "TST-EN-T1-004",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I'd like to cancel ORD-60447, thanks.",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "Simple unconditional cancellation of one order; not automatically TIER_2."
+  },
+  {
+    "id": "TST-EN-T1-005",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "The blender in ORD-60590 arrived cracked — please arrange a return.",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "Simple single-order return with no conditions."
+  },
+  {
+    "id": "TST-EN-T1-006",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "There's an item missing from ORD-60712; I want to raise a claim.",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "Simple direct claim for one item."
+  },
+  {
+    "id": "TST-EN-T1-007",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Will my bank refund arrive before the weekend?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Single refund-timing question."
+  },
+  {
+    "id": "TST-EN-T1-008",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Please update the delivery address for ORD-60855 to my home.",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "One address change on one order; directly executable."
+  },
+  {
+    "id": "TST-EN-T1-009",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Which areas qualify for express delivery?",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "Straightforward delivery-coverage FAQ."
+  },
+  {
+    "id": "TST-EN-T1-010",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Can I stack two vouchers on one order?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Direct voucher-stacking policy question."
+  },
+  {
+    "id": "TST-EN-T1-011",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "ORD-61024 shows 'in transit' since Monday — is that normal?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Direct single-order tracking question; one reference, one question."
+  },
+  {
+    "id": "TST-EN-T1-012",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I paid through Easypaisa; where will the refund go?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Single refund-destination question."
+  },
+  {
+    "id": "TST-EN-T1-013",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Good evening! Is ORD-61278 arriving tomorrow?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting plus a direct delivery-status lookup."
+  },
+  {
+    "id": "TST-EN-T1-014",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "How do I return shoes that don't fit?",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "Direct return-process policy question."
+  },
+  {
+    "id": "TST-EN-T1-015",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Does the air conditioner come with free installation?",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "Straightforward product FAQ; single intent."
+  },
+  {
+    "id": "TST-EN-T2-001",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Refund ORD-61410 and move ORD-61411's delivery to Thursday.",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "Two distinct requests on two different orders in one turn."
+  },
+  {
+    "id": "TST-EN-T2-002",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Is it better to exchange the small rug or just buy the bigger one separately?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Comparison across two resolution paths requiring synthesis."
+  },
+  {
+    "id": "TST-EN-T2-003",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If the replacement arrives damaged too, I want a full refund instead.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Conditional branch on the replacement's condition."
+  },
+  {
+    "id": "TST-EN-T2-004",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Please cancel ORD-61602 — sorry, I meant ORD-61603, not 61602.",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "Correction of the target order with two references to disambiguate."
+  },
+  {
+    "id": "TST-EN-T2-005",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I want the cheapest shipping, but I also need it by tomorrow.",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "Conflicting constraints needing resolution before proceeding."
+  },
+  {
+    "id": "TST-EN-T2-006",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "The package from my earlier order still hasn't shown up.",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "Ambiguous reference to an unspecified earlier order."
+  },
+  {
+    "id": "TST-EN-T2-007",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Your site promises delivery in 3 days; it's day 6. Do I get the late-delivery voucher?",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "Synthesis of a policy promise with actual delivery facts."
+  },
+  {
+    "id": "TST-EN-T2-008",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Add the scratched watch to my existing return for ORD-61840.",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "Compound follow-up adding a new item to an existing return."
+  },
+  {
+    "id": "TST-EN-T2-009",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If COD isn't available in my area, I'll pay online — can you confirm first?",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Conditional payment choice depending on COD availability."
+  },
+  {
+    "id": "TST-EN-T2-010",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Should I keep the discounted mixer or return it and order the newer model?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Comparison between keeping and returning across two product options."
+  },
+  {
+    "id": "TST-EN-T2-011",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If the courier calls before noon I'll collect it myself; if after noon, leave it with my neighbor — and if the neighbor isn't home, reschedule.",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "Nested conditional delivery instructions."
+  },
+  {
+    "id": "TST-EN-T2-012",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Where is ORD-62019, and do you have the red variant in stock?",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "Two simultaneous intents: tracking plus a stock question."
+  },
+  {
+    "id": "TST-EN-T2-013",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "That order with the blue box — has it shipped yet?",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Ambiguous reference to an order described only by packaging."
+  },
+  {
+    "id": "TST-EN-T2-014",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I entered the wrong house number for ORD-62155 — it should be 14-B, not 41-B.",
+    "tags": [
+      "correction",
+      "delivery-question"
+    ],
+    "sourceNote": "Correction of previously supplied address details."
+  },
+  {
+    "id": "TST-EN-T2-015",
+    "split": "FINAL_TEST",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I bought a gift set; the perfume is fine but the lotion leaked. Can I return just the lotion?",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "Synthesis of a partial return within a bundled set."
+  },
+  {
+    "id": "TST-UR-T1-001",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "السلام علیکم! کیا ORD-62310 روانہ ہو چکا ہے؟",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "تحیت کے ساتھ ڈسپیچ اسٹیٹس کا براہِ راست سوال؛ واحد ارادہ۔"
+  },
+  {
+    "id": "TST-UR-T1-002",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا حیدرآباد میں کیش آن ڈیلیوری ملتی ہے؟",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "ادائیگی کے طریقے کا سیدھا سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-003",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "جیکٹ واپس کرنے کے لیے مجھے کتنے دن ملتے ہیں؟",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "واپسی کی مدت کا سیدھا پالیسی سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-004",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میں ORD-62542 منسوخ کرنا چاہتا ہوں، شکریہ۔",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "ایک آرڈر کی سادہ غیر مشروط منسوخی۔"
+  },
+  {
+    "id": "TST-UR-T1-005",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-62688 میں بلینڈر ٹوٹا ہوا آیا ہے — واپسی کا بندوبست کریں۔",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "ایک آرڈر کی سادہ واپسی؛ کوئی شرط نہیں۔"
+  },
+  {
+    "id": "TST-UR-T1-006",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-62803 سے ایک چیز غائب ہے؛ میں دعویٰ کرنا چاہتا ہوں۔",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "ایک آئٹم کا براہِ راست دعویٰ۔"
+  },
+  {
+    "id": "TST-UR-T1-007",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا بینک ریفنڈ ہفتے کے آخر سے پہلے آ جائے گا؟",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "رقم واپسی کے وقت کا واحد سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-008",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "براہ کرم ORD-62951 کا ڈیلیوری پتہ میرے گھر کا کر دیں۔",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "ایک آرڈر پر پتہ کی ایک تبدیلی؛ براہِ راست قابلِ عمل۔"
+  },
+  {
+    "id": "TST-UR-T1-009",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "ایکسپریس ڈیلیوری کن علاقوں میں ملتی ہے؟",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "ڈیلیوری کوریج کا سیدھا سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-010",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا میں ایک آرڈر پر دو واؤچر ایک ساتھ لگا سکتا ہوں؟",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "واؤچر کے استعمال پر براہِ راست پالیسی سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-011",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-63124 پیر سے 'راستے میں' دکھا رہا ہے — کیا یہ معمول ہے؟",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "ایک حوالے کے بارے میں ایک سوال؛ براہِ راست ٹریکنگ استفسار۔"
+  },
+  {
+    "id": "TST-UR-T1-012",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میں نے ایزی پیسہ سے ادائیگی کی تھی؛ رقم واپسی کہاں آئے گی؟",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "رقم واپسی کی منزل کا واحد سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-013",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "شام بخیر! کیا ORD-63307 کل پہنچ جائے گا؟",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "تحیت کے ساتھ ڈیلیوری اسٹیٹس کا براہِ راست سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-014",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "جو جوتے فٹ نہ آئیں انہیں واپس کیسے کروں؟",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "واپسی کے طریقہ کار کا سیدھا پالیسی سوال۔"
+  },
+  {
+    "id": "TST-UR-T1-015",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا ائیر کنڈیشنر کے ساتھ مفت انسٹالیشن ملتی ہے؟",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "مصنوعات کا سیدھا سوال؛ واحد ارادہ۔"
+  },
+  {
+    "id": "TST-UR-T2-001",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-63418 کی رقم واپس کر دیں اور ORD-63419 کی ڈیلیوری جمعرات تک کر دیں۔",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "ایک ہی پیغام میں دو مختلف آرڈرز پر دو الگ درخواستیں۔"
+  },
+  {
+    "id": "TST-UR-T2-002",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "چھوٹا قالین تبدیل کرنا بہتر ہے یا بڑا الگ سے خرید لوں؟",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "دو حل کے راستوں کے درمیان موازنہ؛ ترکیب درکار ہے۔"
+  },
+  {
+    "id": "TST-UR-T2-003",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر متبادل بھی خراب آیا تو میں مکمل رقم واپس چاہتا ہوں۔",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "متبادل کی حالت پر منحصر مشروط شاخ۔"
+  },
+  {
+    "id": "TST-UR-T2-004",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "براہ کرم ORD-63602 منسوخ کر دیں — معذرت، میرا مطلب ORD-63603 تھا۔",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "ہدف آرڈر کی تصحیح؛ دو حوالوں کے درمیان ابہام کا ازالہ۔"
+  },
+  {
+    "id": "TST-UR-T2-005",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "مجھے سب سے سستی شپنگ چاہیے مگر کل تک بھی چاہیے۔",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "متضاد شرائط جن کا حل پہلے ضروری ہے۔"
+  },
+  {
+    "id": "TST-UR-T2-006",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میرے پہلے والے آرڈر کا پارسل ابھی تک نہیں آیا۔",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "غیر متعین پہلے آرڈر کا مبہم حوالہ۔"
+  },
+  {
+    "id": "TST-UR-T2-007",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آپ کی ویب سائٹ تین دن میں ڈیلیوری کا وعدہ کرتی ہے؛ آج چھٹا دن ہے۔ کیا مجھے لیٹ ڈیلیوری واؤچر ملے گا؟",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "پالیسی کے وعدے اور اصل ڈیلیوری حقائق کی ترکیب۔"
+  },
+  {
+    "id": "TST-UR-T2-008",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-63855 کی موجودہ واپسی میں خراش والا گھڑی بھی شامل کر دیں۔",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "موجودہ واپسی میں نئی آئٹم شامل کرنے والا مرکب فالو اپ۔"
+  },
+  {
+    "id": "TST-UR-T2-009",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر میرے علاقے میں کیش آن ڈیلیوری نہ ہو تو میں آن لائن ادائیگی کروں گا — پہلے تصدیق کر دیں۔",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "کیش آن ڈیلیوری کی دستیابی پر منحصر ادائیگی کا انتخاب۔"
+  },
+  {
+    "id": "TST-UR-T2-010",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "کیا رعایتی مکسر رکھ لوں یا واپس کر کے نیا ماڈل منگواؤں؟",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "رکھنے اور واپس کرنے کے درمیان موازنہ۔"
+  },
+  {
+    "id": "TST-UR-T2-011",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر کوریئر دوپہر سے پہلے کال کرے تو میں خود لے لوں گا؛ اگر بعد میں کرے تو پڑوسی کو دے دے — اور اگر پڑوسی گھر نہ ہو تو دوبارہ شیڈول کر دے۔",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "ڈیلیوری کے لیے گہری مشروط ہدایات۔"
+  },
+  {
+    "id": "TST-UR-T2-012",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-64019 کہاں ہے، اور کیا سرخ رنگ دستیاب ہے؟",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "دو بیک وقت ارادے: ٹریکنگ اور اسٹاک کا سوال۔"
+  },
+  {
+    "id": "TST-UR-T2-013",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "نیلے ڈبے والا آرڈر — کیا وہ روانہ ہو چکا ہے؟",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "صرف پیکیجنگ سے بیان کردہ آرڈر کا مبہم حوالہ۔"
+  },
+  {
+    "id": "TST-UR-T2-014",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں نے ORD-64233 کے لیے غلط مکان نمبر لکھا تھا — 14-بی ہونا چاہیے، 41-بی نہیں۔",
+    "tags": [
+      "correction",
+      "delivery-question"
+    ],
+    "sourceNote": "پہلے دیے گئے پتے کی تفصیل کی تصحیح۔"
+  },
+  {
+    "id": "TST-UR-T2-015",
+    "split": "FINAL_TEST",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں نے گفٹ سیٹ خریدا تھا؛ پرفیوم ٹھیک ہے مگر لوشن رس گیا ہے۔ کیا میں صرف لوشن واپس کر سکتا ہوں؟",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "بنڈل سیٹ کے اندر جزوی واپسی کی ترکیب۔"
+  },
+  {
+    "id": "TST-RU-T1-001",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "salam! kya ORD-64410 dispatch ho chuka hai?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting ke saath dispatch status ka seedha sawal; ek intent."
+  },
+  {
+    "id": "TST-RU-T1-002",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya hyderabad mein COD milta hai?",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "Payment method ka seedha FAQ."
+  },
+  {
+    "id": "TST-RU-T1-003",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "jacket wapas karne ke liye mujhe kitne din miltay hain?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Return window ka seedha policy sawal."
+  },
+  {
+    "id": "TST-RU-T1-004",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "main ORD-64652 cancel karna chahta hoon, shukriya.",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "Ek order ki seedhi ghair mashroot cancellation."
+  },
+  {
+    "id": "TST-RU-T1-005",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-64781 mein blender toota hua aaya hai — return ka bandobast karein.",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "Ek order ki seedhi return; koi shart nahin."
+  },
+  {
+    "id": "TST-RU-T1-006",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-64936 se ek cheez ghaib hai; main claim karna chahta hoon.",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "Ek item ka seedha claim."
+  },
+  {
+    "id": "TST-RU-T1-007",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya bank refund weekend se pehle aa jayega?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Refund timing ka wahid sawal."
+  },
+  {
+    "id": "TST-RU-T1-008",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "please ORD-65027 ka delivery address mere ghar ka kar dein.",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "Ek order par ek address change; seedha executable."
+  },
+  {
+    "id": "TST-RU-T1-009",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "express delivery kin ilaqon mein milti hai?",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "Delivery coverage ka seedha FAQ."
+  },
+  {
+    "id": "TST-RU-T1-010",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya main ek order par do voucher ek saath laga sakta hoon?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Voucher stacking par seedha policy sawal."
+  },
+  {
+    "id": "TST-RU-T1-011",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "ORD-65219 peer se 'in transit' dikha raha hai — kya yeh normal hai?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Ek reference par ek sawal; seedha tracking inquiry."
+  },
+  {
+    "id": "TST-RU-T1-012",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "maine easypaisa se payment ki thi; refund kahan aayega?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Refund destination ka wahid sawal."
+  },
+  {
+    "id": "TST-RU-T1-013",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "shaam bakhair! kya ORD-65433 kal pahunch jayega?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting ke saath delivery status ka seedha sawal."
+  },
+  {
+    "id": "TST-RU-T1-014",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "jo jootay fit na aayein unhein wapas kaise karoon?",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "Return process ka seedha policy sawal."
+  },
+  {
+    "id": "TST-RU-T1-015",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "kya AC ke saath free installation milti hai?",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "Product ka seedha FAQ; ek intent."
+  },
+  {
+    "id": "TST-RU-T2-001",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-65518 ka refund kar dein aur ORD-65519 ki delivery jumeraat tak kar dein.",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "Ek turn mein do mukhtalif orders par do alag requests."
+  },
+  {
+    "id": "TST-RU-T2-002",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "chhota qaleen exchange karna behtar hai ya bara alag se khareed loon?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Do hal ke darmiyan mawazna; synthesis darkar."
+  },
+  {
+    "id": "TST-RU-T2-003",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "agar replacement bhi kharab aaya to main full refund chahta hoon.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Replacement ki halat par conditional branch."
+  },
+  {
+    "id": "TST-RU-T2-004",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "please ORD-65702 cancel kar dein — sorry, mera matlab ORD-65703 tha.",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "Target order ki correction; do references ka disambiguation."
+  },
+  {
+    "id": "TST-RU-T2-005",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "mujhe sab se sasti shipping chahiye lekin kal tak bhi chahiye.",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "Mutazaad sharait; pehle in ka hal zaroori."
+  },
+  {
+    "id": "TST-RU-T2-006",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "mere pehlay walay order ka parcel abhi tak nahin aaya.",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "Ghair mutayyan pehlay order ka mubham hawala."
+  },
+  {
+    "id": "TST-RU-T2-007",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "aap ki website 3 din mein delivery ka waada karti hai; aaj chhata din hai. kya mujhe late-delivery voucher milega?",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "Policy waaday aur asal delivery facts ki tarkeeb."
+  },
+  {
+    "id": "TST-RU-T2-008",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-65944 ki existing return mein scratch wali ghari bhi add kar dein.",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "Existing return mein nayi item jorne wala compound follow-up."
+  },
+  {
+    "id": "TST-RU-T2-009",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "agar mere ilaqay mein COD na ho to main online payment karoon ga — pehle confirm kar dein.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "COD availability par conditional payment choice."
+  },
+  {
+    "id": "TST-RU-T2-010",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "kya discounted mixer rakh loon ya wapas kar ke naya model mangwaoon?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Rakhne aur wapas karne ka mawazna."
+  },
+  {
+    "id": "TST-RU-T2-011",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "agar courier dopehar se pehle call kare to main khud le loon ga; agar baad mein kare to parosi ko de de — aur agar parosi ghar na ho to reschedule kar de.",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "Delivery ke liye nested conditional hidayat."
+  },
+  {
+    "id": "TST-RU-T2-012",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "ORD-66129 kahan hai, aur kya red color available hai?",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "Do ek saath intents: tracking aur stock ka sawal."
+  },
+  {
+    "id": "TST-RU-T2-013",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "neelay dabbay wala order — kya woh ship ho chuka hai?",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Sirf packaging se bayan order ka mubham hawala."
+  },
+  {
+    "id": "TST-RU-T2-014",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "maine ORD-66302 ke liye ghalat makaan number likha tha — 14-B hona chahiye, 41-B nahin.",
+    "tags": [
+      "correction",
+      "delivery-question"
+    ],
+    "sourceNote": "Pehle diye gaye address ki correction."
+  },
+  {
+    "id": "TST-RU-T2-015",
+    "split": "FINAL_TEST",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "maine gift set khareeda tha; perfume theek hai lekin lotion leak ho gaya hai. kya main sirf lotion wapas kar sakta hoon?",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "Bundle set ke andar partial return ki tarkeeb."
+  },
+  {
+    "id": "TST-CS-T1-001",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Hi! Kya ORD-66415 dispatch ho chuka hai?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Single dispatch-status intent; language mixing does not add complexity."
+  },
+  {
+    "id": "TST-CS-T1-002",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Is COD available in Hyderabad?",
+    "tags": [
+      "faq",
+      "payment-question"
+    ],
+    "sourceNote": "Direct payment FAQ; one intent."
+  },
+  {
+    "id": "TST-CS-T1-003",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Jacket return karne ki deadline kya hai?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Straightforward return-window policy question."
+  },
+  {
+    "id": "TST-CS-T1-004",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Main ORD-66642 cancel karna chahta hoon, please.",
+    "tags": [
+      "cancellation"
+    ],
+    "sourceNote": "Simple unconditional cancellation of one order."
+  },
+  {
+    "id": "TST-CS-T1-005",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Blender cracked aaya hai in ORD-66730, return arrange kar dein.",
+    "tags": [
+      "return-request"
+    ],
+    "sourceNote": "Simple single-order return; no conditions."
+  },
+  {
+    "id": "TST-CS-T1-006",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "One item missing hai from ORD-66819, claim raise karna hai.",
+    "tags": [
+      "claim-request"
+    ],
+    "sourceNote": "Direct single-item claim; one intent."
+  },
+  {
+    "id": "TST-CS-T1-007",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Bank refund weekend se pehle aa jayega kya?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Single refund-timing question."
+  },
+  {
+    "id": "TST-CS-T1-008",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "ORD-66905 ka address mere ghar ka update kar dein, please.",
+    "tags": [
+      "delivery-question",
+      "single-lookup"
+    ],
+    "sourceNote": "One address change on one order; directly executable."
+  },
+  {
+    "id": "TST-CS-T1-009",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Express delivery kin areas mein available hai?",
+    "tags": [
+      "delivery-question",
+      "faq"
+    ],
+    "sourceNote": "Straightforward delivery-coverage FAQ."
+  },
+  {
+    "id": "TST-CS-T1-010",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Can I use do vouchers on ek order?",
+    "tags": [
+      "faq",
+      "policy-question"
+    ],
+    "sourceNote": "Direct voucher-stacking policy question."
+  },
+  {
+    "id": "TST-CS-T1-011",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "ORD-67038 Monday se in transit show ho raha hai — is this normal?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "One question about one order reference."
+  },
+  {
+    "id": "TST-CS-T1-012",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Maine Easypaisa se pay kiya tha, refund kahan jayega?",
+    "tags": [
+      "payment-question"
+    ],
+    "sourceNote": "Single refund-destination question."
+  },
+  {
+    "id": "TST-CS-T1-013",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Good evening! ORD-67211 kal deliver hoga kya?",
+    "tags": [
+      "greeting",
+      "order-status"
+    ],
+    "sourceNote": "Greeting plus direct delivery-status lookup."
+  },
+  {
+    "id": "TST-CS-T1-014",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Tight shoes wapas karne ka process kya hai?",
+    "tags": [
+      "policy-question",
+      "return-request"
+    ],
+    "sourceNote": "Direct return-process policy question."
+  },
+  {
+    "id": "TST-CS-T1-015",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Kya AC ke saath installation free hai?",
+    "tags": [
+      "faq"
+    ],
+    "sourceNote": "Simple product FAQ; one intent."
+  },
+  {
+    "id": "TST-CS-T2-001",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "ORD-67319 ka refund kar dein, aur ORD-67320 ki delivery Thursday tak move kar dein.",
+    "tags": [
+      "multi-intent",
+      "multi-order"
+    ],
+    "sourceNote": "Do orders par do alag requests — ek hi turn mein."
+  },
+  {
+    "id": "TST-CS-T2-002",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Chhota rug exchange karoon ya bigger one alag se buy kar loon?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Do resolution paths ka mawazna; synthesis chahiye."
+  },
+  {
+    "id": "TST-CS-T2-003",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Agar replacement bhi damaged aaya, I want a full refund instead.",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "Replacement ki condition par conditional branch."
+  },
+  {
+    "id": "TST-CS-T2-004",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Cancel ORD-67502 please — sorry, I meant ORD-67503, not 67502.",
+    "tags": [
+      "correction",
+      "multi-order"
+    ],
+    "sourceNote": "Target order ki correction; do references ka disambiguation."
+  },
+  {
+    "id": "TST-CS-T2-005",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Mujhe cheapest shipping chahiye, but I need it by tomorrow.",
+    "tags": [
+      "conflicting-constraints"
+    ],
+    "sourceNote": "Conflicting constraints; pehle resolution zaroori."
+  },
+  {
+    "id": "TST-CS-T2-006",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Mere earlier order ka package abhi tak nahin aaya.",
+    "tags": [
+      "ambiguous-reference",
+      "order-status"
+    ],
+    "sourceNote": "Unspecified earlier order ka ambiguous reference."
+  },
+  {
+    "id": "TST-CS-T2-007",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Website 3-day delivery promise karti hai; it's day 6. Kya mujhe late-delivery voucher milega?",
+    "tags": [
+      "synthesis",
+      "policy-question"
+    ],
+    "sourceNote": "Policy promise aur actual delivery facts ki synthesis."
+  },
+  {
+    "id": "TST-CS-T2-008",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Scratched watch bhi add kar dein to my existing return for ORD-67741.",
+    "tags": [
+      "compound-followup",
+      "return-request"
+    ],
+    "sourceNote": "Existing return mein nayi item jorne wala compound follow-up."
+  },
+  {
+    "id": "TST-CS-T2-009",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Agar mere area mein COD available nahin, I'll pay online — pehle confirm kar dein?",
+    "tags": [
+      "conditional"
+    ],
+    "sourceNote": "COD availability par conditional payment choice."
+  },
+  {
+    "id": "TST-CS-T2-010",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Discounted mixer rakh loon ya return karke newer model order karoon?",
+    "tags": [
+      "comparison"
+    ],
+    "sourceNote": "Keep vs return ka mawazna across products."
+  },
+  {
+    "id": "TST-CS-T2-011",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Agar courier noon se pehle call kare I'll collect it myself; agar baad mein to neighbor ko de de — and agar neighbor ghar na ho, reschedule kar dein.",
+    "tags": [
+      "nested-conditional"
+    ],
+    "sourceNote": "Timing par nested conditional delivery instructions."
+  },
+  {
+    "id": "TST-CS-T2-012",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "ORD-67903 kahan hai, and kya red variant stock mein hai?",
+    "tags": [
+      "multi-intent"
+    ],
+    "sourceNote": "Do simultaneous intents: tracking + stock question."
+  },
+  {
+    "id": "TST-CS-T2-013",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Woh blue box wala order — has it shipped yet?",
+    "tags": [
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Sirf packaging se describe order ka ambiguous reference."
+  },
+  {
+    "id": "TST-CS-T2-014",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Maine ORD-68055 ke liye wrong house number diya tha — it should be 14-B, not 41-B.",
+    "tags": [
+      "correction",
+      "delivery-question"
+    ],
+    "sourceNote": "Pehle diye gaye address ki correction."
+  },
+  {
+    "id": "TST-CS-T2-015",
+    "split": "FINAL_TEST",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Gift set liya tha; perfume is fine lekin lotion leak ho gaya — can I return just the lotion?",
+    "tags": [
+      "synthesis"
+    ],
+    "sourceNote": "Bundle set ke andar partial return ki synthesis."
+  }
+]

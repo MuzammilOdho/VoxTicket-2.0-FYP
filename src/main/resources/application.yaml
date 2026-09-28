@@ -122,7 +122,7 @@ voxticket:
         temperature: 0.3
         max-output-tokens: 1024
         reasoning-effort: none
-        timeout-seconds: 60
+        timeout-seconds: 20
         max-retries: 0
       tier2:
         provider: GROQ
@@ -130,7 +130,7 @@ voxticket:
         temperature: 0.3
         max-output-tokens: 1536
         reasoning-effort: high
-        timeout-seconds: 60
+        timeout-seconds: 20
         max-retries: 0
 
     selector:
@@ -150,10 +150,11 @@ voxticket:
         model-path: ${ROUTING_MODEL_PATH:}
         examples: classpath:routing/examples-v1.json
         top-k-per-class: 3
-        # Temporary placeholder margins - NOT scientifically calibrated.
-        # Threshold calibration belongs to Phase 3; do not tune to make examples pass.
+        # complex-margin is not calibrated (Phase 3 finding): it only selects the
+        # TIER_2 reason label (SEMANTIC_COMPLEX vs SEMANTIC_AMBIGUOUS), never the tier.
         complex-margin: 0.02
-        simple-margin: 0.02
+        # Calibrated in Phase 3 on the 120-example validation set (was 0.02).
+        simple-margin: 0.01135858377758675
   rag:
     top-k: 3
     similarity-threshold: 0.5

@@ -25,8 +25,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *         model-path: ${ROUTING_MODEL_PATH:}
  *         examples: classpath:routing/examples-v1.json
  *         top-k-per-class: 3
- *         complex-margin: 0.02   # placeholder, NOT calibrated (Phase 3)
- *         simple-margin: 0.02    # placeholder, NOT calibrated (Phase 3)
+ *         complex-margin: 0.02   # not calibrated (Phase 3): reason label only
+ *         simple-margin: 0.01135858377758675   # calibrated in Phase 3 on the validation set
  * </pre>
  */
 @ConfigurationProperties(prefix = "voxticket.ai.selector")
@@ -46,7 +46,7 @@ public record RoutingProperties(
         }
         if (semantic == null) {
             semantic = new SemanticRoutingProperties(true, "intfloat/multilingual-e5-small", "",
-                    "classpath:routing/examples-v1.json", 3, 0.02, 0.02);
+                    "classpath:routing/examples-v1.json", 3, 0.02, 0.01135858377758675);
         }
     }
 }

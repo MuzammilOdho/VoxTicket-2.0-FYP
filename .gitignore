@@ -20,6 +20,10 @@ application-secret.properties
 application-secret.yml
 application-secret.yaml
 
+# Phase 2/3: local routing model artifacts (downloaded once, never committed)
+*.onnx
+models/
+
 ### Logs ###
 *.log
 logs/
@@ -73,8 +77,3 @@ Desktop.ini
 *.swp
 *.swo
 *~
-
-
-models/
-*.onnx
-.env

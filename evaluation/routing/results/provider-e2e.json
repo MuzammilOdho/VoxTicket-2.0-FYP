@@ -1,0 +1,6 @@
+{
+  "status" : "NOT_VALIDLY_EXECUTABLE",
+  "reason" : "no provider credentials in environment (GEMINI_API_KEY/GROQ_API_KEY/CEREBRAS_API_KEY all absent)",
+  "checkedAt" : "2026-09-27T22:08:21.474143883Z",
+  "note" : "Provider-backed E2E remains future research work; the deterministic router-only Phase 3 experiment stands on its own."
+}

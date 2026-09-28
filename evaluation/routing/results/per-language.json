@@ -1,0 +1,97 @@
+{
+  "strategy" : "HYBRID_CALIBRATED",
+  "byLanguage" : {
+    "CODE_SWITCH" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 10,
+        "fp" : 9,
+        "tn" : 6,
+        "fn" : 5
+      },
+      "accuracy" : 0.5333333333333333,
+      "balancedAccuracy" : 0.5333333333333333,
+      "macroF1" : 0.5248868778280543,
+      "t2Precision" : 0.5263157894736842,
+      "t2Recall" : 0.6666666666666666,
+      "t2F1" : 0.5882352941176471,
+      "t1Precision" : 0.5454545454545454,
+      "t1Recall" : 0.4,
+      "t1F1" : 0.4615384615384615,
+      "underRouted" : 5,
+      "underRouteRate" : 0.3333333333333333,
+      "overRouted" : 9,
+      "overRouteRate" : 0.6,
+      "t2SelectionRate" : 0.6333333333333333
+    },
+    "ENGLISH" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 11,
+        "fp" : 7,
+        "tn" : 8,
+        "fn" : 4
+      },
+      "accuracy" : 0.6333333333333333,
+      "balancedAccuracy" : 0.6333333333333333,
+      "macroF1" : 0.6296296296296295,
+      "t2Precision" : 0.6111111111111112,
+      "t2Recall" : 0.7333333333333333,
+      "t2F1" : 0.6666666666666666,
+      "t1Precision" : 0.6666666666666666,
+      "t1Recall" : 0.5333333333333333,
+      "t1F1" : 0.5925925925925926,
+      "underRouted" : 4,
+      "underRouteRate" : 0.26666666666666666,
+      "overRouted" : 7,
+      "overRouteRate" : 0.4666666666666667,
+      "t2SelectionRate" : 0.6
+    },
+    "ROMAN_URDU" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 14,
+        "fp" : 6,
+        "tn" : 9,
+        "fn" : 1
+      },
+      "accuracy" : 0.7666666666666667,
+      "balancedAccuracy" : 0.7666666666666666,
+      "macroF1" : 0.76,
+      "t2Precision" : 0.7,
+      "t2Recall" : 0.9333333333333333,
+      "t2F1" : 0.8,
+      "t1Precision" : 0.9,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7200000000000001,
+      "underRouted" : 1,
+      "underRouteRate" : 0.06666666666666667,
+      "overRouted" : 6,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.6666666666666666
+    },
+    "URDU" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 10,
+        "fp" : 5,
+        "tn" : 10,
+        "fn" : 5
+      },
+      "accuracy" : 0.6666666666666666,
+      "balancedAccuracy" : 0.6666666666666666,
+      "macroF1" : 0.6666666666666666,
+      "t2Precision" : 0.6666666666666666,
+      "t2Recall" : 0.6666666666666666,
+      "t2F1" : 0.6666666666666666,
+      "t1Precision" : 0.6666666666666666,
+      "t1Recall" : 0.6666666666666666,
+      "t1F1" : 0.6666666666666666,
+      "underRouted" : 5,
+      "underRouteRate" : 0.3333333333333333,
+      "overRouted" : 5,
+      "overRouteRate" : 0.3333333333333333,
+      "t2SelectionRate" : 0.5
+    }
+  }
+}

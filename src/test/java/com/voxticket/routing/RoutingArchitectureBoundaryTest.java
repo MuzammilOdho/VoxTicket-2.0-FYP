@@ -1,23 +1,30 @@
 package com.voxticket.routing;
 
-import com.voxticket.agent.ModelSelector;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
-import org.springframework.core.type.filter.AssignableTypeFilter;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
+import com.voxticket.agent.ModelSelector;
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * Phase 2: architecture boundaries. The router decides ONLY the tier - it must never name a
  * provider or model, never touch authorization/OTP/eligibility, and never fall back between
  * providers or strategies.
+ *
+ * <p>All scans below are anchored to the <em>production</em> classes root (resolved from a
+ * known production class's code source). Test and evaluation classes live under a different
+ * classes root and are excluded by origin - not by name pattern - so current and future
+ * research harnesses can never trip these production boundaries.
  */
 class RoutingArchitectureBoundaryTest {
 
@@ -33,23 +40,59 @@ class RoutingArchitectureBoundaryTest {
     private static final Set<String> ALLOWED = Set.of(
             "SemanticRoutingProperties#model", "SemanticRoutingProperties#modelPath");
 
-    /** Every production class under com.voxticket.routing, including the embedding subpackage. */
+    /**
+     * The production classes root, resolved from a known production class's code source
+     * (e.g. {@code target/classes} under Maven). Anchoring the scan here - instead of
+     * scanning the whole test classpath - is what keeps test/evaluation classes out of
+     * these production boundaries, no matter what they are named.
+     */
+    private static Path productionClassesRoot() {
+        var location = RoutingDecision.class.getProtectionDomain().getCodeSource().getLocation();
+        assertThat(location).as("production code-source location").isNotNull();
+        try {
+            return Path.of(location.toURI());
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("Cannot resolve production classes root", e);
+        }
+    }
+
+    private static Path codeSourcePath(Class<?> c) {
+        var location = c.getProtectionDomain().getCodeSource().getLocation();
+        assertThat(location).as("code source of %s", c.getName()).isNotNull();
+        try {
+            return Path.of(location.toURI());
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("Cannot resolve code source of " + c.getName(), e);
+        }
+    }
+
+    /**
+     * Every production class under com.voxticket.routing, including the embedding subpackage
+     * and nested classes. Test classes (including the Phase 3 {@code routing.eval} research
+     * harness) are compiled to a different classes root and can never appear here.
+     */
     private static Set<Class<?>> routingClasses() {
-        var scanner = new ClassPathScanningCandidateComponentProvider(false);
-        scanner.addIncludeFilter(new AssignableTypeFilter(Object.class));
-        return scanner.findCandidateComponents("com.voxticket.routing").stream()
-                .map(BeanDefinition::getBeanClassName)
-                .map(name -> {
-                    try {
-                        return Class.forName(name);
-                    } catch (ClassNotFoundException e) {
-                        throw new IllegalStateException(e);
-                    }
-                })
-                // Boundaries govern production code; test-class names (e.g. *ModelDirectory* tests)
-                // would otherwise trip the fragment scan.
-                .filter(c -> !c.getSimpleName().endsWith("Test"))
-                .collect(Collectors.toSet());
+        Path classesRoot = productionClassesRoot();
+        Path routingRoot = classesRoot.resolve(Path.of("com", "voxticket", "routing"));
+        try (var paths = Files.walk(routingRoot)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".class"))
+                    .map(classesRoot::relativize)
+                    .map(p -> p.toString()
+                            .replace(File.separatorChar, '.')
+                            .replaceAll("\\.class$", ""))
+                    .map(name -> {
+                        try {
+                            return Class.forName(name);
+                        } catch (ClassNotFoundException e) {
+                            throw new IllegalStateException(
+                                    "Cannot load production routing class " + name, e);
+                        }
+                    })
+                    .collect(Collectors.toSet());
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot scan production routing classes", e);
+        }
     }
 
     @Test
@@ -106,5 +149,36 @@ class RoutingArchitectureBoundaryTest {
 
         assertThat(prefix).isEqualTo("voxticket.ai.selector");
         assertThat(prefix).doesNotContain("provider").doesNotContain("model");
+    }
+
+    /**
+     * Regression guard: the production scan above must see production classes only. The Phase 3
+     * research harness ({@code com.voxticket.routing.eval}) sits on the test classpath and its
+     * names trip the forbidden fragments ({@code Phase3ProviderE2E} contains "provider",
+     * {@code RunInfo} declares {@code model()}/{@code modelInitMs()}) - if it ever leaked into
+     * the scan, {@link #noRoutingClassMentionsProvidersModelsOtpOrFallback()} would fail for
+     * reasons unrelated to production code. Exclusion is by class-file origin, so future
+     * eval/research classes are covered without any name-pattern maintenance.
+     */
+    @Test
+    void productionScanExcludesTestAndEvalClasses() {
+        Set<Class<?>> scanned = routingClasses();
+        assertThat(scanned).as("production routing scan").isNotEmpty();
+
+        // Load-bearing: these test-scoped classes exist on the test classpath...
+        assertThatCode(() -> Class.forName("com.voxticket.routing.eval.Phase3ProviderE2E"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> Class.forName("com.voxticket.routing.eval.Phase3EvaluationSuite$RunInfo"))
+                .doesNotThrowAnyException();
+
+        // ...but none of them may leak into the production boundary scan.
+        assertThat(scanned.stream().map(Class::getName).collect(Collectors.toSet()))
+                .noneMatch(n -> n.startsWith("com.voxticket.routing.eval."));
+
+        // Belt and braces: every scanned class really comes from the production classes root.
+        Path root = productionClassesRoot();
+        for (Class<?> c : scanned) {
+            assertThat(codeSourcePath(c)).as("code source of %s", c.getName()).isEqualTo(root);
+        }
     }
 }

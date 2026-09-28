@@ -5,9 +5,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * Phase 2: semantic routing knobs, bound from {@code voxticket.ai.selector.semantic}.
  *
- * <p>The margins are TEMPORARY PLACEHOLDER defaults only - they are not scientifically
- * calibrated. Threshold calibration belongs to Phase 3; do not tune them to make examples
- * pass.
+ * <p>{@code simpleMargin} was calibrated in Phase 3 on the 120-example held-out
+ * validation set (objective: maximize balanced accuracy; tie-breaks: lower
+ * under-routing, higher macro-F1, lower TIER_2 selection rate). {@code complexMargin}
+ * is intentionally NOT calibrated: it only renames the TIER_2 reason
+ * ({@code SEMANTIC_COMPLEX} vs {@code SEMANTIC_AMBIGUOUS}) and is not identifiable
+ * from binary tier labels.
  */
 public record SemanticRoutingProperties(
         @DefaultValue("true") boolean enabled,
@@ -16,8 +19,11 @@ public record SemanticRoutingProperties(
         @DefaultValue("") String modelPath,
         @DefaultValue("classpath:routing/examples-v1.json") String examples,
         @DefaultValue("3") int topKPerClass,
-        /** Temporary placeholder - NOT calibrated (Phase 3). */
+        /**
+         * Not calibrated (Phase 3 finding): only selects the TIER_2 reason label,
+         * never the tier itself. Kept at the Phase 2 value.
+         */
         @DefaultValue("0.02") double complexMargin,
-        /** Temporary placeholder - NOT calibrated (Phase 3). */
-        @DefaultValue("0.02") double simpleMargin) {
+        /** Calibrated in Phase 3 (was the 0.02 placeholder). */
+        @DefaultValue("0.01135858377758675") double simpleMargin) {
 }

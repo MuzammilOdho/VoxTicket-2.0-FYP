@@ -1,0 +1,56 @@
+{
+  "timestamp": "2026-09-28T03:40:00+05:00",
+  "gitSha": "0bf8b0a0de4cbfee8aff70e3395c9a565019bc92",
+  "branch": "converstaion",
+  "note": "Live provider-backed validation was BLOCKED: no provider credentials present in the environment. Transport-layer reachability was verified without credentials (no key sent).",
+  "credentials": {
+    "GEMINI_API_KEY": "absent",
+    "GROQ_API_KEY": "absent",
+    "CEREBRAS_API_KEY": "absent"
+  },
+  "transportChecks": [
+    {
+      "provider": "GOOGLE",
+      "host": "generativelanguage.googleapis.com",
+      "method": "GET / (no auth header sent)",
+      "httpStatus": 404,
+      "connectS": 0.0019,
+      "totalS": 0.4841,
+      "verdict": "REACHABLE"
+    },
+    {
+      "provider": "GROQ",
+      "host": "api.groq.com",
+      "method": "GET /openai/v1/models (no auth header sent)",
+      "httpStatus": 401,
+      "connectS": 0.0007,
+      "totalS": 0.3082,
+      "verdict": "REACHABLE (401 = missing auth, as expected without key)"
+    },
+    {
+      "provider": "CEREBRAS",
+      "host": "api.cerebras.ai",
+      "method": "GET /v1/models (no auth header sent)",
+      "httpStatus": 403,
+      "connectS": 0.0007,
+      "totalS": 0.6921,
+      "verdict": "REACHABLE (403 = no auth, as expected without key)"
+    }
+  ],
+  "configuredModels": {
+    "tier1": {
+      "provider": "GOOGLE",
+      "model": "gemini-3.6-flash",
+      "maxRetries": 0
+    },
+    "tier2": {
+      "provider": "GROQ",
+      "model": "openai/gpt-oss-20b",
+      "maxRetries": 0
+    },
+    "extra": {
+      "provider": "CEREBRAS",
+      "enabled": true
+    }
+  }
+}
