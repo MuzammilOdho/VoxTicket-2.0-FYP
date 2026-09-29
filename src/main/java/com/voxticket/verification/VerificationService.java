@@ -73,19 +73,22 @@ public class VerificationService {
         Optional<VerificationChallenge> latest = repository.findFirstBySessionIdOrderByCreatedAtDesc(session.getSessionId());
         if (latest.isPresent() && !latest.get().isConsumed()
                 && Duration.between(latest.get().getCreatedAt(), Instant.now()).compareTo(resendCooldown) < 0) {
-            return VerificationOutcome.error("A code was already sent - please wait a moment before requesting another.");
+            return VerificationOutcome.error(VerificationIssueCode.RESEND_COOLDOWN,
+                    "A code was already sent - please wait a moment before requesting another.");
         }
 
         long sessionCount = repository.countBySessionIdAndCreatedAtAfter(session.getSessionId(), Instant.now().minus(Duration.ofDays(1)));
         if (sessionCount >= maxChallengesPerSession) {
             log.warn("event=otp_rate_limited sessionId={} scope=session count={}", session.getSessionId(), sessionCount);
-            return VerificationOutcome.error("Too many verification attempts for this conversation - please try again later or ask for a human agent.");
+            return VerificationOutcome.error(VerificationIssueCode.SESSION_RATE_LIMITED,
+                    "Too many verification attempts for this conversation - please try again later or ask for a human agent.");
         }
 
         long customerCount = repository.countByCustomerIdAndCreatedAtAfter(customerId, Instant.now().minus(Duration.ofHours(1)));
         if (customerCount >= maxChallengesPerCustomerPerHour) {
             log.warn("event=otp_rate_limited customerId={} scope=customer count={}", customerId, customerCount);
-            return VerificationOutcome.error("Too many verification attempts recently - please try again later or ask for a human agent.");
+            return VerificationOutcome.error(VerificationIssueCode.CUSTOMER_RATE_LIMITED,
+                    "Too many verification attempts recently - please try again later or ask for a human agent.");
         }
 
         String plainOtp = generateOtp();
@@ -110,7 +113,12 @@ public class VerificationService {
         log.info("event=otp_issued customerId={} sessionId={} channel={} purpose={} procedureId={} orderNumber={}",
                 customerId, session.getSessionId(), channel, purpose, procedureId, orderNumber);
 
-        Map<String, String> metadata = channel == OtpDeliveryChannel.DEV ? Map.of("devOtp", plainOtp) : Map.of();
+        // Pass 2C (Task 6): the masked destination travels as structured metadata so the
+        // deterministic direct renderer can name where the code went without ever
+        // seeing OTP material. devOtp stays DEV-only and model-invisible, as before.
+        Map<String, String> metadata = channel == OtpDeliveryChannel.DEV
+                ? Map.of("devOtp", plainOtp, "maskedDestination", maskedDestination)
+                : Map.of("maskedDestination", maskedDestination);
         return VerificationOutcome.challengeIssued(
                 "I've sent a 6-digit verification code to " + maskedDestination + ". Could you read that back to me once you receive it?", metadata);
     }
@@ -119,25 +127,29 @@ public class VerificationService {
     public VerificationResult verify(ConversationSession session, String submittedCode, UUID expectedProcedureId, String expectedOrderNumber) {
         UUID challengeId = session.getPendingVerificationChallengeId().orElse(null);
         if (challengeId == null) {
-            return VerificationResult.error("There's no verification code pending right now.");
+            return VerificationResult.error(VerificationResultCode.NO_PENDING,
+                    "There's no verification code pending right now.");
         }
         VerificationChallenge challenge = repository.findById(challengeId).orElse(null);
         if (challenge == null || challenge.isConsumed()) {
             session.clearPendingVerification();
-            return VerificationResult.error("That verification code is no longer valid - let's request a new one.");
+            return VerificationResult.error(VerificationResultCode.NO_LONGER_VALID,
+                    "That verification code is no longer valid - let's request a new one.");
         }
         if (!challenge.getProcedureId().equals(expectedProcedureId) || !challenge.getOrderNumber().equals(expectedOrderNumber)) {
             // Should never happen given only one challenge is ever pending per session, but an
             // OTP must never be usable for anything other than the exact action it was issued for.
             log.warn("event=otp_binding_mismatch sessionId={} expectedProcedureId={} expectedOrderNumber={}",
                     session.getSessionId(), expectedProcedureId, expectedOrderNumber);
-            return VerificationResult.error("That verification code doesn't match what we're trying to verify - let's request a new one.");
+            return VerificationResult.error(VerificationResultCode.BINDING_MISMATCH,
+                    "That verification code doesn't match what we're trying to verify - let's request a new one.");
         }
         if (challenge.isExpired()) {
             challenge.markConsumedWithoutVerification();
             session.clearPendingVerification();
             log.info("event=otp_expired sessionId={}", session.getSessionId());
-            return VerificationResult.error("That code has expired - let's request a new one.");
+            return VerificationResult.error(VerificationResultCode.EXPIRED,
+                    "That code has expired - let's request a new one.");
         }
         if (!hash(submittedCode, challenge.getOtpSalt()).equals(challenge.getOtpHash())) {
             challenge.recordFailedAttempt();
@@ -145,10 +157,12 @@ public class VerificationService {
                 challenge.markConsumedWithoutVerification();
                 session.clearPendingVerification();
                 log.warn("event=otp_verification_failed sessionId={} outcome=max_attempts_exceeded", session.getSessionId());
-                return VerificationResult.error("That code didn't match too many times - let's request a new one.");
+                return VerificationResult.error(VerificationResultCode.MAX_ATTEMPTS_EXCEEDED,
+                        "That code didn't match too many times - let's request a new one.");
             }
             log.warn("event=otp_verification_failed sessionId={} outcome=wrong_code attempts={}", session.getSessionId(), challenge.getAttempts());
-            return VerificationResult.error("That code didn't match - please double check and try again.");
+            return VerificationResult.error(VerificationResultCode.WRONG_CODE,
+                    "That code didn't match - please double check and try again.");
         }
 
         challenge.markVerified();

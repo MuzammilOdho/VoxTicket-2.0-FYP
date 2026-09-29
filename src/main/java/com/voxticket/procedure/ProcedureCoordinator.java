@@ -119,8 +119,9 @@ public class ProcedureCoordinator {
         long startNanos = System.nanoTime();
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return recordOutcome(session, ProcedureType.CANCELLATION,
-                    ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."), orderReference, startNanos);
+            return withMetadata(recordOutcome(session, ProcedureType.CANCELLATION,
+                    ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."), orderReference, startNanos),
+                    Map.of("orderReference", orderReference));
         }
         session.recordFocusOrder(ref.orderNumber());
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
@@ -128,90 +129,121 @@ public class ProcedureCoordinator {
                 .orElseThrow(() -> new IllegalStateException("Order has no payment record: " + ref.orderNumber()));
         CancellationEligibility eligibility = cancellationPolicyService.evaluate(order, payment);
         if (!eligibility.eligible()) {
-            return recordOutcome(session, ProcedureType.CANCELLATION,
+            return withMetadata(recordOutcome(session, ProcedureType.CANCELLATION,
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This order is not eligible for cancellation (" + eligibility.denialReason() + ")."),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    cancellationMetadata(ref.orderNumber(), eligibility));
         }
         String description = "cancel order " + ref.orderNumber() + "." + describePaymentConsequence(eligibility.paymentConsequence());
-        return beginProcedure(session, ProcedureType.CANCELLATION, ref, Map.of(), true, description, startNanos);
+        ProcedureOutcome raw = beginProcedure(session, ProcedureType.CANCELLATION, ref, Map.of(), true, description, startNanos);
+        Map<String, String> extra = new LinkedHashMap<>();
+        extra.put("orderReference", ref.orderNumber());
+        if ("VERIFICATION_REQUIRED".equals(raw.code())) {
+            extra.put("paymentConsequence", eligibility.paymentConsequence().name());
+        }
+        return withMetadata(raw, extra);
     }
 
     public ProcedureOutcome startReturn(ConversationSession session, String orderReference, String itemReference, String reasonText) {
         long startNanos = System.nanoTime();
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return recordOutcome(session, ProcedureType.RETURN,
-                    ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."), orderReference, startNanos);
+            return withMetadata(recordOutcome(session, ProcedureType.RETURN,
+                    ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."), orderReference, startNanos),
+                    Map.of("orderReference", orderReference));
         }
         session.recordFocusOrder(ref.orderNumber());
         OrderItem item;
         try {
             item = resolveItemWithFocusFallback(session, ref, itemReference);
         } catch (ResourceNotFoundForAccountException e) {
-            return recordOutcome(session, ProcedureType.RETURN,
+            return withMetadata(recordOutcome(session, ProcedureType.RETURN,
                     ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    Map.of("orderReference", ref.orderNumber()));
         } catch (AmbiguousItemException e) {
             String candidates = e.getCandidates().stream().map(OrderItem::getProductName).collect(Collectors.joining(", "));
-            return recordOutcome(session, ProcedureType.RETURN,
+            return withMetadata(recordOutcome(session, ProcedureType.RETURN,
                     ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    ambiguousItemMetadata(ref.orderNumber(), e));
         }
         session.recordFocusItem(item.getSku(), item.getProductName());
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
         if (!eligibility.eligible()) {
-            return recordOutcome(session, ProcedureType.RETURN,
+            return withMetadata(recordOutcome(session, ProcedureType.RETURN,
                     ProcedureOutcome.error("NOT_ELIGIBLE", "This item is not eligible for return (" + eligibility.denialReason() + ")."),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    returnDenialMetadata(ref.orderNumber(), item.getProductName(), eligibility));
         }
         if (reasonText == null || reasonText.isBlank()) {
-            return recordOutcome(session, ProcedureType.RETURN, ProcedureOutcome.error("REASON_REQUIRED",
+            return withMetadata(recordOutcome(session, ProcedureType.RETURN, ProcedureOutcome.error("REASON_REQUIRED",
                             "Could you tell me why you'd like to return the " + item.getProductName() + " - for example wrong size, damaged, or you changed your mind?"),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    Map.of("orderReference", ref.orderNumber(), "itemName", item.getProductName()));
         }
         ReturnReason reason = parseReturnReason(reasonText);
         Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name());
         String description = "start a return for " + item.getProductName() + " from order " + ref.orderNumber();
-        return beginProcedure(session, ProcedureType.RETURN, ref, data, true, description, startNanos);
+        ProcedureOutcome raw = beginProcedure(session, ProcedureType.RETURN, ref, data, true, description, startNanos);
+        return withMetadata(raw, Map.of(
+                "orderReference", ref.orderNumber(),
+                "itemName", item.getProductName(),
+                "returnReason", reason.name()));
     }
 
     public ProcedureOutcome startClaim(ConversationSession session, String orderReference, String itemReference, String problemText) {
         long startNanos = System.nanoTime();
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
-            return recordOutcome(session, ProcedureType.CLAIM,
-                    ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."), orderReference, startNanos);
+            return withMetadata(recordOutcome(session, ProcedureType.CLAIM,
+                    ProcedureOutcome.error("NOT_FOUND_FOR_ACCOUNT", "That order doesn't match any of the customer's own orders."), orderReference, startNanos),
+                    Map.of("orderReference", orderReference));
         }
         session.recordFocusOrder(ref.orderNumber());
         OrderItem item;
         try {
             item = resolveItemWithFocusFallback(session, ref, itemReference);
         } catch (ResourceNotFoundForAccountException e) {
-            return recordOutcome(session, ProcedureType.CLAIM,
+            return withMetadata(recordOutcome(session, ProcedureType.CLAIM,
                     ProcedureOutcome.error("ITEM_REQUIRED", "I couldn't match that to an item on this order - could you describe which item you mean?"),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    Map.of("orderReference", ref.orderNumber()));
         } catch (AmbiguousItemException e) {
             String candidates = e.getCandidates().stream().map(OrderItem::getProductName).collect(Collectors.joining(", "));
-            return recordOutcome(session, ProcedureType.CLAIM,
+            return withMetadata(recordOutcome(session, ProcedureType.CLAIM,
                     ProcedureOutcome.error("ITEM_REQUIRED", "This order has a few items that could match: " + candidates + ". Which one did you mean?"),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    ambiguousItemMetadata(ref.orderNumber(), e));
         }
         session.recordFocusItem(item.getSku(), item.getProductName());
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
-            return recordOutcome(session, ProcedureType.CLAIM,
-                    ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."), ref.orderNumber(), startNanos);
+            return withMetadata(recordOutcome(session, ProcedureType.CLAIM,
+                    ProcedureOutcome.error("NOT_ELIGIBLE", "Cannot file a claim against a cancelled order."), ref.orderNumber(), startNanos),
+                    Map.of("orderReference", ref.orderNumber(), "itemName", item.getProductName()));
         }
         if (problemText == null || problemText.isBlank()) {
-            return recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("PROBLEM_REQUIRED",
+            return withMetadata(recordOutcome(session, ProcedureType.CLAIM, ProcedureOutcome.error("PROBLEM_REQUIRED",
                             "Could you tell me what happened with the " + item.getProductName() + " - for example was it damaged, defective, the wrong item, or missing?"),
-                    ref.orderNumber(), startNanos);
+                    ref.orderNumber(), startNanos),
+                    Map.of("orderReference", ref.orderNumber(), "itemName", item.getProductName()));
         }
         ClaimReason reason = parseClaimReason(problemText);
         Map<String, String> data = Map.of("itemReference", item.getSku(), "reason", reason.name(), "description", problemText);
         String description = "file a claim for " + item.getProductName() + " on order " + ref.orderNumber() + " (" + reason.name().toLowerCase(Locale.ROOT) + ")";
-        return beginProcedure(session, ProcedureType.CLAIM, ref, data, false, description, startNanos);
+        ProcedureOutcome raw = beginProcedure(session, ProcedureType.CLAIM, ref, data, false, description, startNanos);
+        Map<String, String> extra = new LinkedHashMap<>();
+        extra.put("orderReference", ref.orderNumber());
+        extra.put("itemName", item.getProductName());
+        extra.put("claimReason", reason.name());
+        if ("CONFIRMATION_REQUIRED".equals(raw.code())) {
+            // Customer-supplied words only: lets the model confirm what is
+            // awaiting confirmation without relying on coordinator prose.
+            extra.put("problemDescription", problemText);
+        }
+        return withMetadata(raw, extra);
     }
 
     /**
@@ -235,9 +267,12 @@ public class ProcedureCoordinator {
                     .reduce((first, second) -> second)
                     .map(RecentAction::reference)
                     .orElse(null);
-            return ProcedureOutcome.ok("ALREADY_ESCALATED", existingTicket != null
+            ProcedureOutcome outcome = ProcedureOutcome.ok("ALREADY_ESCALATED", existingTicket != null
                     ? "You're already connected to our support team on ticket " + existingTicket + " - they have the details already."
                     : "You're already connected to our support team for this conversation.");
+            return existingTicket != null
+                    ? withMetadata(outcome, Map.of("ticketNumber", existingTicket))
+                    : outcome;
         }
         Customer customer = customerRepository.findById(identity.requireCustomerId()).orElseThrow();
         String summary = buildHandoffSummary(session, reason);
@@ -248,8 +283,9 @@ public class ProcedureCoordinator {
         log.info("event=procedure_escalated ticketNumber={}", ticket.getTicketNumber());
         turnMetrics.recordProcedureOutcome("ESCALATION", "ESCALATED", true);
         auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.ESCALATED, "ticketNumber=" + ticket.getTicketNumber());
-        return ProcedureOutcome.ok("ESCALATED", "I've let our support team know - reference " + ticket.getTicketNumber()
-                + ". They'll have the details of what we've discussed so far.");
+        return withMetadata(ProcedureOutcome.ok("ESCALATED", "I've let our support team know - reference " + ticket.getTicketNumber()
+                + ". They'll have the details of what we've discussed so far."),
+                Map.of("ticketNumber", ticket.getTicketNumber()));
     }
 
     // ---- Verification (called ONLY from ConversationRuntime, never from a tool) ----
@@ -268,7 +304,14 @@ public class ProcedureCoordinator {
         VerificationResult result = verificationService.verify(session, code, procedure.getProcedureId(), orderReference);
         if (!result.verified()) {
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_FAILED, "type=" + procedure.getType() + " orderReference=" + orderReference);
-            return recordOutcome(session, procedure.getType(), ProcedureOutcome.error("VERIFICATION_FAILED", result.message()), orderReference, startNanos);
+            // Pass 2C (Task 7): the failure's stable reason travels as structured
+            // metadata - the direct renderer keys off verificationReason instead
+            // of parsing the English message.
+            Map<String, String> reasonMetadata = new LinkedHashMap<>();
+            reasonMetadata.put("verificationReason", result.code().name());
+            reasonMetadata.put("orderReference", orderReference);
+            return recordOutcome(session, procedure.getType(),
+                    withMetadata(ProcedureOutcome.error("VERIFICATION_FAILED", result.message()), reasonMetadata), orderReference, startNanos);
         }
         auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_VERIFIED, "type=" + procedure.getType() + " orderReference=" + orderReference);
 
@@ -304,8 +347,10 @@ public class ProcedureCoordinator {
                     "type=" + procedure.getType() + " orderReference=" + orderReference + " resend=true");
         }
         return outcome.success()
-                ? ProcedureOutcome.ok("VERIFICATION_REQUIRED", outcome.message(), outcome.metadata())
-                : ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", outcome.message());
+                ? withMetadata(ProcedureOutcome.ok("VERIFICATION_REQUIRED", outcome.message(), outcome.metadata()),
+                        verificationMetadata(orderReference, outcome))
+                : withMetadata(ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", outcome.message()),
+                        verificationMetadata(orderReference, outcome));
     }
 
     // ---- Advancing a pending confirmation (CLAIM only - called ONLY from ConversationRuntime, never from a tool) ----
@@ -372,7 +417,8 @@ public class ProcedureCoordinator {
         String orderReference = procedure.getVerifiedTarget().orderNumber();
         procedure.setStatus(ProcedureStatus.CANCELLED);
         session.clearActiveProcedure();
-        return recordOutcome(session, procedure.getType(), ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that."), orderReference, startNanos);
+        return recordOutcome(session, procedure.getType(), withMetadata(
+                ProcedureOutcome.ok("DECLINED", "No problem, I won't go ahead with that."), Map.of("orderReference", orderReference)), orderReference, startNanos);
     }
 
     // ---- internal ----
@@ -393,6 +439,85 @@ public class ProcedureCoordinator {
         detail.append(" durationMs=").append(durationMs);
         auditService.recordEvent(session, session.getTurnCount(), eventType, detail.toString());
         return outcome;
+    }
+
+    /**
+     * Pass 2B (Task 4): attach support-safe structured facts to a coordinator
+     * outcome at the source, so the model-facing mapper can carry them without
+     * ever parsing {@code ProcedureOutcome.message()}.
+     *
+     * <p>Only whitelisted values are ever passed here: order references, item
+     * product names, denial reasons, payment consequences, return/claim/ticket
+     * numbers, and customer-supplied descriptions. Never SKUs, database IDs,
+     * customer IDs, procedure IDs, verification challenge IDs, OTP material,
+     * internal slot keys, or raw exception text.
+     */
+    private ProcedureOutcome withMetadata(ProcedureOutcome outcome, Map<String, String> additions) {
+        if (additions == null || additions.isEmpty()) {
+            return outcome;
+        }
+        Map<String, String> merged = new LinkedHashMap<>(outcome.metadata() == null ? Map.of() : outcome.metadata());
+        additions.forEach((key, value) -> {
+            if (key != null && value != null) {
+                merged.put(key, value);
+            }
+        });
+        return new ProcedureOutcome(outcome.success(), outcome.code(), outcome.message(), Map.copyOf(merged));
+    }
+
+    /**
+     * Carries ambiguous item candidates as indexed keys so the model-facing
+     * mapper can fold them into a single list of customer-visible product
+     * names - no SKUs or item IDs.
+     */
+    private Map<String, String> ambiguousItemMetadata(String orderNumber, AmbiguousItemException e) {
+        Map<String, String> md = new LinkedHashMap<>();
+        md.put("orderReference", orderNumber);
+        List<OrderItem> candidates = e.getCandidates();
+        for (int i = 0; i < Math.min(candidates.size(), 5); i++) {
+            md.put("candidateItem." + (i + 1), candidates.get(i).getProductName());
+        }
+        return md;
+    }
+
+    /**
+     * Pass 2C (Task 7): carries a challenge issue/rate-limit outcome into the
+     * coordinator outcome as stable, safe structured facts. The dev OTP is
+     * deliberately NOT copied here - only the masked destination and the
+     * stable issue code travel beyond the verification layer.
+     */
+    private static Map<String, String> verificationMetadata(String orderNumber, VerificationOutcome outcome) {
+        Map<String, String> md = new LinkedHashMap<>();
+        md.put("verificationIssue", outcome.issueCode().name());
+        md.put("orderReference", orderNumber);
+        if (outcome.metadata() != null) {
+            String masked = outcome.metadata().get("maskedDestination");
+            if (masked != null) {
+                md.put("maskedDestination", masked);
+            }
+        }
+        return md;
+    }
+
+    private static Map<String, String> cancellationMetadata(String orderNumber, CancellationEligibility eligibility) {
+        Map<String, String> md = new LinkedHashMap<>();
+        md.put("orderReference", orderNumber);
+        if (eligibility.denialReason() != null) {
+            md.put("denialReason", eligibility.denialReason().name());
+        }
+        if (eligibility.paymentConsequence() != null) {
+            md.put("paymentConsequence", eligibility.paymentConsequence().name());
+        }
+        return md;
+    }
+
+    private static Map<String, String> returnDenialMetadata(String orderNumber, String itemName, ReturnEligibility eligibility) {
+        Map<String, String> md = new LinkedHashMap<>();
+        md.put("orderReference", orderNumber);
+        md.put("itemName", itemName);
+        md.put("denialReason", eligibility.denialReason().name());
+        md.put("maxReturnableQuantity", Integer.toString(eligibility.maxReturnableQuantity()));
+        return md;
     }
 
     private ConversationEventType classifyProcedureEvent(ProcedureOutcome outcome) {
@@ -441,13 +566,19 @@ public class ProcedureCoordinator {
             if (!verificationOutcome.success()) {
                 procedure.setStatus(ProcedureStatus.FAILED);
                 session.clearActiveProcedure();
-                return recordOutcome(session, type, ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()), target.orderNumber(), startNanos);
+                return recordOutcome(session, type,
+                        withMetadata(ProcedureOutcome.error("VERIFICATION_RATE_LIMITED", verificationOutcome.message()),
+                                verificationMetadata(target.orderNumber(), verificationOutcome)),
+                        target.orderNumber(), startNanos);
             }
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.OTP_ISSUED, "type=" + type + " orderReference=" + target.orderNumber());
             String pausedNote = slotResult == ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS
                     ? " I've paused what we were doing before - we'll come back to it after this."
                     : "";
-            return recordOutcome(session, type, ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote), target.orderNumber(), startNanos);
+            return recordOutcome(session, type,
+                    withMetadata(ProcedureOutcome.ok("VERIFICATION_REQUIRED", verificationOutcome.message() + pausedNote),
+                            verificationMetadata(target.orderNumber(), verificationOutcome)),
+                    target.orderNumber(), startNanos);
         }
 
         return recordOutcome(session, type, moveToConfirmation(procedure), target.orderNumber(), startNanos);
@@ -491,7 +622,9 @@ public class ProcedureCoordinator {
                     RecentActionType.REFUND_INITIATED, result.orderNumber(), result.refund().getStatus().name(),
                     result.refund().getAmount(), result.refund().getRefundNumber(), Instant.now()));
         }
-        return ProcedureOutcome.ok("CANCELLED", "Order " + result.orderNumber() + " has been cancelled." + describePaymentConsequence(result.paymentConsequence()));
+        return withMetadata(ProcedureOutcome.ok("CANCELLED", "Order " + result.orderNumber() + " has been cancelled."
+                        + describePaymentConsequence(result.paymentConsequence())),
+                Map.of("orderReference", result.orderNumber(), "paymentConsequence", result.paymentConsequence().name()));
     }
 
     private ProcedureOutcome executeReturn(ConversationSession session, ProcedureState procedure) {
@@ -501,8 +634,9 @@ public class ProcedureCoordinator {
         session.recordAction(new RecentAction(
                 RecentActionType.RETURN_REQUESTED, procedure.getVerifiedTarget().orderNumber(), returnRequest.getStatus().name(),
                 null, returnRequest.getReturnNumber(), Instant.now()));
-        return ProcedureOutcome.ok("RETURN_STARTED", "Return " + returnRequest.getReturnNumber() + " has been started for order "
-                + procedure.getVerifiedTarget().orderNumber() + ". It is now requested and awaiting approval.");
+        return withMetadata(ProcedureOutcome.ok("RETURN_STARTED", "Return " + returnRequest.getReturnNumber() + " has been started for order "
+                        + procedure.getVerifiedTarget().orderNumber() + ". It is now requested and awaiting approval."),
+                Map.of("orderReference", procedure.getVerifiedTarget().orderNumber(), "returnNumber", returnRequest.getReturnNumber()));
     }
 
 
@@ -512,8 +646,9 @@ public class ProcedureCoordinator {
         var claim = claimService.fileClaim(procedure.getVerifiedTarget(), data.get("itemReference"), reason, ClaimResolution.MANUAL_REVIEW, data.get("description"));
         session.recordAction(new RecentAction(
                 RecentActionType.CLAIM_FILED, procedure.getVerifiedTarget().orderNumber(), claim.getStatus().name(), null, claim.getClaimNumber(), Instant.now()));
-        return ProcedureOutcome.ok("CLAIM_FILED", "I've filed claim " + claim.getClaimNumber() + " for order "
-                + procedure.getVerifiedTarget().orderNumber() + " and opened a support ticket - our team will review it.");
+        return withMetadata(ProcedureOutcome.ok("CLAIM_FILED", "I've filed claim " + claim.getClaimNumber() + " for order "
+                        + procedure.getVerifiedTarget().orderNumber() + " and opened a support ticket - our team will review it."),
+                Map.of("orderReference", procedure.getVerifiedTarget().orderNumber(), "claimNumber", claim.getClaimNumber()));
     }
 
     private String describePaymentConsequence(PaymentConsequence consequence) {

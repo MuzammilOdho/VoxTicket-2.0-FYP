@@ -39,75 +39,109 @@ class SupportAgentSystemPromptTest {
     }
 
     @Test
-    void withNoRecentActionsOrProcedureThePromptIsUnchanged() {
-        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+    void basePromptIsACompactGlobalContract() {
+        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
 
-        assertThat(agent.buildSystemPrompt(session)).doesNotContain("Recent activity").doesNotContain("active request");
+        assertThat(prompt).contains("You are VoxTicket, an e-commerce customer-support assistant.");
+        assertThat(prompt).contains("COMMUNICATION").contains("GROUNDING").contains("ACTIONS")
+                .contains("CONVERSATION").contains("SAFETY");
+        assertThat(prompt).contains("Never invent an order, status, amount, date, cause, policy,");
+        assertThat(prompt).contains("Never say an action succeeded unless the procedure result says it");
+        assertThat(prompt).contains("Handle every requested part of a multi-intent message.");
+        assertThat(prompt).contains("The application controls customer identity and ownership.");
     }
 
     @Test
-    void aCancellationAppearsInTheRecentActivitySummary() {
+    void basePromptKeepsNoneOfTheLegacyLongGuidance() {
+        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
+
+        assertThat(prompt).doesNotContain("VOICE-FIRST");
+        assertThat(prompt).doesNotContain("do NOT call requestCancellation");
+        assertThat(prompt).doesNotContain("reportOrderProblem");
+        assertThat(prompt).doesNotContain("call the matching tool right away");
+        assertThat(prompt).doesNotContain("do not invent specific mechanisms, timeframes, or promises");
+    }
+
+    @Test
+    void withNoSessionStateThePromptIsJustTheBaseContract() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10001", "CANCELLED", null, "ORD-10001", Instant.now()));
+
+        assertThat(agent.buildSystemPrompt(session)).doesNotContain("CONVERSATION STATE");
+    }
+
+    @Test
+    void conversationStateBlockSurfacesFocusProcedureAndEffectsCompactly() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordFocusOrder("ORD-10004");
+        session.recordFocusItem("SKU-9", "Mechanical Keyboard");
+        ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
+        procedure.setPendingDescription("cancel order ORD-10001");
+        procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
+        session.beginProcedure(procedure);
+        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10003", "REFUND_REQUIRED", null, "ORD-10003", Instant.now()));
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("Recent activity");
-        assertThat(prompt).contains("Order ORD-10001 was cancelled.");
+        assertThat(prompt).contains("CONVERSATION STATE");
+        assertThat(prompt).contains("focusOrder: ORD-10004");
+        assertThat(prompt).contains("focusItem: Mechanical Keyboard");
+        assertThat(prompt).contains("activeProcedure: CANCELLATION");
+        assertThat(prompt).contains("activeProcedureStatus: AWAITING_VERIFICATION");
+        assertThat(prompt).contains("activeTarget: cancel order ORD-10001");
+        assertThat(prompt).contains("recentEffects:");
+        assertThat(prompt).contains("- ORDER_CANCELLED ORD-10003 REFUND_REQUIRED");
     }
 
     @Test
-    void aRefundIsDescribedWithItsAmountAndReferenceButNoMutableStatus() {
+    void stateBlockOmitsFieldsThatDoNotExist() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10001", "PENDING", BigDecimal.valueOf(5000), "RFN-00001", Instant.now()));
+        session.recordFocusOrder("ORD-10001");
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("RFN-00001").contains("5000");
-        assertThat(prompt).doesNotContain("PENDING");
+        assertThat(prompt).contains("CONVERSATION STATE").contains("focusOrder: ORD-10001");
+        assertThat(prompt).doesNotContain("focusItem:");
+        assertThat(prompt).doesNotContain("activeProcedure:");
+        assertThat(prompt).doesNotContain("pausedProcedure:");
+        assertThat(prompt).doesNotContain("recentEffects:");
     }
 
     @Test
-    void thePromptInstructsTheModelToUseToolsForCurrentStatusRatherThanTrustingHistory() {
+    void noInternalSecretsLeakIntoTheStateBlock() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        session.recordAction(new RecentAction(RecentActionType.CLAIM_FILED, "ORD-20002", "OPEN", null, "CLM-00001", Instant.now()));
+        session.recordFocusOrder("ORD-10001");
+        session.recordFocusItem("SKU-1", "Cotton Bedsheet Set");
+        ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"),
+                Map.of("itemReference", "SKU-1", "reason", "DAMAGED", "description", "torn seam"), IdentityAssurance.PHONE_MATCHED);
+        procedure.setPendingDescription("file a claim for Cotton Bedsheet Set on order ORD-10001 (damaged)");
+        session.beginProcedure(procedure);
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("historical facts only").contains("NOT necessarily still");
+        assertThat(prompt).contains("focusItem: Cotton Bedsheet Set");
+        assertThat(prompt).contains("activeTarget: file a claim for Cotton Bedsheet Set on order ORD-10001 (damaged)");
+        assertThat(prompt).doesNotContain("SKU-1");
+        assertThat(prompt).doesNotContain("DAMAGED");
+        assertThat(prompt).doesNotContain("torn seam");
     }
 
     @Test
-    void anActiveProcedureAwaitingConfirmationIsDescribedWithoutLeakingRawInternalValues() {
+    void anActiveProcedureAwaitingConfirmationUsesTheStableStatusCode() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"), Map.of("itemReference", "SKU-1", "reason", "DAMAGED"), IdentityAssurance.PHONE_MATCHED);
+        ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.PHONE_MATCHED);
         procedure.setPendingDescription("file a claim for Running Shoes on order ORD-10001 (damaged)");
         session.beginProcedure(procedure);
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("file a claim for Running Shoes on order ORD-10001 (damaged)");
-        assertThat(prompt).contains("explicitly say yes or no");
-        assertThat(prompt).contains("Do not abandon or forget this");
-        assertThat(prompt).doesNotContain("SKU-1");
-        assertThat(prompt).doesNotContain("DAMAGED");
+        assertThat(prompt).contains("activeProcedure: CLAIM");
+        assertThat(prompt).contains("activeProcedureStatus: AWAITING_CONFIRMATION");
+        assertThat(prompt).doesNotContain("explicitly say yes or no");
+        assertThat(prompt).doesNotContain("Do not abandon or forget this");
     }
 
     @Test
-    void anActiveProcedureAwaitingVerificationIsDescribedCorrectly() {
-        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
-        procedure.setPendingDescription("cancel order ORD-10001");
-        procedure.setStatus(com.voxticket.procedure.ProcedureStatus.AWAITING_VERIFICATION);
-        session.beginProcedure(procedure);
-
-        String prompt = agent.buildSystemPrompt(session);
-
-        assertThat(prompt).contains("waiting for the customer to provide a verification code");
-    }
-
-    @Test
-    void aPausedProcedureIsMentionedAlongsideTheActiveOne() {
+    void aPausedProcedureIsRepresentedCompactlyAlongsideTheActiveOne() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         ProcedureState first = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.PHONE_MATCHED);
         first.setPendingDescription("file a claim for Running Shoes on order ORD-10001 (damaged)");
@@ -118,41 +152,61 @@ class SupportAgentSystemPromptTest {
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("start a return for Cotton T-Shirt from order ORD-20002");
-        assertThat(prompt).contains("file a claim for Running Shoes on order ORD-10001 (damaged)");
-        assertThat(prompt).contains("paused");
+        assertThat(prompt).contains("activeProcedure: RETURN");
+        assertThat(prompt).contains("activeTarget: start a return for Cotton T-Shirt from order ORD-20002");
+        assertThat(prompt).contains("pausedProcedure: CLAIM");
+        assertThat(prompt).contains("pausedTarget: file a claim for Running Shoes on order ORD-10001 (damaged)");
     }
 
     @Test
-    void multipleRecentActionsAreAllIncluded() {
+    void recentEffectsAreCappedAtTheLatestThree() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10001", "CANCELLED", null, "ORD-10001", Instant.now()));
+        session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10001", "PENDING", BigDecimal.ONE, "RFN-00001", Instant.now()));
+        session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10002", "PENDING", BigDecimal.ONE, "RFN-00002", Instant.now()));
+        session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10003", "PENDING", BigDecimal.ONE, "RFN-00003", Instant.now()));
+        session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10004", "PENDING", BigDecimal.ONE, "RFN-00004", Instant.now()));
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).doesNotContain("RFN-00001");
+        assertThat(prompt).contains("- REFUND_INITIATED ORD-10002 RFN-00002");
+        assertThat(prompt).contains("- REFUND_INITIATED ORD-10003 RFN-00003");
+        assertThat(prompt).contains("- REFUND_INITIATED ORD-10004 RFN-00004");
+    }
+
+    @Test
+    void aRefundEffectCarriesItsReferenceButNoMutableStatus() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordAction(new RecentAction(RecentActionType.REFUND_INITIATED, "ORD-10001", "PENDING", BigDecimal.valueOf(5000), "RFN-00001", Instant.now()));
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("- REFUND_INITIATED ORD-10001 RFN-00001");
+        assertThat(prompt).doesNotContain("PENDING");
+    }
+
+    @Test
+    void aCancelledOrderEffectPreservesThePaymentConsequenceAsAStableCode() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10003",
+                com.voxticket.policy.PaymentConsequence.VOID_AUTHORIZATION.name(), null, "ORD-10003", Instant.now()));
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("- ORDER_CANCELLED ORD-10003 VOID_AUTHORIZATION");
+        assertThat(prompt).doesNotContain("authorization was simply voided");
+    }
+
+    @Test
+    void effectsAreMarkedAsHistoricalFactsNotCurrentState() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         session.recordAction(new RecentAction(RecentActionType.CLAIM_FILED, "ORD-20002", "OPEN", null, "CLM-00001", Instant.now()));
 
         String prompt = agent.buildSystemPrompt(session);
 
-        assertThat(prompt).contains("ORD-10001 was cancelled").contains("CLM-00001");
-    }
-
-    @Test
-    void hypotheticalQuestionsAreDistinguishedFromRealIncidentsInThePromptGuidance() {
-        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
-
-        assertThat(prompt).contains("hypothetical").contains("do NOT call requestCancellation, requestReturn, or reportOrderProblem");
-    }
-
-    @Test
-    void focusOrderAndItemAreSurfacedForFollowUpReferenceResolution() {
-        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        session.recordFocusOrder("ORD-10001");
-        session.recordFocusItem("SKU-1", "Cotton Bedsheet Set");
-
-        String prompt = agent.buildSystemPrompt(session);
-
-        assertThat(prompt).contains("ORD-10001").contains("Cotton Bedsheet Set");
-        assertThat(prompt).contains("without repeating the order number");
-        // The internal SKU is Java's own bookkeeping - it must never leak into the model's context.
-        assertThat(prompt).doesNotContain("SKU-1");
+        assertThat(prompt).contains("- CLAIM_FILED ORD-20002 CLM-00001");
+        assertThat(prompt).contains("historical facts only");
+        assertThat(prompt).contains("getMyOrderContext").contains("getMyTicketStatus");
     }
 
     @Test
@@ -185,43 +239,5 @@ class SupportAgentSystemPromptTest {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
 
         assertThat(agent.blankResponseFallback(session)).isEqualTo("Sorry, could you say that again?");
-    }
-
-    @Test
-    void aVoidAuthorizationCancellationExplainsWhyNoRefundIsNeededAsAStableFact() {
-        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10003",
-                com.voxticket.policy.PaymentConsequence.VOID_AUTHORIZATION.name(), null, "ORD-10003", Instant.now()));
-
-        String prompt = agent.buildSystemPrompt(session);
-
-        assertThat(prompt).contains("no refund is needed").contains("authorization was simply voided");
-    }
-
-    @Test
-    void promptInstructsCallingTheProcedureToolEarlyRatherThanGatheringDetailsInFreeTextFirst() {
-        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
-
-        assertThat(prompt).contains("call the matching tool right away");
-    }
-
-    @Test
-    void promptForbidsInventingProcessDetailsWhenPolicySearchIsSilent() {
-        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
-
-        assertThat(prompt).contains("do not invent specific mechanisms, timeframes, or promises");
-        assertThat(prompt).contains("awaiting approval");
-    }
-
-    @Test
-    void keyGuardrailPhrasesAreContiguousAcrossSourceLineBoundaries() {
-        String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));
-
-        // Regression test for the missing-space defect: these phrases must survive
-        // Java text-block line boundaries as single contiguous strings.
-        assertThat(prompt).contains("do not invent specific mechanisms, timeframes, or promises");
-        assertThat(prompt).contains("call the matching tool right away");
-        assertThat(prompt).doesNotContain("specific\nmechanisms");
-        assertThat(prompt).doesNotContain("the\nmatching");
     }
 }

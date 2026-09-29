@@ -1,6 +1,7 @@
 package com.voxticket.service.dto;
 
+import com.voxticket.persistence.entity.enums.ShipmentStatus;
 import java.time.Instant;
 
-public record ShipmentContextView(String carrier, String trackingNumber, String status, Instant estimatedDeliveryAt, Instant deliveredAt) {
+public record ShipmentContextView(String carrier, String trackingNumber, ShipmentStatus status, Instant estimatedDeliveryAt, Instant deliveredAt) {
 }

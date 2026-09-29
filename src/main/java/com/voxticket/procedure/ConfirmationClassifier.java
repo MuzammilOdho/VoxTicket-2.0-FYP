@@ -21,14 +21,26 @@ import org.springframework.stereotype.Component;
  * ask for an explicit yes/no before anything is confirmed - it still has no
  * tool that can trigger the mutation itself, so this doesn't weaken the
  * security boundary at all, only fixes what happens with ambiguous input.
+ *
+ * <p>Pass 2C: the sets include a deliberately narrow set of standalone
+ * Roman-Urdu and Urdu-script yes/no tokens ("haan", "نہیں", ...). Matching
+ * stays whole-message-only - a compound or corrective message containing
+ * one of these tokens ("haan, file kar do") is still UNCLEAR and reaches
+ * SupportAgent. The direct deterministic path this classifier guards only
+ * advances a procedure that is already in {@code AWAITING_CONFIRMATION},
+ * so the extension cannot auto-confirm anything new.
  */
 @Component
 public class ConfirmationClassifier {
 
     private static final Set<String> YES_PHRASES = Set.of(
-            "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "confirmed", "go ahead", "please do", "do it");
+            "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "confirm", "confirmed", "go ahead", "please do", "do it",
+            // Pass 2C: unambiguous standalone Roman-Urdu / Urdu-script yes tokens.
+            "haan", "han", "jee haan", "ji haan", "ہاں", "جی ہاں");
     private static final Set<String> NO_PHRASES = Set.of(
-            "no", "nope", "don't", "do not", "stop", "never mind", "nevermind", "wait", "cancel that");
+            "no", "nope", "don't", "do not", "stop", "never mind", "nevermind", "wait", "cancel that",
+            // Pass 2C: unambiguous standalone Roman-Urdu / Urdu-script no tokens.
+            "nahi", "nahin", "jee nahi", "ji nahi", "نہیں");
 
     public ConfirmationDecision classify(String message) {
         String normalized = normalize(message);

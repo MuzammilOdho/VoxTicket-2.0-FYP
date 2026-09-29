@@ -1,4 +1,6 @@
 package com.voxticket.service.dto;
 
-public record ClaimContextView(String claimNumber, String status, String reason, String requestedResolution) {
+import com.voxticket.persistence.entity.enums.ClaimStatus;
+
+public record ClaimContextView(String claimNumber, ClaimStatus status, String reason, String requestedResolution) {
 }

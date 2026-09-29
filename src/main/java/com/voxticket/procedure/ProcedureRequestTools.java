@@ -4,6 +4,14 @@ import com.voxticket.conversation.ConversationSession;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
+/**
+ * Pass 2B: every procedure tool returns {@link ProcedureToolResult} - the
+ * model-facing representation - instead of the raw coordinator
+ * {@link ProcedureOutcome}. The deterministic {@code ProcedureOutcome.message()}
+ * stays available to {@code ConversationRuntime} for direct customer responses;
+ * the model only ever sees stable codes, the next action, and whitelisted
+ * structured facts.
+ */
 public class ProcedureRequestTools {
 
     private final ProcedureCoordinator procedureCoordinator;
@@ -14,43 +22,45 @@ public class ProcedureRequestTools {
         this.session = session;
     }
 
-    @Tool(description = "Begin a cancellation request for one of the customer's own orders. This starts a guarded process - "
-            + "it does NOT cancel the order by itself. After the customer reads back the verification code that is sent, "
-            + "the cancellation executes immediately - there is no separate yes/no confirmation step for cancellation.")
-    public Object requestCancellation(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
+    @Tool(description = "Start the deterministic cancellation procedure for an owned order. Use only when the customer "
+            + "wants to cancel now, not for hypothetical or policy questions. The returned procedure state determines "
+            + "what happens next; this call by itself does not prove cancellation succeeded.")
+    public ProcedureToolResult requestCancellation(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
         session.markToolInvoked();
-        return procedureCoordinator.startCancellation(session, orderReference);
+        return ProcedureToolResultMapper.toToolResult(ProcedureType.CANCELLATION.name(),
+                procedureCoordinator.startCancellation(session, orderReference));
     }
 
-    @Tool(description = "Begin a return request for a specific item on one of the customer's own orders. This starts a guarded process - "
-            + "it does NOT create the return by itself. After the customer reads back the verification code that is sent, "
-            + "the return executes immediately - there is no separate yes/no confirmation step for a return.")
-    public Object requestReturn(
+    @Tool(description = "Start or continue the deterministic return procedure for an item in an owned order. Use when "
+            + "the customer wants to return something now. Call even when the item or reason is not yet known; the "
+            + "procedure result identifies missing information. This call by itself does not prove the return succeeded.")
+    public ProcedureToolResult requestReturn(
             @ToolParam(description = "Order number, e.g. ORD-10001") String orderReference,
-            @ToolParam(description = "Which item, described naturally in the customer's own words - product name, color, or any other "
-                    + "distinguishing detail. NEVER a SKU or internal ID. Leave blank if the order only has one item or the customer hasn't said yet.")
-            String itemReference,
-            @ToolParam(description = "Why the customer is returning it, in their own words. Leave blank if they haven't said yet.") String reason) {
+            @ToolParam(required = false, description = "Item name in the customer's own words; blank if unknown or the order has one item") String itemReference,
+            @ToolParam(required = false, description = "Why the customer is returning it, in their own words; blank if not said yet") String reason) {
         session.markToolInvoked();
-        return procedureCoordinator.startReturn(session, orderReference, itemReference, reason);
+        return ProcedureToolResultMapper.toToolResult(ProcedureType.RETURN.name(),
+                procedureCoordinator.startReturn(session, orderReference, itemReference, reason));
     }
 
-    @Tool(description = "Report a problem with a specific item on one of the customer's own orders - damaged, defective, wrong item, or "
-            + "missing item. This starts a guarded process - it does NOT file the claim by itself. The customer must still explicitly confirm afterward.")
-    public Object reportOrderProblem(
+    @Tool(description = "Start or continue the deterministic claim procedure for an item problem such as damaged, "
+            + "defective, incorrect, or missing goods. Call even when the item or problem description is incomplete; "
+            + "the procedure result identifies missing information. The claim is not filed until server-controlled "
+            + "confirmation succeeds.")
+    public ProcedureToolResult requestClaim(
             @ToolParam(description = "Order number, e.g. ORD-10001") String orderReference,
-            @ToolParam(description = "Which item, described naturally in the customer's own words - product name, color, or any other "
-                    + "distinguishing detail. NEVER a SKU or internal ID. Leave blank if the order only has one item or the customer hasn't said yet.")
-            String itemReference,
-            @ToolParam(description = "Description of the problem, in the customer's own words. Leave blank if they haven't said yet.") String problem) {
+            @ToolParam(required = false, description = "Item name in the customer's own words; blank if unknown or the order has one item") String itemReference,
+            @ToolParam(required = false, description = "What happened to the item, in the customer's own words; blank if not said yet") String problem) {
         session.markToolInvoked();
-        return procedureCoordinator.startClaim(session, orderReference, itemReference, problem);
+        return ProcedureToolResultMapper.toToolResult(ProcedureType.CLAIM.name(),
+                procedureCoordinator.startClaim(session, orderReference, itemReference, problem));
     }
 
-    @Tool(description = "Escalate to a human support agent. Use this when the customer explicitly asks for a person, a supervisor, "
-            + "or says this system can't help them.")
-    public Object requestHumanSupport(@ToolParam(description = "Brief reason for the escalation") String reason) {
+    @Tool(description = "Escalate the conversation to human support when the customer explicitly requests a "
+            + "person/supervisor or says automated support cannot help.")
+    public ProcedureToolResult requestHumanSupport(@ToolParam(description = "Brief reason for the escalation") String reason) {
         session.markToolInvoked();
-        return procedureCoordinator.requestHumanSupport(session, reason);
+        return ProcedureToolResultMapper.toToolResult(ProcedureToolResultMapper.HUMAN_SUPPORT,
+                procedureCoordinator.requestHumanSupport(session, reason));
     }
 }

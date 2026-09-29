@@ -26,6 +26,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import com.voxticket.policy.CancellationNotEligibleException;
+import com.voxticket.policy.PaymentConsequence;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -145,7 +146,20 @@ class ProcedureCoordinatorIntegrationTest {
         ProcedureOutcome outcome = procedureCoordinator.startCancellation(session, order.getOrderNumber());
 
         assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
-        assertThat(outcome.metadata()).isEmpty();
+        // Pass 2B: safe structured metadata is allowed on the coordinator outcome;
+        // the security requirement is the absence of OTP/challenge identifiers,
+        // not an empty metadata map.
+        assertThat(outcome.metadata())
+                .containsEntry("orderReference", order.getOrderNumber())
+                .containsEntry("paymentConsequence", PaymentConsequence.NO_REFUND_REQUIRED.name());
+        assertThat(outcome.metadata())
+                .doesNotContainKeys(
+                        "devOtp",
+                        "otp",
+                        "otpCode",
+                        "otpHash",
+                        "challengeId",
+                        "procedureId");
     }
 
     @Test
@@ -303,9 +317,23 @@ class ProcedureCoordinatorIntegrationTest {
 
         assertThat(outcome.success()).isTrue();
         assertThat(outcome.code()).isEqualTo("VERIFICATION_REQUIRED");
-        // This exact outcome is what a @Tool method hands back to the model - it must never
-        // carry the OTP, unlike resendVerificationCode's outcome, which is model-invisible.
-        assertThat(outcome.metadata()).isEmpty();
+        // Pass 2B: ProcedureOutcome is the coordinator/runtime result, not the model-facing
+        // contract. ProcedureRequestTools maps it through ProcedureToolResultMapper, which
+        // whitelists only safe structured facts. Safe metadata (order reference, payment
+        // consequence) is therefore allowed here - but OTP, challenge, procedure, and other
+        // internal verification identifiers must never appear, unlike resendVerificationCode's
+        // model-invisible outcome, which is the only path allowed to carry the dev OTP.
+        assertThat(outcome.metadata())
+                .containsEntry("orderReference", order.getOrderNumber())
+                .containsEntry("paymentConsequence", PaymentConsequence.NO_REFUND_REQUIRED.name());
+        assertThat(outcome.metadata())
+                .doesNotContainKeys(
+                        "devOtp",
+                        "otp",
+                        "otpCode",
+                        "otpHash",
+                        "challengeId",
+                        "procedureId");
         assertThat(session.getActiveProcedure()).isPresent();
     }
 
@@ -323,7 +351,7 @@ class ProcedureCoordinatorIntegrationTest {
     @Test
     void ambiguousItemDescriptionAsksForClarificationInsteadOfGuessing() {
         Order order = newOrder(BigDecimal.valueOf(2000));
-        order.addItem(new OrderItem("Blue Cotton Shirt", "SKU-EXTRA-" + java.util.UUID.randomUUID(), 1, BigDecimal.valueOf(1000), true, false));
+        order.addItem(new OrderItem("Blue Cotton Shirt", "SKU-EXTRA-" + UUID.randomUUID(), 1, BigDecimal.valueOf(1000), true, false));
         orderRepository.saveAndFlush(order);
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
         ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
@@ -364,7 +392,7 @@ class ProcedureCoordinatorIntegrationTest {
     @Test
     void establishingAnItemDuringOneReturnAttemptLetsALaterYesResolveItWithoutRepeatingTheDescription() {
         Order order = newOrder(BigDecimal.valueOf(1000));
-        order.addItem(new OrderItem("Running Shoes", "SKU-EXTRA-" + java.util.UUID.randomUUID(), 1, BigDecimal.valueOf(500), true, false));
+        order.addItem(new OrderItem("Running Shoes", "SKU-EXTRA-" + UUID.randomUUID(), 1, BigDecimal.valueOf(500), true, false));
         orderRepository.saveAndFlush(order);
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
         Shipment shipment = new Shipment(order, "TCS", "TCS-1", ShipmentStatus.DELIVERED);

@@ -20,8 +20,18 @@ import org.springframework.stereotype.Component;
 @Component
 public class ContextBuilder {
 
+    /**
+     * Maximum conversation messages sent to the LLM per turn. The session itself keeps a longer
+     * history ({@code MAX_RECENT_MESSAGES}) for audit and reference resolution - this bound only
+     * limits what the model sees, and always includes the current user message (recorded into the
+     * session before the agent is called).
+     */
+    private static final int MAX_MODEL_MESSAGES = 10;
+
     public List<Message> buildHistory(ConversationSession session) {
-        return session.getRecentMessages().stream().<Message>map(this::toSpringAiMessage).toList();
+        List<ConversationMessage> recent = session.getRecentMessages();
+        int from = Math.max(0, recent.size() - MAX_MODEL_MESSAGES);
+        return recent.subList(from, recent.size()).stream().<Message>map(this::toSpringAiMessage).toList();
     }
 
     private Message toSpringAiMessage(ConversationMessage message) {

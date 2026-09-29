@@ -21,10 +21,12 @@ import com.voxticket.safety.SafeLogging;
 import com.voxticket.verification.OtpInputClassifier;
 import com.voxticket.verification.OtpInputResult;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -55,6 +57,8 @@ public class ConversationRuntime {
     private final ProcedureCoordinator procedureCoordinator;
     private final TurnMetrics turnMetrics;
     private final ConversationAuditService auditService;
+    private final ConversationLanguageResolver languageResolver;
+    private final DirectProcedureResponseRenderer directRenderer;
 
     public ConversationRuntime(
             SessionStore sessionStore,
@@ -66,7 +70,9 @@ public class ConversationRuntime {
             OtpInputClassifier otpInputClassifier,
             ProcedureCoordinator procedureCoordinator,
             TurnMetrics turnMetrics,
-            ConversationAuditService auditService) {
+            ConversationAuditService auditService,
+            ConversationLanguageResolver languageResolver,
+            DirectProcedureResponseRenderer directRenderer) {
         this.sessionStore = sessionStore;
         this.identityService = identityService;
         this.supportAgent = supportAgent;
@@ -77,6 +83,8 @@ public class ConversationRuntime {
         this.procedureCoordinator = procedureCoordinator;
         this.turnMetrics = turnMetrics;
         this.auditService = auditService;
+        this.languageResolver = languageResolver;
+        this.directRenderer = directRenderer;
     }
 
     public AssistantTurn processTurn(UserTurn turn) {
@@ -132,8 +140,15 @@ public class ConversationRuntime {
                     case OTHER -> null;
                 };
                 if (outcome != null) {
-                    responseText = outcome.message();
-                    turnMetadata = outcome.metadata();
+                    // Pass 2C: the direct path never reaches the LLM. Presentation is
+                    // rendered deterministically from the stable outcome code and
+                    // safe metadata in the customer's language.
+                    responseText = renderDirect(session, outcome);
+                    // Pass 2C security cleanup: the AssistantTurn boundary is
+                    // customer-facing, so only allowlisted safe fields cross it.
+                    // Internal DEV metadata (devOtp, hashes, salts, internal IDs)
+                    // stays inside the verification/coordinator layer.
+                    turnMetadata = safeDirectTurnMetadata(outcome);
                     outcomeLabel = "verification";
                 } else {
                     AgentResponse agentResponse = respondViaAgent(session, normalizedText);
@@ -146,8 +161,10 @@ public class ConversationRuntime {
                 ConfirmationDecision decision = confirmationClassifier.classify(normalizedText);
                 AgentResponse unclearResponse = null;
                 responseText = switch (decision) {
-                    case YES -> confirmWithSafeFallback(session);
-                    case NO -> procedureCoordinator.declineActive(session).message();
+                    // Pass 2C: YES/NO advance the pending confirmation deterministically -
+                    // only the customer presentation step goes through the direct renderer.
+                    case YES -> renderDirect(session, confirmWithSafeFallback(session));
+                    case NO -> renderDirect(session, procedureCoordinator.declineActive(session));
                     case UNCLEAR -> {
                         unclearResponse = respondViaAgent(session, normalizedText);
                         yield unclearResponse.text();
@@ -174,6 +191,51 @@ public class ConversationRuntime {
         });
     }
 
+
+    /**
+     * Pass 2C security cleanup: the direct OTP/confirmation path must never
+     * carry internal DEV metadata into {@link AssistantTurn#metadata()}, which
+     * is customer-facing. {@code VerificationService} intentionally exposes
+     * {@code devOtp} in DEV-only internal metadata (needed by existing
+     * local/integration test mechanics), so the sanitization happens here at
+     * the customer-response boundary, not in the verification layer.
+     *
+     * <p>Explicit allowlist: only fields that are already safe and
+     * customer-visible survive. Everything else - {@code devOtp}, {@code otp},
+     * {@code otpHash}, {@code otpSalt}, internal IDs ({@code challengeId},
+     * {@code procedureId}, {@code customerId}, {@code orderId},
+     * {@code paymentId}, {@code itemId}), and any raw exception information -
+     * is dropped, however it is named.
+     */
+    private static final Set<String> DIRECT_TURN_METADATA_ALLOWLIST = Set.of(
+            "orderReference",
+            "paymentConsequence",
+            "returnNumber",
+            "claimNumber",
+            "maskedDestination",
+            "verificationReason",
+            "verificationIssue");
+
+    /**
+     * Copies only allowlisted entries from the outcome's internal metadata.
+     * The renderer still receives the full internal {@link ProcedureOutcome}
+     * (it only reads explicit safe keys and ignores {@code devOtp}); this
+     * method guards the {@link AssistantTurn} boundary instead.
+     */
+    private Map<String, String> safeDirectTurnMetadata(ProcedureOutcome outcome) {
+        Map<String, String> metadata = outcome == null ? Map.of() : outcome.metadata();
+        if (metadata.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> safe = new LinkedHashMap<>();
+        for (String key : DIRECT_TURN_METADATA_ALLOWLIST) {
+            String value = metadata.get(key);
+            if (value != null) {
+                safe.put(key, value);
+            }
+        }
+        return Map.copyOf(safe);
+    }
 
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
     private AgentResponse respondViaAgent(ConversationSession session, String normalizedText) {
@@ -202,12 +264,21 @@ public class ConversationRuntime {
         }
     }
 
-    private String confirmWithSafeFallback(ConversationSession session) {
+    /**
+     * Pass 2C: resolves the language from the session's recent user history
+     * (which already contains the current turn's user message) and renders
+     * the direct-path outcome deterministically - no LLM call.
+     */
+    private String renderDirect(ConversationSession session, ProcedureOutcome outcome) {
+        return directRenderer.render(languageResolver.resolve(session), outcome);
+    }
+
+    private ProcedureOutcome confirmWithSafeFallback(ConversationSession session) {
         try {
-            return procedureCoordinator.confirmActive(session).message();
+            return procedureCoordinator.confirmActive(session);
         } catch (Exception e) {
             log.error("event=procedure_confirmation_failed sessionId={} errorType={}", session.getSessionId(), e.getClass().getSimpleName(), e);
-            return PROCEDURE_FAILURE_MESSAGE;
+            return ProcedureOutcome.error("EXECUTION_FAILED", PROCEDURE_FAILURE_MESSAGE);
         }
     }
 

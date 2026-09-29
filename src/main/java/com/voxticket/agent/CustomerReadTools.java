@@ -37,14 +37,17 @@ public class CustomerReadTools {
         this.auditService = auditService;
     }
 
-    @Tool(description = "Get the customer's most recent orders, most recent first.")
+    @Tool(description = "List the current customer's recent orders, newest first. Use when the customer does not know "
+            + "the order reference or when several recent orders must be distinguished. Do not use when a specific "
+            + "order reference is already known.")
     public Object getMyRecentOrders() {
         return safely("getMyRecentOrders", null, () -> queryService.getRecentOrders(identity, 5));
     }
 
-    @Tool(description = "Get a complete picture of one of the customer's own orders - status, items, payment, shipment, cancellation "
-            + "eligibility, and any related returns, refunds, or claims - all in one call, already in plain language. This is the "
-            + "only way to look up anything about an order.")
+    @Tool(description = "Get the authoritative support context for one order owned by the current customer. Use for "
+            + "questions about that order's status, items, payment, shipping, tracking, cancellation eligibility, "
+            + "returns, refunds, or claims. Do not use for general store-policy questions. The application enforces "
+            + "customer ownership.")
     public Object getMyOrderContext(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
         Object result = safely("getMyOrderContext", orderReference, () -> queryService.getOrderContext(identity, orderReference));
         if (result instanceof OrderContextView context) {
@@ -53,7 +56,8 @@ public class CustomerReadTools {
         return result;
     }
 
-    @Tool(description = "Get the status of one of the customer's own support tickets.")
+    @Tool(description = "Get the authoritative status of one support ticket owned by the current customer. Use when "
+            + "the customer asks about a specific support-ticket reference.")
     public Object getMyTicketStatus(@ToolParam(description = "Ticket number, e.g. TCK-00001") String ticketReference) {
         return safely("getMyTicketStatus", ticketReference, () -> queryService.getTicketStatus(identity, ticketReference));
     }

@@ -32,11 +32,9 @@ public class PolicyKnowledgeTools {
         this.auditService = auditService;
     }
 
-    @Tool(description = "Search company policy documentation for questions about returns, refund timing, cancellation policy, "
-            + "shipping, delivery, payment issues, claims (damaged/wrong/missing items), or human escalation. "
-            + "Use this for general 'how does X work' policy questions - never to check whether a SPECIFIC order is eligible "
-            + "for something; getMyOrderContext already tells you cancellation eligibility, and requestReturn reports return "
-            + "eligibility itself if it isn't eligible.")
+    @Tool(description = "Search authoritative store policy. Use for general questions about how cancellation, "
+            + "returns, refunds, shipping, delivery, payments, claims, or human support work. Do not use to determine "
+            + "eligibility or current state of a specific order.")
     public Object searchPolicy(@ToolParam(description = "A natural-language question about company policy") String query) {
         session.markToolInvoked();
         long start = System.nanoTime();

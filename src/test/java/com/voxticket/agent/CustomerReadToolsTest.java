@@ -14,7 +14,12 @@ import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
+import com.voxticket.persistence.entity.enums.FulfillmentStatus;
+import com.voxticket.persistence.entity.enums.OrderStatus;
+import com.voxticket.service.dto.CancellationEligibilityView;
+import com.voxticket.service.dto.ItemReturnEligibilityView;
 import com.voxticket.service.dto.OrderContextView;
+import com.voxticket.service.dto.OrderItemContextView;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -30,8 +35,12 @@ class CustomerReadToolsTest {
 
     private OrderContextView sampleContext() {
         return new OrderContextView(
-                "ORD-10001", "in progress", "not yet shipped", "PKR", BigDecimal.valueOf(1000), Instant.now(),
-                List.of(), null, List.of(), "Eligible for cancellation.", List.of(), List.of(), List.of());
+                "ORD-10001", OrderStatus.OPEN, FulfillmentStatus.UNFULFILLED, "PKR", BigDecimal.valueOf(1000), Instant.now(),
+                List.of(new OrderItemContextView("Cotton Bedsheet Set", 1, BigDecimal.valueOf(1000),
+                        new ItemReturnEligibilityView(false, "ITEM_NOT_DELIVERED", 0))),
+                null, List.of(),
+                new CancellationEligibilityView("ORD-10001", true, null, "REFUND_REQUIRED"),
+                List.of(), List.of(), List.of());
     }
 
     @Test
@@ -63,6 +72,17 @@ class CustomerReadToolsTest {
 
         assertThat(result).isInstanceOf(ToolError.class);
         assertThat(((ToolError) result).code()).isEqualTo("IDENTITY_NOT_VERIFIED");
+    }
+
+    @Test
+    void getMyOrderContextRecordsTheFocusOrderInTheSession() {
+        OrderContextView context = sampleContext();
+        when(queryService.getOrderContext(identity, "ORD-10001")).thenReturn(context);
+
+        tools.getMyOrderContext("ORD-10001");
+
+        assertThat(session.getFocus()).isPresent();
+        assertThat(session.getFocus().orElseThrow().orderNumber()).isEqualTo("ORD-10001");
     }
 
     @Test
