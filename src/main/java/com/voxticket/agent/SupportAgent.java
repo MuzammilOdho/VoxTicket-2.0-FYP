@@ -7,6 +7,7 @@ import com.voxticket.conversation.RecentActionType;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.policy.PaymentConsequence;
+import com.voxticket.procedure.ProcedureControlTools;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureRequestTools;
 import com.voxticket.procedure.ProcedureState;
@@ -45,7 +46,9 @@ public class SupportAgent {
             Use tools for customer-specific or current account facts. Use policy search for
             store-policy facts. Never invent an order, status, amount, date, cause, policy,
             process, timeframe, or action result. If authoritative information does not
-            contain the answer, say that it is not available.
+            contain the answer, say that it is not available. Capability data from
+            getMyOrderContext is authoritative for what support actions are available:
+            never suggest one as available unless current tool data establishes it.
 
             ACTIONS
             Cancellation, return, and claim tools start deterministic server-controlled
@@ -96,6 +99,57 @@ public class SupportAgent {
 
 
     public AgentResponse respond(ConversationSession session, String currentUserMessage) {
+        return respondWithMode(session, currentUserMessage, ToolAccessMode.FULL);
+    }
+
+    /**
+     * Pass 2D-A: answers a follow-up while a guarded procedure (OTP
+     * verification or claim confirmation) is still unresolved. Only customer
+     * read / policy tools are registered - procedure-request tools
+     * (requestCancellation, requestReturn, requestClaim, requestHumanSupport)
+     * are genuinely unavailable, so no second mutation procedure can start.
+     * Enforcement is tool registration, not prompting.
+     */
+    public AgentResponse respondReadOnly(ConversationSession session, String currentUserMessage) {
+        return respondWithMode(session, currentUserMessage, ToolAccessMode.READ_ONLY);
+    }
+
+    /**
+     * Pass 2D-B: answers a follow-up while one procedure is active. The full
+     * read / policy / procedure-request surface is available - plus the safe
+     * procedure-control tools (abandon active, discard deferred) - so the
+     * model can understand a second mutation request, a correction, or a
+     * replacement. The coordinator guarantees the safety invariant: an
+     * identical request reuses the live procedure, a different request is
+     * deferred as the single intent, and a second live procedure can never
+     * be created. Enforcement is tool registration plus coordinator state
+     * ownership, not prompting.
+     */
+    public AgentResponse respondGuarded(ConversationSession session, String currentUserMessage) {
+        return respondWithMode(session, currentUserMessage, ToolAccessMode.GUARDED);
+    }
+
+    /**
+     * The tool objects attached to the chat call for a mode. Package-visible
+     * for tests: READ_ONLY must never contain a {@code ProcedureRequestTools}
+     * instance; GUARDED must contain both {@code ProcedureRequestTools} and
+     * {@code ProcedureControlTools}.
+     */
+    Object[] toolObjectsForMode(ToolAccessMode mode, ConversationSession session) {
+        var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity(), session, turnMetrics, auditService);
+        var policyTools = new PolicyKnowledgeTools(ragService, turnMetrics, session, auditService);
+        if (mode == ToolAccessMode.READ_ONLY) {
+            return new Object[]{customerTools, policyTools};
+        }
+        var procedureTools = new ProcedureRequestTools(procedureCoordinator, session);
+        if (mode == ToolAccessMode.GUARDED) {
+            var controlTools = new ProcedureControlTools(procedureCoordinator, session);
+            return new Object[]{customerTools, policyTools, procedureTools, controlTools};
+        }
+        return new Object[]{customerTools, policyTools, procedureTools};
+    }
+
+    private AgentResponse respondWithMode(ConversationSession session, String currentUserMessage, ToolAccessMode mode) {
         long start = System.nanoTime();
         String tierLabel = "UNKNOWN";
         String providerLabel = "unknown";
@@ -111,13 +165,13 @@ public class SupportAgent {
                     "tier=" + tierLabel + " provider=" + providerLabel + " model=" + modelLabel + " reason=" + selection.reason());
             log.info("event=model_selected sessionId={} tier={} provider={} model={} reason={}", session.getSessionId(), tierLabel, providerLabel, modelLabel, selection.reason());
 
-            var history = contextBuilder.buildHistory(session);
-            var customerTools = new CustomerReadTools(queryService, session.getCustomerIdentity(), session, turnMetrics, auditService);
-            var procedureTools = new ProcedureRequestTools(procedureCoordinator, session);
-            var policyTools = new PolicyKnowledgeTools(ragService, turnMetrics, session, auditService);
+            var history = contextBuilder.buildHistory(session, currentUserMessage);
+            Object[] tools = toolObjectsForMode(mode, session);
+            // Pass 2D-A: the system prompt is identical in both modes. Read-only
+            // enforcement is tool registration (toolObjectsForMode), not prompting.
             String systemPrompt = buildSystemPrompt(session);
 
-            log.info("event=support_agent_call_start sessionId={} tier={} provider={} model={}", session.getSessionId(), tierLabel, providerLabel, modelLabel);
+            log.info("event=support_agent_call_start sessionId={} tier={} provider={} model={} mode={}", session.getSessionId(), tierLabel, providerLabel, modelLabel, mode);
 
             // No per-prompt advisors: the tool-calling advisor is a default
             // advisor on each tier's ChatClient (configured once in
@@ -127,7 +181,7 @@ public class SupportAgent {
             ChatResponse chatResponse = chatClient.prompt()
                     .system(systemPrompt)
                     .messages(history)
-                    .tools(customerTools, policyTools, procedureTools)
+                    .tools(tools)
                     .call()
                     .chatResponse();
 
@@ -216,9 +270,15 @@ public class SupportAgent {
             appendStateLine(sb, "activeProcedureStatus: " + p.getStatus());
             appendStateLine(sb, "activeTarget: " + p.getPendingDescription());
         });
-        session.getPausedProcedure().ifPresent(p -> {
-            appendStateLine(sb, "pausedProcedure: " + p.getType());
-            appendStateLine(sb, "pausedTarget: " + p.getPendingDescription());
+        // Pass 2D-B: the paused-procedure concept is gone. The single
+        // deferred intent is rendered with customer-visible selectors only -
+        // no procedure IDs, no SKUs, no challenge material.
+        session.getDeferredIntent().ifPresent(d -> {
+            appendStateLine(sb, "deferredProcedure: " + d.type());
+            appendStateLine(sb, "deferredTarget: " + d.orderNumber());
+            if (d.itemDisplayName() != null) {
+                appendStateLine(sb, "deferredItem: " + d.itemDisplayName());
+            }
         });
         List<RecentAction> actions = session.getRecentActions();
         if (!actions.isEmpty()) {

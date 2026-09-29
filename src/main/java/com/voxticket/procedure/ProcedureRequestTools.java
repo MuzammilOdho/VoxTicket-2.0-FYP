@@ -37,12 +37,13 @@ public class ProcedureRequestTools {
     public ProcedureToolResult requestReturn(
             @ToolParam(description = "Order number, e.g. ORD-10001") String orderReference,
             @ToolParam(required = false, description = "Item name in the customer's own words; blank if unknown or the order has one item") String itemReference,
-            @ToolParam(required = false, description = "Why the customer is returning it, in their own words; blank if not said yet") String reason) {
+            @ToolParam(required = false, description = "Why the customer is returning it, in their own words; blank if not said yet") String reason,
+            @ToolParam(required = false, description = "How many units to return, e.g. \"2\"; blank or \"1\" for a single unit") String quantity) {
         session.markToolInvoked();
         return ProcedureToolResultMapper.toToolResult(ProcedureType.RETURN.name(),
-                procedureCoordinator.startReturn(session, orderReference, itemReference, reason));
+                procedureCoordinator.startReturn(session, orderReference, itemReference, reason, quantity));
     }
-
+    
     @Tool(description = "Start or continue the deterministic claim procedure for an item problem such as damaged, "
             + "defective, incorrect, or missing goods. Call even when the item or problem description is incomplete; "
             + "the procedure result identifies missing information. The claim is not filed until server-controlled "

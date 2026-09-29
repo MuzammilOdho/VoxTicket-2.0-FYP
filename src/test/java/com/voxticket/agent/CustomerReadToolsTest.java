@@ -16,10 +16,14 @@ import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
 import com.voxticket.persistence.entity.enums.FulfillmentStatus;
 import com.voxticket.persistence.entity.enums.OrderStatus;
-import com.voxticket.service.dto.CancellationEligibilityView;
-import com.voxticket.service.dto.ItemReturnEligibilityView;
-import com.voxticket.service.dto.OrderContextView;
-import com.voxticket.service.dto.OrderItemContextView;
+import com.voxticket.service.dto.CancellationCapabilityView;
+import com.voxticket.service.dto.ItemClaimCapabilityView;
+import com.voxticket.service.dto.ItemReturnCapabilityView;
+import com.voxticket.service.dto.OrderSupportContext;
+import com.voxticket.service.dto.OrderSupportItemView;
+import com.voxticket.service.dto.RefundStateView;
+import com.voxticket.policy.ClaimCapabilityState;
+import com.voxticket.service.dto.SupportCapabilitiesView;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -33,20 +37,23 @@ class CustomerReadToolsTest {
     private final ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
     private final CustomerReadTools tools = new CustomerReadTools(queryService, identity, session, mock(TurnMetrics.class), mock(ConversationAuditService.class));
 
-    private OrderContextView sampleContext() {
-        return new OrderContextView(
-                "ORD-10001", OrderStatus.OPEN, FulfillmentStatus.UNFULFILLED, "PKR", BigDecimal.valueOf(1000), Instant.now(),
-                List.of(new OrderItemContextView("Cotton Bedsheet Set", 1, BigDecimal.valueOf(1000),
-                        new ItemReturnEligibilityView(false, "ITEM_NOT_DELIVERED", 0))),
+    private OrderSupportContext sampleContext() {
+        CancellationCapabilityView cancellation = new CancellationCapabilityView(true, null, "REFUND_REQUIRED");
+        return new OrderSupportContext(
+                "ORD-10001", OrderStatus.OPEN, FulfillmentStatus.UNFULFILLED, Instant.now(), "PKR", BigDecimal.valueOf(1000),
+                List.of(new OrderSupportItemView("Cotton Bedsheet Set", 1, BigDecimal.valueOf(1000),
+                        new ItemReturnCapabilityView(false, "ITEM_NOT_DELIVERED", 0),
+                        new ItemClaimCapabilityView(ClaimCapabilityState.AVAILABLE, null, "MANUAL_REVIEW", null))),
                 null, List.of(),
-                new CancellationEligibilityView("ORD-10001", true, null, "REFUND_REQUIRED"),
-                List.of(), List.of(), List.of());
+                cancellation,
+                List.of(), List.of(), List.of(),
+                new SupportCapabilitiesView(false, true, new RefundStateView(false, null, false, false)));
     }
 
     @Test
     void getMyOrderContextReturnsTheAggregatedServiceResultOnSuccess() {
-        OrderContextView context = sampleContext();
-        when(queryService.getOrderContext(identity, "ORD-10001")).thenReturn(context);
+        OrderSupportContext context = sampleContext();
+        when(queryService.getOrderSupportContext(identity, "ORD-10001")).thenReturn(context);
 
         Object result = tools.getMyOrderContext("ORD-10001");
 
@@ -55,7 +62,7 @@ class CustomerReadToolsTest {
 
     @Test
     void getMyOrderContextConvertsNotFoundIntoAStructuredToolError() {
-        when(queryService.getOrderContext(identity, "ORD-99999")).thenThrow(new ResourceNotFoundForAccountException("ORDER", "ORD-99999"));
+        when(queryService.getOrderSupportContext(identity, "ORD-99999")).thenThrow(new ResourceNotFoundForAccountException("ORDER", "ORD-99999"));
 
         Object result = tools.getMyOrderContext("ORD-99999");
 
@@ -65,7 +72,7 @@ class CustomerReadToolsTest {
 
     @Test
     void toolsConvertInsufficientAssuranceIntoAStructuredToolError() {
-        when(queryService.getOrderContext(identity, "ORD-10001"))
+        when(queryService.getOrderSupportContext(identity, "ORD-10001"))
                 .thenThrow(new InsufficientAssuranceException(IdentityAssurance.PHONE_MATCHED, IdentityAssurance.ANONYMOUS));
 
         Object result = tools.getMyOrderContext("ORD-10001");
@@ -76,8 +83,8 @@ class CustomerReadToolsTest {
 
     @Test
     void getMyOrderContextRecordsTheFocusOrderInTheSession() {
-        OrderContextView context = sampleContext();
-        when(queryService.getOrderContext(identity, "ORD-10001")).thenReturn(context);
+        OrderSupportContext context = sampleContext();
+        when(queryService.getOrderSupportContext(identity, "ORD-10001")).thenReturn(context);
 
         tools.getMyOrderContext("ORD-10001");
 
@@ -88,7 +95,7 @@ class CustomerReadToolsTest {
     @Test
     void anInjectionStyledOrderReferenceIsHandledAsAnOrdinaryNonexistentReference() {
         String injectionAttempt = "'; DROP TABLE orders; --";
-        when(queryService.getOrderContext(identity, injectionAttempt))
+        when(queryService.getOrderSupportContext(identity, injectionAttempt))
                 .thenThrow(new ResourceNotFoundForAccountException("ORDER", injectionAttempt));
 
         Object result = tools.getMyOrderContext(injectionAttempt);

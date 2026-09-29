@@ -172,6 +172,31 @@ public class VerificationService {
         return VerificationResult.success();
     }
 
+    /**
+     * Pass 2D-B: narrowly scoped invalidation used when the active procedure
+     * is explicitly abandoned or replaced. Marks the session's pending
+     * challenge consumed without verification and clears the session pointer,
+     * so the old OTP can never authorize anything afterwards - not the
+     * abandoned action, and not a replacement action either (the
+     * procedure/order binding would reject it anyway; this makes it unusable
+     * outright).
+     *
+     * <p>OTP semantics are untouched: length, hashing, expiry, attempt
+     * limits, resend cooldown, and rate limits are not changed here.
+     */
+    @Transactional
+    public void invalidatePendingChallenge(ConversationSession session) {
+        session.getPendingVerificationChallengeId().ifPresent(challengeId -> {
+            repository.findById(challengeId).ifPresent(challenge -> {
+                if (!challenge.isConsumed()) {
+                    challenge.markConsumedWithoutVerification();
+                    log.info("event=otp_invalidated sessionId={} purpose={}", session.getSessionId(), challenge.getPurpose());
+                }
+            });
+            session.clearPendingVerification();
+        });
+    }
+
     private String generateOtp() {
         return String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
     }

@@ -14,6 +14,6 @@ public record StructuralRoutingFeatures(
         int distinctOrderReferences,
         /** Whether the session currently holds an active (unpaused) procedure. */
         boolean hasActiveProcedure,
-        /** Whether the session currently holds a paused procedure. */
-        boolean hasPausedProcedure) {
+        /** Whether the session currently holds a deferred (queued, unauthorized) procedure intent. */
+        boolean hasDeferredIntent) {
 }

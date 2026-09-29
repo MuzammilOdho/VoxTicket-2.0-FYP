@@ -2,9 +2,12 @@ package com.voxticket.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,7 +20,8 @@ import com.voxticket.identity.IdentityService;
 import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
-import com.voxticket.procedure.ConfirmationClassifier;
+import com.voxticket.procedure.DeferredProcedureIntent;
+import com.voxticket.procedure.ExplicitConfirmationParser;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureOutcome;
 import com.voxticket.procedure.ProcedureState;
@@ -26,10 +30,12 @@ import com.voxticket.procedure.ProcedureType;
 import com.voxticket.safety.HeuristicPromptGuard;
 import com.voxticket.safety.InputNormalizer;
 import com.voxticket.safety.PromptGuard;
-import com.voxticket.verification.OtpInputClassifier;
+import com.voxticket.verification.SensitiveTurnParser;
 import java.time.Instant;
+import org.mockito.ArgumentCaptor;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,21 +46,25 @@ class ConversationRuntimeTest {
     private final SupportAgent supportAgent = mock(SupportAgent.class);
     private final InputNormalizer inputNormalizer = new InputNormalizer();
     private final PromptGuard promptGuard = new HeuristicPromptGuard(mock(TurnMetrics.class));
-    private final ConfirmationClassifier confirmationClassifier = new ConfirmationClassifier();
-    private final OtpInputClassifier otpInputClassifier = new OtpInputClassifier();
+    private final ExplicitConfirmationParser confirmationParser = new ExplicitConfirmationParser();
+    private final SensitiveTurnParser sensitiveTurnParser = new SensitiveTurnParser();
     private final ProcedureCoordinator procedureCoordinator = mock(ProcedureCoordinator.class);
     private final InMemorySessionStore sessionStore = new InMemorySessionStore();
     private final TurnMetrics turnMetrics = mock(TurnMetrics.class);
     private final ConversationAuditService auditService = mock(ConversationAuditService.class);
     private final ConversationRuntime runtime = new ConversationRuntime(
             sessionStore, identityService, supportAgent, inputNormalizer, promptGuard,
-            confirmationClassifier, otpInputClassifier, procedureCoordinator, turnMetrics, auditService,
+            confirmationParser, sensitiveTurnParser, procedureCoordinator, turnMetrics, auditService,
             new ConversationLanguageResolver(), new DirectProcedureResponseRenderer());
 
     @BeforeEach
     void stubSupportAgent() {
         when(supportAgent.respond(any(), any()))
                 .thenReturn(new AgentResponse("stubbed agent response", AgentResponse.Outcome.SUCCESS));
+        when(supportAgent.respondGuarded(any(), any()))
+                .thenReturn(new AgentResponse("stubbed guarded agent response", AgentResponse.Outcome.SUCCESS));
+        when(supportAgent.respondGuarded(any(), any()))
+                .thenReturn(new AgentResponse("stubbed guarded agent response", AgentResponse.Outcome.SUCCESS));
     }
 
     @Test
@@ -150,7 +160,8 @@ class ConversationRuntimeTest {
 
         verify(procedureCoordinator, never()).confirmActive(any());
         verify(procedureCoordinator, never()).declineActive(any());
-        verify(supportAgent).respond(any(), any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), any());
     }
 
     @Test
@@ -162,7 +173,8 @@ class ConversationRuntimeTest {
 
         verify(procedureCoordinator, never()).confirmActive(any());
         verify(procedureCoordinator, never()).declineActive(any());
-        verify(supportAgent).respond(any(), any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), any());
     }
 
     @Test
@@ -174,7 +186,8 @@ class ConversationRuntimeTest {
 
         verify(procedureCoordinator, never()).confirmActive(any());
         verify(procedureCoordinator, never()).declineActive(any());
-        verify(supportAgent).respond(any(), any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), any());
         assertThat(response.requiresConfirmation()).isTrue();
     }
 
@@ -228,10 +241,11 @@ class ConversationRuntimeTest {
                 "stale English message that must never reach the customer",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
 
-        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "code dobara bhejain please resend", null, Instant.now(), Map.of()));
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "please resend the code", null, Instant.now(), Map.of()));
 
         verify(procedureCoordinator).resendVerificationCode(any());
         verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent, never()).respondGuarded(any(), any());
         assertThat(response.text()).contains("********4567");
         assertThat(response.requiresVerification()).isTrue();
     }
@@ -291,6 +305,216 @@ class ConversationRuntimeTest {
         assertThat(response.metadata())
                 .doesNotContainKey("devOtp")
                 .doesNotContainValue("482916");
+    }
+
+    // ---- Pass 2D-A: OTP redaction, mixed turns, ambiguity, confirmation ----
+
+    @Test
+    void otpPlaintextNeverEntersHistoryAuditOrModelInput() {
+        String sessionId = "s70";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916")))
+                .thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED", "stale English message",
+                        Map.of("verificationReason", "WRONG_CODE")));
+
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "482916", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator).submitVerificationCode(any(), eq("482916"));
+
+        // Conversation history: redacted placeholder stored, plaintext gone.
+        List<ConversationMessage> history = sessionStore.withSession(sessionId, Channel.CHAT, ConversationSession::getRecentMessages);
+        assertThat(history).filteredOn(m -> m.role() == MessageRole.USER)
+                .noneMatch(m -> m.text().contains("482916"));
+        assertThat(history).filteredOn(m -> m.role() == MessageRole.USER)
+                .anyMatch(m -> m.text().contains("[verification code provided]"));
+
+        // Audit message text: no plaintext.
+        ArgumentCaptor<String> auditText = ArgumentCaptor.forClass(String.class);
+        verify(auditService, atLeastOnce()).recordMessage(any(), anyInt(), eq(MessageRole.USER), auditText.capture());
+        assertThat(auditText.getAllValues()).noneMatch(t -> t.contains("482916"));
+
+        // Customer-facing turn: no plaintext in text or metadata.
+        assertThat(response.text()).doesNotContain("482916");
+        assertThat(response.metadata()).doesNotContainValue("482916");
+    }
+
+    @Test
+    void otpPlusReadResidualExecutesCancellationAndAnswersResidualWithNormalTools() {
+        String sessionId = "s71";
+        seedAwaitingVerification(sessionId);
+        // The real coordinator clears the procedure on successful execution; the mock mirrors that.
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+            ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
+            return ProcedureOutcome.ok("CANCELLED", "stale English message",
+                    Map.of("orderReference", "ORD-10001", "paymentConsequence", "NO_REFUND_REQUIRED"));
+        });
+        when(supportAgent.respond(any(), eq("where is ORD-10002?")))
+                .thenReturn(new AgentResponse("ORD-10002 is out for delivery.", AgentResponse.Outcome.SUCCESS));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916 and where is ORD-10002?", null, Instant.now(), Map.of()));
+
+        // The OTP went to verification exactly once, as the raw code.
+        verify(procedureCoordinator, times(1)).submitVerificationCode(any(), eq("482916"));
+
+        // The residual reached the agent with the OTP removed - normal tool surface after success.
+        ArgumentCaptor<String> agentInput = ArgumentCaptor.forClass(String.class);
+        verify(supportAgent).respond(any(), agentInput.capture());
+        verify(supportAgent, never()).respondGuarded(any(), any());
+        assertThat(agentInput.getValue()).isEqualTo("where is ORD-10002?");
+        assertThat(agentInput.getValue()).doesNotContain("482916");
+
+        // One combined customer-facing response; exactly one recorded assistant message.
+        assertThat(response.text()).contains("ORD-10002 is out for delivery.");
+        assertThat(response.text()).doesNotContain("482916");
+        List<ConversationMessage> history = sessionStore.withSession(sessionId, Channel.CHAT, ConversationSession::getRecentMessages);
+        assertThat(history).filteredOn(m -> m.role() == MessageRole.ASSISTANT).hasSize(1);
+
+        // Pass 2C metadata allowlist still holds.
+        assertThat(response.metadata())
+                .containsEntry("orderReference", "ORD-10001")
+                .containsEntry("paymentConsequence", "NO_REFUND_REQUIRED");
+        assertThat(response.metadata()).doesNotContainValue("482916");
+        assertThat(response.requiresVerification()).isFalse();
+    }
+
+    @Test
+    void otpPlusMutationResidualCannotReuseTheFirstOtpForANewProcedure() {
+        String sessionId = "s72";
+        seedAwaitingVerificationOfType(sessionId, ProcedureType.RETURN);
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+            ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
+            return ProcedureOutcome.ok("RETURN_STARTED", "stale English message",
+                    Map.of("orderReference", "ORD-10006", "returnNumber", "RET-00042"));
+        });
+        when(supportAgent.respond(any(), eq("cancel ORD-10002")))
+                .thenReturn(new AgentResponse("To cancel ORD-10002 I will send a fresh verification code.", AgentResponse.Outcome.SUCCESS));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916 and cancel ORD-10002", null, Instant.now(), Map.of()));
+
+        // The first OTP authorized exactly one verification - never anything else.
+        verify(procedureCoordinator, times(1)).submitVerificationCode(any(), eq("482916"));
+        verify(procedureCoordinator, never()).submitVerificationCode(any(), eq("cancel ORD-10002"));
+
+        // The mutation request reached the agent as plain residual text, without the OTP.
+        ArgumentCaptor<String> agentInput = ArgumentCaptor.forClass(String.class);
+        verify(supportAgent).respond(any(), agentInput.capture());
+        assertThat(agentInput.getValue()).isEqualTo("cancel ORD-10002");
+        assertThat(agentInput.getValue()).doesNotContain("482916");
+        assertThat(response.text()).doesNotContain("482916");
+    }
+
+    @Test
+    void failedOtpWithReadResidualAnswersGuardedWhileVerificationStaysPending() {
+        String sessionId = "s73";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.submitVerificationCode(any(), eq("000000")))
+                .thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED", "stale English message",
+                        Map.of("verificationReason", "WRONG_CODE")));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "000000 and where is ORD-10002?", null, Instant.now(), Map.of()));
+
+        // The guarded procedure is still active: full agent mode is never used.
+        verify(supportAgent, never()).respond(any(), any());
+        ArgumentCaptor<String> agentInput = ArgumentCaptor.forClass(String.class);
+        verify(supportAgent).respondGuarded(any(), agentInput.capture());
+        assertThat(agentInput.getValue()).isEqualTo("where is ORD-10002?");
+        assertThat(agentInput.getValue()).doesNotContain("000000");
+
+        assertThat(response.requiresVerification()).isTrue();
+        assertThat(response.text()).doesNotContain("000000");
+    }
+
+    @Test
+    void resendWithReadResidualResendsAndAnswersGuarded() {
+        String sessionId = "s74";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.resendVerificationCode(any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+                "stale English message",
+                Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "resend the code and where is ORD-10002?", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator).resendVerificationCode(any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), eq("where is ORD-10002?"));
+
+        assertThat(response.requiresVerification()).isTrue();
+        assertThat(response.text()).contains("********4567");
+    }
+
+    @Test
+    void multipleOtpCandidatesAskForOneCodeAndSubmitNothing() {
+        String sessionId = "s75";
+        seedAwaitingVerification(sessionId);
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916 or 123456", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator, never()).submitVerificationCode(any(), any());
+        verify(procedureCoordinator, never()).resendVerificationCode(any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent, never()).respondGuarded(any(), any());
+
+        assertThat(response.text()).doesNotContain("482916").doesNotContain("123456");
+        assertThat(response.text()).contains("6-digit verification code");
+        assertThat(response.requiresVerification()).isTrue();
+    }
+
+    @Test
+    void standaloneHaConfirmsClaimExactlyOnceWithoutAgent() {
+        String sessionId = "s76";
+        seedUserMessage(sessionId, "mera claim file kar do");
+        seedAwaitingConfirmation(sessionId);
+        when(procedureCoordinator.confirmActive(any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
+                "stale English message", Map.of("orderReference", "ORD-10001", "claimNumber", "CLM-00007")));
+
+        AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "ha", null, Instant.now(), Map.of()));
+
+        // The live duplicate-claim bug: "ha" was missed, the model called requestClaim again.
+        verify(procedureCoordinator, times(1)).confirmActive(any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent, never()).respondGuarded(any(), any());
+        assertThat(response.text()).contains("CLM-00007");
+    }
+
+    @Test
+    void compoundConfirmationReachesGuardedAgentAndStartsNoNewProcedure() {
+        String sessionId = "s77";
+        seedAwaitingConfirmation(sessionId);
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "yes and cancel ORD-10002", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator, never()).confirmActive(any());
+        verify(procedureCoordinator, never()).declineActive(any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), eq("yes and cancel ORD-10002"));
+
+        // The original procedure is untouched and still pending; nothing new started.
+        assertThat(response.requiresConfirmation()).isTrue();
+        ProcedureState stillPending = sessionStore.withSession(sessionId, Channel.CHAT,
+                session -> session.getActiveProcedure().orElse(null));
+        assertThat(stillPending).isNotNull();
+        assertThat(stillPending.getStatus()).isEqualTo(ProcedureStatus.AWAITING_CONFIRMATION);
+    }
+
+    @Test
+    void correctiveConfirmationReachesGuardedAgentWithoutDeclining() {
+        String sessionId = "s78";
+        seedAwaitingConfirmation(sessionId);
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "nahi doosra item tha", null, Instant.now(), Map.of()));
+
+        verify(procedureCoordinator, never()).confirmActive(any());
+        verify(procedureCoordinator, never()).declineActive(any());
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), eq("nahi doosra item tha"));
+        assertThat(response.requiresConfirmation()).isTrue();
     }
 
     @Test
@@ -433,7 +657,7 @@ class ConversationRuntimeTest {
         String sessionId = "s-roman-urdu-claim";
         sessionStore.withSession(sessionId, Channel.CHAT, session -> {
             VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-20002", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
-            session.beginProcedure(new ProcedureState(ProcedureType.CLAIM, ref, Map.of(), IdentityAssurance.PHONE_MATCHED));
+            session.startActiveProcedure(new ProcedureState(ProcedureType.CLAIM, ref, Map.of(), IdentityAssurance.PHONE_MATCHED));
             session.recordUserMessage("mera claim file kar do");
             return null;
         });
@@ -454,7 +678,7 @@ class ConversationRuntimeTest {
         String sessionId = "s-roman-urdu-decline";
         sessionStore.withSession(sessionId, Channel.CHAT, session -> {
             VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-20003", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
-            session.beginProcedure(new ProcedureState(ProcedureType.CLAIM, ref, Map.of(), IdentityAssurance.PHONE_MATCHED));
+            session.startActiveProcedure(new ProcedureState(ProcedureType.CLAIM, ref, Map.of(), IdentityAssurance.PHONE_MATCHED));
             session.recordUserMessage("mera claim file kar do");
             return null;
         });
@@ -481,6 +705,179 @@ class ConversationRuntimeTest {
         assertThat(response.text()).isEqualTo("No problem - I won't go ahead with that.");
     }
 
+    @Test
+    void ordinaryTextDuringAwaitingVerificationUsesGuardedAgent() {
+        String sessionId = "s80";
+        seedAwaitingVerification(sessionId);
+        when(supportAgent.respondGuarded(any(), eq("cancel ORD-10002")))
+                .thenReturn(new AgentResponse("Your cancellation is still awaiting its verification code.", AgentResponse.Outcome.SUCCESS));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "cancel ORD-10002", null, Instant.now(), Map.of()));
+
+        // No ordinary text may reach full agent tools while verification is pending.
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), eq("cancel ORD-10002"));
+        verify(procedureCoordinator, never()).submitVerificationCode(any(), any());
+        verify(procedureCoordinator, never()).resendVerificationCode(any());
+
+        // The original guarded procedure is unchanged; no deferred intent was created.
+        sessionStore.withSession(sessionId, Channel.CHAT, session -> {
+            assertThat(session.getActiveProcedure()).isPresent();
+            assertThat(session.getActiveProcedure().get().getType()).isEqualTo(ProcedureType.CANCELLATION);
+            assertThat(session.getActiveProcedure().get().getStatus()).isEqualTo(ProcedureStatus.AWAITING_VERIFICATION);
+            assertThat(session.getDeferredIntent()).isEmpty();
+            return null;
+        });
+        assertThat(response.requiresVerification()).isTrue();
+    }
+
+    @Test
+    void ordinaryClaimTextDuringAwaitingVerificationCannotStartANewProcedure() {
+        String sessionId = "s81";
+        seedAwaitingVerification(sessionId);
+        when(supportAgent.respondGuarded(any(), any()))
+                .thenReturn(new AgentResponse("Still waiting on the verification code for your cancellation.", AgentResponse.Outcome.SUCCESS));
+
+        runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "I want to file a claim for my order", null, Instant.now(), Map.of()));
+
+        verify(supportAgent, never()).respond(any(), any());
+        verify(supportAgent).respondGuarded(any(), eq("I want to file a claim for my order"));
+
+        // No second procedure started: the active slot still holds the
+        // original cancellation and no deferred intent was created by the runtime.
+        sessionStore.withSession(sessionId, Channel.CHAT, session -> {
+            assertThat(session.getActiveProcedure()).isPresent();
+            assertThat(session.getActiveProcedure().get().getType()).isEqualTo(ProcedureType.CANCELLATION);
+            assertThat(session.getDeferredIntent()).isEmpty();
+            return null;
+        });
+    }
+
+    @Test
+    void successfulOtpPromotingDeferredClaimKeepsResidualGuarded() {
+        String sessionId = "s82";
+        sessionStore.withSession(sessionId, Channel.CHAT, session -> {
+            VerifiedOrderRef cancelRef = new VerifiedOrderRef(UUID.randomUUID(), "ORD-10001", UUID.randomUUID(), IdentityAssurance.OTP_VERIFIED, Instant.now());
+            ProcedureState cancellation = new ProcedureState(ProcedureType.CANCELLATION, cancelRef, Map.of(), IdentityAssurance.OTP_VERIFIED);
+            cancellation.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
+            session.startActiveProcedure(cancellation);
+            session.setDeferredIntent(new DeferredProcedureIntent(ProcedureType.CLAIM, "ORD-10002", UUID.randomUUID(),
+                    "Blue Widget", "SKU-1", "DAMAGED", "1", "box was crushed", Instant.now()));
+            return null;
+        });
+        // The real coordinator promotes the deferred intent when the active
+        // procedure clears on terminal execution; the mock mirrors that.
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+            ConversationSession session = inv.getArgument(0);
+            session.clearActiveProcedure();
+            return ProcedureOutcome.ok("CANCELLED", "stale English message",
+                    Map.of("orderReference", "ORD-10001"));
+        });
+        when(procedureCoordinator.promoteDeferredIntent(any())).thenAnswer(inv -> {
+            ConversationSession session = inv.getArgument(0);
+            session.clearDeferredIntent();
+            VerifiedOrderRef claimRef = new VerifiedOrderRef(UUID.randomUUID(), "ORD-10002", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
+            session.startActiveProcedure(new ProcedureState(ProcedureType.CLAIM, claimRef, Map.of(), IdentityAssurance.PHONE_MATCHED));
+            return Optional.of(ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "stale English message",
+                    Map.of("orderReference", "ORD-10002")));
+        });
+        when(supportAgent.respondGuarded(any(), eq("where is ORD-10002?")))
+                .thenReturn(new AgentResponse("ORD-10002 is out for delivery.", AgentResponse.Outcome.SUCCESS));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916 and where is ORD-10002?", null, Instant.now(), Map.of()));
+
+        // The promoted guarded confirmation keeps the residual guarded.
+        verify(supportAgent, never()).respond(any(), any());
+        ArgumentCaptor<String> agentInput = ArgumentCaptor.forClass(String.class);
+        verify(supportAgent).respondGuarded(any(), agentInput.capture());
+        assertThat(agentInput.getValue()).isEqualTo("where is ORD-10002?");
+        assertThat(response.text()).doesNotContain("482916");
+
+        sessionStore.withSession(sessionId, Channel.CHAT, session -> {
+            assertThat(session.getActiveProcedure()).isPresent();
+            assertThat(session.getActiveProcedure().get().getType()).isEqualTo(ProcedureType.CLAIM);
+            assertThat(session.getDeferredIntent()).isEmpty();
+            return null;
+        });
+    }
+
+    @Test
+    void residualTurnAuditAndHistoryKeepTheRedactedFullText() {
+        String sessionId = "s83";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+            ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
+            return ProcedureOutcome.ok("CANCELLED", "stale English message",
+                    Map.of("orderReference", "ORD-10001"));
+        });
+        when(supportAgent.respond(any(), eq("where is ORD-10002?")))
+                .thenReturn(new AgentResponse("ORD-10002 is out for delivery.", AgentResponse.Outcome.SUCCESS));
+
+        runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916 and where is ORD-10002?", null, Instant.now(), Map.of()));
+
+        // Session and audit keep the safe redacted full message; OTP plaintext is absent.
+        List<ConversationMessage> history = sessionStore.withSession(sessionId, Channel.CHAT, ConversationSession::getRecentMessages);
+        assertThat(history).filteredOn(m -> m.role() == MessageRole.USER)
+                .anyMatch(m -> m.text().equals("[verification code provided] and where is ORD-10002?"));
+        assertThat(history).filteredOn(m -> m.role() == MessageRole.USER)
+                .noneMatch(m -> m.text().contains("482916"));
+
+        ArgumentCaptor<String> auditText = ArgumentCaptor.forClass(String.class);
+        verify(auditService, atLeastOnce()).recordMessage(any(), anyInt(), eq(MessageRole.USER), auditText.capture());
+        assertThat(auditText.getAllValues()).anyMatch(t -> t.contains("[verification code provided]"));
+        assertThat(auditText.getAllValues()).noneMatch(t -> t.contains("482916"));
+    }
+
+    @Test
+    void promotionFailureNoticeComposesAfterSuccessfulMutation() {
+        // Task 2 cleanup: a PROMOTION_FAILED deferred outcome appends a safe
+        // localized notice to the already-rendered active success - it never
+        // replaces it with a generic failure message.
+        String sessionId = "s84";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+            ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
+            return ProcedureOutcome.ok("CANCELLED", "stale English message",
+                    Map.of("orderReference", "ORD-TEST", "paymentConsequence", "NO_REFUND_REQUIRED"));
+        });
+        when(procedureCoordinator.promoteDeferredIntent(any())).thenReturn(
+                Optional.of(ProcedureOutcome.error("PROMOTION_FAILED", "internal promotion failure")));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916", null, Instant.now(), Map.of()));
+
+        assertThat(response.text()).contains("has been cancelled");
+        assertThat(response.text()).contains("queued request");
+        assertThat(response.text()).doesNotContain("Something went wrong");
+    }
+
+    @Test
+    void promotionThrowingNeverMasksSuccessfulMutation() {
+        // Task 3 cleanup: an unexpected promotion exception escapes nothing
+        // and cannot replace the already-rendered active success with a
+        // global failure; the turn still completes as one AssistantTurn.
+        String sessionId = "s85";
+        seedAwaitingVerification(sessionId);
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+            ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
+            return ProcedureOutcome.ok("CANCELLED", "stale English message",
+                    Map.of("orderReference", "ORD-TEST", "paymentConsequence", "NO_REFUND_REQUIRED"));
+        });
+        when(procedureCoordinator.promoteDeferredIntent(any()))
+                .thenThrow(new RuntimeException("promotion exploded"));
+
+        AssistantTurn response = runtime.processTurn(
+                new UserTurn(sessionId, Channel.CHAT, "482916", null, Instant.now(), Map.of()));
+
+        assertThat(response.text()).contains("has been cancelled");
+        assertThat(response.text()).contains("queued request");
+        assertThat(response.text()).doesNotContain("Something went wrong");
+    }
+
     private void seedUserMessage(String sessionId, String text) {
         sessionStore.withSession(sessionId, Channel.CHAT, session -> {
             session.recordUserMessage(text);
@@ -492,17 +889,21 @@ class ConversationRuntimeTest {
         sessionStore.withSession(sessionId, Channel.CHAT, session -> {
             VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
             ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, ref, Map.of(), IdentityAssurance.PHONE_MATCHED);
-            session.beginProcedure(procedure);
+            session.startActiveProcedure(procedure);
             return null;
         });
     }
 
     private void seedAwaitingVerification(String sessionId) {
+        seedAwaitingVerificationOfType(sessionId, ProcedureType.CANCELLATION);
+    }
+
+    private void seedAwaitingVerificationOfType(String sessionId, ProcedureType type) {
         sessionStore.withSession(sessionId, Channel.CHAT, session -> {
             VerifiedOrderRef ref = new VerifiedOrderRef(UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
-            ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, ref, Map.of(), IdentityAssurance.OTP_VERIFIED);
+            ProcedureState procedure = new ProcedureState(type, ref, Map.of(), IdentityAssurance.OTP_VERIFIED);
             procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
-            session.beginProcedure(procedure);
+            session.startActiveProcedure(procedure);
             return null;
         });
     }

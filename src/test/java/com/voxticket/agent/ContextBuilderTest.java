@@ -113,4 +113,105 @@ class ContextBuilderTest {
         assertThat(((UserMessage) history.get(0)).getText()).isEqualTo("user-0");
         assertThat(((UserMessage) history.get(9)).getText()).isEqualTo("user-9");
     }
+
+    @Test
+    void overrideReplacesOnlyTheLatestUserMessageForModelInput() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordUserMessage("first redacted message");
+        session.recordAssistantMessage("code accepted");
+        session.recordUserMessage("[verification code provided] and where is ORD-10002?");
+
+        var history = contextBuilder.buildHistory(session, "where is ORD-10002?");
+
+        assertThat(history).hasSize(3);
+        assertThat(((UserMessage) history.get(0)).getText())
+                .isEqualTo("first redacted message");
+        assertThat(((AssistantMessage) history.get(1)).getText()).isEqualTo("code accepted");
+        assertThat(((UserMessage) history.get(2)).getText()).isEqualTo("where is ORD-10002?");
+    }
+
+    @Test
+    void overrideAppliesToTheCurrentTurnLatestUserMessage() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordUserMessage("older question");
+        session.recordAssistantMessage("older answer");
+        session.recordUserMessage("[verification code provided] and where is ORD-10002?");
+
+        var history = contextBuilder.buildHistory(session, "where is ORD-10002?");
+
+        assertThat(history).hasSize(3);
+        assertThat(((UserMessage) history.get(0)).getText()).isEqualTo("older question");
+        assertThat(((AssistantMessage) history.get(1)).getText()).isEqualTo("older answer");
+        assertThat(history.get(2)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) history.get(2)).getText()).isEqualTo("where is ORD-10002?");
+    }
+
+    @Test
+    void overridePreservesTheTenMessageModelHistoryCap() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        for (int i = 0; i < 14; i++) {
+            session.recordAssistantMessage("assistant-" + i);
+        }
+        session.recordUserMessage("[verification code provided] and where is ORD-10002?");
+
+        var history = contextBuilder.buildHistory(session, "where is ORD-10002?");
+
+        assertThat(history).hasSize(10);
+        assertThat(((AssistantMessage) history.get(0)).getText()).isEqualTo("assistant-5");
+        assertThat(((UserMessage) history.get(9)).getText()).isEqualTo("where is ORD-10002?");
+    }
+
+    @Test
+    void overrideMatchingTheStoredMessageLeavesNormalTurnsUnchanged() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordUserMessage("hello");
+        session.recordAssistantMessage("hi there");
+
+        var plain = contextBuilder.buildHistory(session);
+        var overridden = contextBuilder.buildHistory(session, "hello");
+
+        assertThat(overridden).hasSize(plain.size());
+        assertThat(((UserMessage) overridden.get(0)).getText())
+                .isEqualTo(((UserMessage) plain.get(0)).getText());
+        assertThat(((AssistantMessage) overridden.get(1)).getText())
+                .isEqualTo(((AssistantMessage) plain.get(1)).getText());
+    }
+
+    @Test
+    void overrideDoesNotMutateTheSessionOrAddADuplicateUserMessage() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordUserMessage("[verification code provided] and where is ORD-10002?");
+
+        var history = contextBuilder.buildHistory(session, "where is ORD-10002?");
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0)).isInstanceOf(UserMessage.class);
+        assertThat(session.getRecentMessages()).hasSize(1);
+        assertThat(session.getRecentMessages().get(0).text())
+                .isEqualTo("[verification code provided] and where is ORD-10002?");
+    }
+
+    @Test
+    void overrideIsIgnoredWhenTheLatestMessageIsNotFromTheUser() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordUserMessage("hello");
+        session.recordAssistantMessage("hi there");
+
+        var history = contextBuilder.buildHistory(session, "intruder text");
+
+        assertThat(history).hasSize(2);
+        assertThat(((UserMessage) history.get(0)).getText()).isEqualTo("hello");
+        assertThat(((AssistantMessage) history.get(1)).getText()).isEqualTo("hi there");
+    }
+
+    @Test
+    void nullOverrideKeepsLegacyBehavior() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.recordUserMessage("hello");
+
+        var history = contextBuilder.buildHistory(session, null);
+
+        assertThat(history).hasSize(1);
+        assertThat(((UserMessage) history.get(0)).getText()).isEqualTo("hello");
+    }
 }

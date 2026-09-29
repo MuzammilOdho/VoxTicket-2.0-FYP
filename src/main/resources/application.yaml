@@ -118,7 +118,7 @@ voxticket:
     tiers:
       tier1:
         provider: GROQ
-        model: openai/gpt-oss-20b
+        model: qwen/qwen3.8-27b
         temperature: 0.3
         max-output-tokens: 1024
         reasoning-effort: none
@@ -140,7 +140,7 @@ voxticket:
       # containing model.onnx + tokenizer.json (download once from
       # https://huggingface.co/intfloat/multilingual-e5-small/tree/main/onnx).
       # Startup fails fast with an actionable error if they are missing.
-      strategy: HYBRID
+      strategy: always_tier_1
       structural:
         long-message-threshold: 300
         min-order-references-for-tier2: 2

@@ -3,7 +3,6 @@ package com.voxticket.service;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.InsufficientAssuranceException;
-import com.voxticket.identity.OwnedOrderItemResolver;
 import com.voxticket.identity.OwnedOrderResolver;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.identity.VerifiedOrderRef;
@@ -15,7 +14,9 @@ import com.voxticket.persistence.entity.Refund;
 import com.voxticket.persistence.entity.ReturnRequest;
 import com.voxticket.persistence.entity.Shipment;
 import com.voxticket.persistence.entity.SupportTicket;
+import com.voxticket.persistence.entity.enums.ClaimStatus;
 import com.voxticket.persistence.entity.enums.PaymentStatus;
+import com.voxticket.persistence.entity.enums.RefundStatus;
 import com.voxticket.persistence.entity.enums.TicketStatus;
 import com.voxticket.persistence.repository.OrderClaimRepository;
 import com.voxticket.persistence.repository.OrderRepository;
@@ -26,31 +27,40 @@ import com.voxticket.persistence.repository.ShipmentRepository;
 import com.voxticket.persistence.repository.SupportTicketRepository;
 import com.voxticket.policy.CancellationEligibility;
 import com.voxticket.policy.CancellationPolicyService;
+import com.voxticket.policy.ClaimCapabilityState;
+import com.voxticket.policy.ClaimPolicyService;
+import com.voxticket.policy.ItemClaimCapability;
 import com.voxticket.policy.ReturnEligibility;
 import com.voxticket.policy.ReturnPolicyService;
-import com.voxticket.service.dto.CancellationEligibilityView;
+import com.voxticket.service.dto.CancellationCapabilityView;
 import com.voxticket.service.dto.ClaimContextView;
-import com.voxticket.service.dto.ItemReturnEligibilityView;
-import com.voxticket.service.dto.OrderContextView;
-import com.voxticket.service.dto.OrderItemContextView;
+import com.voxticket.service.dto.ExistingItemClaimView;
+import com.voxticket.service.dto.ItemClaimCapabilityView;
+import com.voxticket.service.dto.ItemReturnCapabilityView;
 import com.voxticket.service.dto.OrderItemView;
 import com.voxticket.service.dto.OrderSummaryView;
+import com.voxticket.service.dto.OrderSupportContext;
+import com.voxticket.service.dto.OrderSupportItemView;
 import com.voxticket.service.dto.PaymentContextView;
 import com.voxticket.service.dto.PaymentStatusView;
 import com.voxticket.service.dto.RecentOrderView;
 import com.voxticket.service.dto.RefundContextView;
+import com.voxticket.service.dto.RefundStateView;
 import com.voxticket.service.dto.RefundStatusView;
 import com.voxticket.service.dto.ReturnContextView;
-import com.voxticket.service.dto.ReturnEligibilityView;
+import com.voxticket.service.dto.ReturnItemContextView;
 import com.voxticket.service.dto.ReturnStatusView;
 import com.voxticket.service.dto.ShipmentContextView;
 import com.voxticket.service.dto.ShipmentStatusView;
+import com.voxticket.service.dto.SupportCapabilitiesView;
 import com.voxticket.service.dto.TicketStatusView;
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,9 +71,9 @@ public class CustomerOrderQueryService {
 
     private static final IdentityAssurance MIN_READ_ASSURANCE = IdentityAssurance.PHONE_MATCHED;
     private static final Set<TicketStatus> OPEN_TICKET_STATUSES = Set.of(TicketStatus.OPEN, TicketStatus.IN_PROGRESS);
+    private static final Set<ClaimStatus> OPEN_CLAIM_STATUSES = Set.of(ClaimStatus.OPEN, ClaimStatus.IN_REVIEW);
 
     private final OwnedOrderResolver ownedOrderResolver;
-    private final OwnedOrderItemResolver ownedOrderItemResolver;
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final ShipmentRepository shipmentRepository;
@@ -73,10 +83,10 @@ public class CustomerOrderQueryService {
     private final OrderClaimRepository orderClaimRepository;
     private final CancellationPolicyService cancellationPolicyService;
     private final ReturnPolicyService returnPolicyService;
+    private final ClaimPolicyService claimPolicyService;
 
     public CustomerOrderQueryService(
             OwnedOrderResolver ownedOrderResolver,
-            OwnedOrderItemResolver ownedOrderItemResolver,
             OrderRepository orderRepository,
             PaymentRepository paymentRepository,
             ShipmentRepository shipmentRepository,
@@ -85,9 +95,9 @@ public class CustomerOrderQueryService {
             SupportTicketRepository supportTicketRepository,
             OrderClaimRepository orderClaimRepository,
             CancellationPolicyService cancellationPolicyService,
-            ReturnPolicyService returnPolicyService) {
+            ReturnPolicyService returnPolicyService,
+            ClaimPolicyService claimPolicyService) {
         this.ownedOrderResolver = ownedOrderResolver;
-        this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.shipmentRepository = shipmentRepository;
@@ -97,10 +107,19 @@ public class CustomerOrderQueryService {
         this.orderClaimRepository = orderClaimRepository;
         this.cancellationPolicyService = cancellationPolicyService;
         this.returnPolicyService = returnPolicyService;
+        this.claimPolicyService = claimPolicyService;
     }
 
-    /** Core Improvement #1: the main aggregate order read - see OrderContextView for what it covers. */
-    public OrderContextView getOrderContext(CustomerIdentity identity, String orderNumber) {
+    /**
+     * The single authoritative model-facing support-state read for one order.
+     * Capability fields are computed deterministically in Java from domain
+     * policy ({@link CancellationPolicyService}, {@link ReturnPolicyService},
+     * {@link ClaimPolicyService}) - the model must not infer what support
+     * actions are available from the raw order/shipment/payment fields alone.
+     * Existing returns, claims, and refunds are all reflected so the model
+     * does not suggest duplicate actions.
+     */
+    public OrderSupportContext getOrderSupportContext(CustomerIdentity identity, String orderNumber) {
         requireAssurance(identity);
         VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
         Order order = orderRepository.findById(ref.orderId()).orElseThrow();
@@ -110,8 +129,12 @@ public class CustomerOrderQueryService {
         List<Refund> refunds = refundRepository.findByOrderId(ref.orderId());
         List<OrderClaim> claims = orderClaimRepository.findByOrderId(ref.orderId());
 
-        List<OrderItemContextView> items = order.getItems().stream()
-                .map(item -> toOrderItemContextView(order, item))
+        // Bulk return evaluation: one shipment query and one return-item
+        // query for the whole order, then per-item decisions in memory.
+        Map<UUID, ReturnEligibility> returnEligibilityByItem = returnPolicyService.evaluateAll(order, order.getItems());
+
+        List<OrderSupportItemView> items = order.getItems().stream()
+                .map(item -> toOrderSupportItemView(order, item, returnEligibilityByItem.get(item.getId()), claims))
                 .toList();
 
         PaymentContextView paymentView = payment.map(p -> new PaymentContextView(
@@ -126,56 +149,115 @@ public class CustomerOrderQueryService {
                 .map(s -> new ShipmentContextView(s.getCarrier(), s.getTrackingNumber(), s.getStatus(), s.getEstimatedDeliveryAt(), s.getDeliveredAt()))
                 .toList();
 
-        CancellationEligibilityView cancellationEligibility = payment
-                .map(p -> toCancellationEligibilityView(order, p))
-                .orElse(new CancellationEligibilityView(order.getOrderNumber(), false, "NO_PAYMENT_RECORD", null));
+        CancellationCapabilityView cancellation = toCancellationCapabilityView(order, payment);
 
         List<ReturnContextView> returnViews = returns.stream()
                 .sorted(Comparator.comparing(ReturnRequest::getRequestedAt).reversed())
-                .map(r -> new ReturnContextView(r.getReturnNumber(), r.getStatus(), r.getReason().name(), r.getRequestedAt(), r.getCompletedAt()))
+                .map(r -> new ReturnContextView(
+                        r.getReturnNumber(), r.getStatus(), r.getReason().name(), r.getRequestedAt(),
+                        r.getApprovedAt(), r.getReceivedAt(), r.getInspectedAt(), r.getCompletedAt(),
+                        r.getItems().stream()
+                                .map(ri -> new ReturnItemContextView(
+                                        ri.getOrderItem().getProductName(),
+                                        ri.getQuantity(),
+                                        ri.getReason().name(),
+                                        ri.getCondition() == null ? null : ri.getCondition().name()))
+                                .toList()))
                 .toList();
 
         List<RefundContextView> refundViews = refunds.stream()
                 .sorted(Comparator.comparing(Refund::getInitiatedAt).reversed())
-                .map(r -> new RefundContextView(r.getRefundNumber(), r.getStatus(), r.getAmount(), r.getInitiatedAt(), r.getCompletedAt(), r.getFailedAt()))
+                .map(r -> new RefundContextView(
+                        r.getRefundNumber(), r.getStatus(), r.getAmount(), r.getReason().name(),
+                        r.getInitiatedAt(), r.getCompletedAt(), r.getFailedAt(),
+                        r.getReturnRequest() == null ? null : r.getReturnRequest().getReturnNumber()))
                 .toList();
 
         List<ClaimContextView> claimViews = claims.stream()
                 .sorted(Comparator.comparing(OrderClaim::getCreatedAt).reversed())
-                .map(c -> new ClaimContextView(c.getClaimNumber(), c.getStatus(), c.getReason().name(), c.getRequestedResolution().name()))
+                .map(c -> new ClaimContextView(
+                        c.getClaimNumber(), c.getStatus(), c.getReason().name(), c.getRequestedResolution().name(),
+                        c.getOrderItem() == null ? null : c.getOrderItem().getProductName(),
+                        c.getCreatedAt(),
+                        c.getSupportTicket() == null ? null : c.getSupportTicket().getTicketNumber(),
+                        c.getSupportTicket() == null ? null : c.getSupportTicket().getStatus().name()))
                 .toList();
 
-        return new OrderContextView(
+        // Compact rollup only - the detailed cancellation capability lives
+        // once on the context root; no duplicate copy here.
+        SupportCapabilitiesView supportCapabilities = new SupportCapabilitiesView(
+                items.stream().anyMatch(i -> i.returnCapability().available()),
+                items.stream().anyMatch(i -> i.claimCapability().state() == ClaimCapabilityState.AVAILABLE),
+                toRefundStateView(refunds));
+
+        return new OrderSupportContext(
                 order.getOrderNumber(),
                 order.getOrderStatus(),
                 order.getFulfillmentStatus(),
+                order.getPlacedAt(),
                 order.getCurrency(),
                 order.getTotalAmount(),
-                order.getPlacedAt(),
                 items,
                 paymentView,
                 shipmentViews,
-                cancellationEligibility,
+                cancellation,
                 returnViews,
                 refundViews,
-                claimViews);
+                claimViews,
+                supportCapabilities);
     }
 
     /**
-     * Model-facing item: no SKU or other internal identifiers. Return eligibility is evaluated
-     * deterministically here by {@link ReturnPolicyService} so the model never derives it from
-     * raw flags.
+     * Model-facing item: no SKU or other internal identifiers. Return and
+     * claim capability are evaluated deterministically by the policy
+     * services, so the model never derives them from raw flags. The claim
+     * state is explicit: an OPEN/IN_REVIEW claim on this item reports
+     * {@code EXISTING_ACTIVE} with the claim attached - never a fresh
+     * {@code AVAILABLE} opportunity.
      */
-    private OrderItemContextView toOrderItemContextView(Order order, OrderItem item) {
-        ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
-        return new OrderItemContextView(
+    private OrderSupportItemView toOrderSupportItemView(
+            Order order, OrderItem item, ReturnEligibility returnEligibility, List<OrderClaim> claims) {
+        ItemReturnCapabilityView returnCapability = new ItemReturnCapabilityView(
+                returnEligibility.eligible(),
+                returnEligibility.denialReason() == null ? null : returnEligibility.denialReason().name(),
+                returnEligibility.maxReturnableQuantity());
+
+        OrderClaim activeClaim = claims.stream()
+                .filter(c -> OPEN_CLAIM_STATUSES.contains(c.getStatus()))
+                .filter(c -> sameOrderItem(c.getOrderItem(), item))
+                .findFirst()
+                .orElse(null);
+        ItemClaimCapability capability = claimPolicyService.evaluateItem(order, activeClaim);
+        ExistingItemClaimView existingClaim = activeClaim == null
+                ? null
+                : new ExistingItemClaimView(activeClaim.getClaimNumber(), activeClaim.getStatus().name(), activeClaim.getReason().name());
+        ItemClaimCapabilityView claimCapability = new ItemClaimCapabilityView(
+                capability.state(),
+                capability.denialReason() == null ? null : capability.denialReason().name(),
+                capability.resolution() == null ? null : capability.resolution().name(),
+                existingClaim);
+
+        return new OrderSupportItemView(
                 item.getProductName(),
                 item.getQuantity(),
                 item.getUnitPrice(),
-                new ItemReturnEligibilityView(
-                        eligibility.eligible(),
-                        eligibility.denialReason() == null ? null : eligibility.denialReason().name(),
-                        eligibility.maxReturnableQuantity()));
+                returnCapability,
+                claimCapability);
+    }
+
+    /**
+     * Matches a claim's item to a context item by persisted ID, falling back
+     * to entity identity for transient (non-persisted) instances so unit
+     * tests without a database behave the same as production.
+     */
+    private boolean sameOrderItem(OrderItem a, OrderItem b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        if (a == b) {
+            return true;
+        }
+        return a.getId() != null && a.getId().equals(b.getId());
     }
 
     private BigDecimal amountActuallyCollected(Payment payment) {
@@ -185,13 +267,33 @@ public class CustomerOrderQueryService {
         };
     }
 
-    private CancellationEligibilityView toCancellationEligibilityView(Order order, Payment payment) {
-        CancellationEligibility eligibility = cancellationPolicyService.evaluate(order, payment);
-        return new CancellationEligibilityView(
-                order.getOrderNumber(),
-                eligibility.eligible(),
-                eligibility.denialReason() == null ? null : eligibility.denialReason().name(),
-                eligibility.paymentConsequence() == null ? null : eligibility.paymentConsequence().name());
+    private CancellationCapabilityView toCancellationCapabilityView(Order order, Optional<Payment> payment) {
+        return payment.map(p -> {
+                    CancellationEligibility eligibility = cancellationPolicyService.evaluate(order, p);
+                    return new CancellationCapabilityView(
+                            eligibility.eligible(),
+                            eligibility.denialReason() == null ? null : eligibility.denialReason().name(),
+                            eligibility.paymentConsequence() == null ? null : eligibility.paymentConsequence().name());
+                })
+                .orElse(new CancellationCapabilityView(false, "NO_PAYMENT_RECORD", null));
+    }
+
+    /**
+     * Descriptive refund state only - refund is not a standalone customer
+     * action in the current domain, so no eligibility is invented. Failure
+     * causes stay absent: the domain persists no authoritative failure
+     * reason.
+     */
+    private RefundStateView toRefundStateView(List<Refund> refunds) {
+        if (refunds.isEmpty()) {
+            return new RefundStateView(false, null, false, false);
+        }
+        Refund latest = refunds.stream()
+                .max(Comparator.comparing(Refund::getInitiatedAt))
+                .orElseThrow();
+        boolean hasFailedRefund = refunds.stream().anyMatch(r -> r.getStatus() == RefundStatus.FAILED);
+        boolean hasPendingRefund = refunds.stream().anyMatch(r -> r.getStatus() == RefundStatus.PENDING);
+        return new RefundStateView(true, latest.getStatus().name(), hasFailedRefund, hasPendingRefund);
     }
 
     public OrderSummaryView getOrderSummary(CustomerIdentity identity, String orderNumber) {
@@ -260,32 +362,6 @@ public class CustomerOrderQueryService {
                 .findByTicketNumberAndCustomerId(ticketNumber, identity.requireCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundForAccountException("TICKET", ticketNumber));
         return toTicketStatusView(ticket);
-    }
-
-    public CancellationEligibilityView checkCancellationEligibility(CustomerIdentity identity, String orderNumber) {
-        requireAssurance(identity);
-        VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
-        Order order = orderRepository.findById(ref.orderId()).orElseThrow();
-        Payment payment = paymentRepository
-                .findFirstByOrderIdOrderByCreatedAtDesc(ref.orderId())
-                .orElseThrow(() -> new IllegalStateException("Order has no payment record: " + orderNumber));
-
-        return toCancellationEligibilityView(order, payment);
-    }
-
-    public ReturnEligibilityView checkReturnEligibility(CustomerIdentity identity, String orderNumber, String sku) {
-        requireAssurance(identity);
-        VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
-        Order order = orderRepository.findById(ref.orderId()).orElseThrow();
-        OrderItem item = ownedOrderItemResolver.resolveBySku(ref, sku);
-
-        ReturnEligibility eligibility = returnPolicyService.evaluate(order, item);
-        return new ReturnEligibilityView(
-                orderNumber,
-                sku,
-                eligibility.eligible(),
-                eligibility.denialReason() == null ? null : eligibility.denialReason().name(),
-                eligibility.maxReturnableQuantity());
     }
 
     private void requireAssurance(CustomerIdentity identity) {

@@ -34,6 +34,25 @@ class DirectProcedureResponseRendererTest {
 
     @ParameterizedTest
     @EnumSource(ConversationLanguage.class)
+    void ambiguousOtpAsksForExactlyOneCode(ConversationLanguage language) {
+        String rendered = renderer.render(language, outcome("OTP_AMBIGUOUS", Map.of()));
+
+        assertThat(rendered).doesNotContain("This message is a lie");
+        assertThat(rendered).isNotBlank();
+    }
+
+    @Test
+    void ambiguousOtpTextDiffersAcrossLanguages() {
+        String english = renderer.render(ConversationLanguage.ENGLISH, outcome("OTP_AMBIGUOUS", Map.of()));
+        String urdu = renderer.render(ConversationLanguage.URDU, outcome("OTP_AMBIGUOUS", Map.of()));
+
+        assertThat(english).contains("6-digit verification code");
+        assertThat(urdu).contains("6");
+        assertThat(english).isNotEqualTo(urdu);
+    }
+
+    @ParameterizedTest
+    @EnumSource(ConversationLanguage.class)
     void wrongCodeIsDistinctFromExpired(ConversationLanguage language) {
         String wrong = renderer.render(language,
                 outcome("VERIFICATION_FAILED", Map.of("verificationReason", "WRONG_CODE")));

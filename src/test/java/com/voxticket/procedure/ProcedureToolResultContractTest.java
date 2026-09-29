@@ -3,6 +3,7 @@ package com.voxticket.procedure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -62,11 +63,11 @@ class ProcedureToolResultContractTest {
 
     @Test
     void requestReturnReturnsProcedureToolResult() {
-        when(coordinator.startReturn(any(), eq("ORD-10006"), eq("Running Shoes"), eq(null)))
+        when(coordinator.startReturn(any(), eq("ORD-10006"), eq("Running Shoes"), eq(null), isNull()))
                 .thenReturn(outcome(false, "REASON_REQUIRED", "Could you tell me why you'd like to return the Running Shoes?",
                         Map.of("orderReference", "ORD-10006", "itemName", "Running Shoes")));
 
-        ProcedureToolResult result = tools.requestReturn("ORD-10006", "Running Shoes", null);
+        ProcedureToolResult result = tools.requestReturn("ORD-10006", "Running Shoes", null, null);
 
         assertThat(result).isNotNull();
         assertThat(result.procedure()).isEqualTo("RETURN");
@@ -111,18 +112,29 @@ class ProcedureToolResultContractTest {
             "ITEM_REQUIRED, ASK_ITEM",
             "REASON_REQUIRED, ASK_RETURN_REASON",
             "PROBLEM_REQUIRED, ASK_PROBLEM_DESCRIPTION",
-            "TOO_MANY_ACTIVE_PROCEDURES, ASK_PROCEDURE_CHOICE",
+            "ALREADY_PENDING, ASK_VERIFICATION_CODE",
+            "QUANTITY_REQUIRED, ASK_QUANTITY",
+            "PROCEDURE_DEFERRED, COMPLETE_ACTIVE_PROCEDURE",
+            "ALREADY_DEFERRED, COMPLETE_ACTIVE_PROCEDURE",
+            "PENDING_REQUEST_LIMIT_REACHED, ASK_PROCEDURE_CHOICE",
+            "DEFERRED_REQUEST_PENDING, ASK_PROCEDURE_CHOICE",
             "IDENTITY_NOT_VERIFIED, VERIFY_IDENTITY",
             "VERIFICATION_RATE_LIMITED, RETRY_LATER",
             "NOT_FOUND_FOR_ACCOUNT, NONE",
-            "NOT_ELIGIBLE, NONE",
+            "NOT_ELIGIBLE, CHECK_SUPPORT_OPTIONS",
             "ESCALATED, NONE",
             "ALREADY_ESCALATED, NONE",
             "SOME_FUTURE_CODE, NONE"
     })
     void outcomeCodesMapToStableNextActions(String code, String expectedAction) {
+        Map<String, String> metadata = new java.util.HashMap<>(Map.of("orderReference", "ORD-10001"));
+        // ALREADY_PENDING's next action is driven by the live procedure's
+        // stage, carried as pendingStage metadata - mirror the coordinator.
+        if ("ALREADY_PENDING".equals(code)) {
+            metadata.put("pendingStage", "VERIFICATION_REQUIRED");
+        }
         ProcedureToolResult result = ProcedureToolResultMapper.toToolResult("RETURN",
-                outcome(false, code, "Some coordinator prose.", Map.of("orderReference", "ORD-10001")));
+                outcome(true, code, "Some coordinator prose.", metadata));
 
         assertThat(result.nextAction()).isEqualTo(ProcedureNextAction.valueOf(expectedAction));
     }
@@ -138,7 +150,7 @@ class ProcedureToolResultContractTest {
                                 "denialReason", "ITEM_FINAL_SALE")));
 
         assertThat(result.code()).isEqualTo("NOT_ELIGIBLE");
-        assertThat(result.nextAction()).isEqualTo(ProcedureNextAction.NONE);
+        assertThat(result.nextAction()).isEqualTo(ProcedureNextAction.CHECK_SUPPORT_OPTIONS);
         assertThat(result.details()).containsEntry("denialReason", "ITEM_FINAL_SALE");
         assertThat(result.details().values().toString()).doesNotContain("eligible");
     }
@@ -147,15 +159,15 @@ class ProcedureToolResultContractTest {
 
     @Test
     void notEligiblePreservesDenialReason() {
-        when(coordinator.startReturn(any(), eq("ORD-10008"), eq("Clearance T-Shirt"), eq("changed my mind")))
+        when(coordinator.startReturn(any(), eq("ORD-10008"), eq("Clearance T-Shirt"), eq("changed my mind"), isNull()))
                 .thenReturn(outcome(false, "NOT_ELIGIBLE", "This item is not eligible for return (ITEM_FINAL_SALE).",
                         Map.of("orderReference", "ORD-10008", "itemName", "Clearance T-Shirt",
                                 "denialReason", "ITEM_FINAL_SALE", "maxReturnableQuantity", "0")));
 
-        ProcedureToolResult result = tools.requestReturn("ORD-10008", "Clearance T-Shirt", "changed my mind");
+        ProcedureToolResult result = tools.requestReturn("ORD-10008", "Clearance T-Shirt", "changed my mind", null);
 
         assertThat(result.success()).isFalse();
-        assertThat(result.nextAction()).isEqualTo(ProcedureNextAction.NONE);
+        assertThat(result.nextAction()).isEqualTo(ProcedureNextAction.CHECK_SUPPORT_OPTIONS);
         assertThat(result.details())
                 .containsEntry("itemName", "Clearance T-Shirt")
                 .containsEntry("denialReason", "ITEM_FINAL_SALE")
@@ -176,13 +188,13 @@ class ProcedureToolResultContractTest {
 
     @Test
     void ambiguousItemResultsExposeCandidateNamesWithoutSku() {
-        when(coordinator.startReturn(any(), eq("ORD-10002"), eq("shoes"), eq(null)))
+        when(coordinator.startReturn(any(), eq("ORD-10002"), eq("shoes"), eq(null), isNull()))
                 .thenReturn(outcome(false, "ITEM_REQUIRED", "This order has a few items that could match: Running Shoes, Tennis Shoes. Which one did you mean?",
                         Map.of("orderReference", "ORD-10002",
                                 "candidateItem.1", "Running Shoes",
                                 "candidateItem.2", "Tennis Shoes")));
 
-        ProcedureToolResult result = tools.requestReturn("ORD-10002", "shoes", null);
+        ProcedureToolResult result = tools.requestReturn("ORD-10002", "shoes", null, null);
 
         assertThat(result.nextAction()).isEqualTo(ProcedureNextAction.ASK_ITEM);
         assertThat(result.details()).containsEntry("candidateItems", java.util.List.of("Running Shoes", "Tennis Shoes"));
@@ -297,7 +309,7 @@ class ProcedureToolResultContractTest {
     void toolMethodsDeclareModelFacingReturnType() throws Exception {
         assertThat(ProcedureRequestTools.class.getMethod("requestCancellation", String.class).getReturnType())
                 .isEqualTo(ProcedureToolResult.class);
-        assertThat(ProcedureRequestTools.class.getMethod("requestReturn", String.class, String.class, String.class).getReturnType())
+        assertThat(ProcedureRequestTools.class.getMethod("requestReturn", String.class, String.class, String.class, String.class).getReturnType())
                 .isEqualTo(ProcedureToolResult.class);
         assertThat(ProcedureRequestTools.class.getMethod("requestClaim", String.class, String.class, String.class).getReturnType())
                 .isEqualTo(ProcedureToolResult.class);

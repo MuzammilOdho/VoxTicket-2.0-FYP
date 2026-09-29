@@ -50,6 +50,20 @@ class ConversationLanguageResolverTest {
     }
 
     @Test
+    void otpPlaceholderAloneCarriesNoLanguageSignal() {
+        assertThat(resolver.classify("[verification code provided]")).isEmpty();
+    }
+
+    @Test
+    void otpPlaceholderDoesNotResetAnEstablishedLanguage() {
+        ConversationSession session = ConversationSession.newSession("s-ph", Channel.CHAT);
+        session.recordUserMessage("mera order cancel karo");
+        session.recordUserMessage("[verification code provided]");
+
+        assertThat(resolver.resolve(session)).isEqualTo(ConversationLanguage.ROMAN_URDU);
+    }
+
+    @Test
     void commerceNounsAloneAreNotRomanUrduEvidence() {
         assertThat(resolver.classify("refund")).hasValue(ConversationLanguage.ENGLISH);
         assertThat(resolver.classify("cancel return order")).hasValue(ConversationLanguage.ENGLISH);

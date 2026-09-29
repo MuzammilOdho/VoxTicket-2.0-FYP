@@ -43,8 +43,8 @@ public class StructuralFeatureExtractor {
         String text = userMessage == null ? "" : userMessage;
         int distinctOrders = countDistinctOrderReferences(text);
         boolean hasActive = session.getActiveProcedure().isPresent();
-        boolean hasPaused = session.getPausedProcedure().isPresent();
-        return new StructuralRoutingFeatures(text.length(), distinctOrders, hasActive, hasPaused);
+        boolean hasDeferred = session.getDeferredIntent().isPresent();
+        return new StructuralRoutingFeatures(text.length(), distinctOrders, hasActive, hasDeferred);
     }
 
     /** True when the multi-order signal fires for the given features. */
@@ -57,11 +57,11 @@ public class StructuralFeatureExtractor {
         return features.messageLength() >= properties.longMessageThreshold();
     }
 
-    /** True when both procedure slots are occupied and the message is a substantive request. */
+    /** True when a procedure is active and another intent is deferred, and the message is a substantive request. */
     public boolean isComplexSessionState(StructuralRoutingFeatures features, String userMessage) {
         String text = userMessage == null ? "" : userMessage;
         return features.hasActiveProcedure()
-                && features.hasPausedProcedure()
+                && features.hasDeferredIntent()
                 && text.trim().length() >= SUBSTANTIVE_MESSAGE_MIN_LENGTH;
     }
 

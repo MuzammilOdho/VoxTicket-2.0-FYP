@@ -22,7 +22,7 @@ class RefundContextViewTest {
         Instant initiatedAt = Instant.parse("2026-09-28T10:00:00Z");
         Instant failedAt = Instant.parse("2026-09-28T10:05:00Z");
 
-        var view = new RefundContextView("RFN-00001", RefundStatus.FAILED, BigDecimal.valueOf(2500), initiatedAt, null, failedAt);
+        var view = new RefundContextView("RFN-00001", RefundStatus.FAILED, BigDecimal.valueOf(2500), "CANCELLATION", initiatedAt, null, failedAt, null);
 
         assertThat(view.failedAt()).isEqualTo(failedAt);
         assertThat(view.completedAt()).isNull();
@@ -36,14 +36,15 @@ class RefundContextViewTest {
 
         assertThat(componentNames).contains("failedAt");
         assertThat(componentNames).doesNotContain(
-                "failureReason", "failureCause", "errorReason", "errorMessage", "providerReason");
+                "failureReason", "failureCause", "errorReason", "errorMessage", "providerReason",
+                "providerReference", "paymentId", "orderId");
     }
 
     @Test
     void nonFailedRefundLeavesFailedAtEmpty() {
         Instant initiatedAt = Instant.parse("2026-09-28T10:00:00Z");
 
-        var view = new RefundContextView("RFN-00002", RefundStatus.SUCCEEDED, BigDecimal.valueOf(2500), initiatedAt, initiatedAt.plusSeconds(60), null);
+        var view = new RefundContextView("RFN-00002", RefundStatus.SUCCEEDED, BigDecimal.valueOf(2500), "RETURN", initiatedAt, initiatedAt.plusSeconds(60), null, "RTN-00001");
 
         assertThat(view.failedAt()).isNull();
         assertThat(view.completedAt()).isNotNull();

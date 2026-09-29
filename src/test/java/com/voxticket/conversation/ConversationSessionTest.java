@@ -1,6 +1,7 @@
 package com.voxticket.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
@@ -95,72 +96,73 @@ class ConversationSessionTest {
         assertThat(session.getCustomerIdentity()).isEqualTo(phoneMatched);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     void firstProcedureBecomesActiveDirectly() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         var procedure = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), IdentityAssurance.PHONE_MATCHED);
 
-        var result = session.beginProcedure(procedure);
+        session.startActiveProcedure(procedure);
 
-        assertThat(result).isEqualTo(com.voxticket.procedure.ProcedureSlotResult.STARTED);
         assertThat(session.getActiveProcedure()).contains(procedure);
-        assertThat(session.getPausedProcedure()).isEmpty();
+        assertThat(session.getDeferredIntent()).isEmpty();
     }
 
-    @org.junit.jupiter.api.Test
-    void secondProcedurePausesTheFirst() {
+    @Test
+    void secondLiveProcedureIsRefusedWhileOneIsActive() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         var first = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), IdentityAssurance.PHONE_MATCHED);
         var second = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
+                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), IdentityAssurance.OTP_VERIFIED);
 
-        session.beginProcedure(first);
-        var result = session.beginProcedure(second);
+        session.startActiveProcedure(first);
 
-        assertThat(result).isEqualTo(com.voxticket.procedure.ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS);
-        assertThat(session.getActiveProcedure()).contains(second);
-        assertThat(session.getPausedProcedure()).contains(first);
+        assertThatThrownBy(() -> session.startActiveProcedure(second)).isInstanceOf(IllegalStateException.class);
+        assertThat(session.getActiveProcedure()).contains(first);
+        assertThat(session.getDeferredIntent()).isEmpty();
     }
 
-    @org.junit.jupiter.api.Test
-    void thirdProcedureIsRejectedWithBothSlotsUntouched() {
+    @Test
+    void deferredIntentSlotHoldsAtMostOneAndNeverOverwrites() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         var first = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
-        var second = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
-        var third = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.CANCELLATION, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), IdentityAssurance.PHONE_MATCHED);
+        session.startActiveProcedure(first);
 
-        session.beginProcedure(first);
-        session.beginProcedure(second);
-        var result = session.beginProcedure(third);
+        var firstIntent = new com.voxticket.procedure.DeferredProcedureIntent(
+                com.voxticket.procedure.ProcedureType.CANCELLATION, "ORD-10002", UUID.randomUUID(),
+                null, null, null, "1", null, Instant.now());
+        var secondIntent = new com.voxticket.procedure.DeferredProcedureIntent(
+                com.voxticket.procedure.ProcedureType.RETURN, "ORD-10003", UUID.randomUUID(),
+                null, null, null, "1", null, Instant.now());
 
-        assertThat(result).isEqualTo(com.voxticket.procedure.ProcedureSlotResult.BOTH_SLOTS_OCCUPIED);
-        assertThat(session.getActiveProcedure()).contains(second);
-        assertThat(session.getPausedProcedure()).contains(first);
+        session.setDeferredIntent(firstIntent);
+
+        assertThatThrownBy(() -> session.setDeferredIntent(secondIntent)).isInstanceOf(IllegalStateException.class);
+        assertThat(session.getDeferredIntent()).contains(firstIntent);
+        assertThat(session.getActiveProcedure()).contains(first);
     }
 
-    @org.junit.jupiter.api.Test
-    void clearingActiveProcedureResumesThePausedOne() {
+    @Test
+    void clearingActiveProcedureEmptiesTheSlotWithoutRestoringAnything() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         var first = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED);
-        var second = new com.voxticket.procedure.ProcedureState(
-                com.voxticket.procedure.ProcedureType.RETURN, dummyRef(), java.util.Map.of(), com.voxticket.identity.IdentityAssurance.OTP_VERIFIED);
-        session.beginProcedure(first);
-        session.beginProcedure(second);
+                com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), IdentityAssurance.PHONE_MATCHED);
+        session.startActiveProcedure(first);
+        var intent = new com.voxticket.procedure.DeferredProcedureIntent(
+                com.voxticket.procedure.ProcedureType.CANCELLATION, "ORD-10002", UUID.randomUUID(),
+                null, null, null, "1", null, Instant.now());
+        session.setDeferredIntent(intent);
 
         session.clearActiveProcedure();
 
-        assertThat(session.getActiveProcedure()).contains(first);
-        assertThat(session.getPausedProcedure()).isEmpty();
+        assertThat(session.getActiveProcedure()).isEmpty();
+        assertThat(session.getDeferredIntent()).contains(intent);
     }
 
     private com.voxticket.identity.VerifiedOrderRef dummyRef() {
         return new com.voxticket.identity.VerifiedOrderRef(
-                UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), com.voxticket.identity.IdentityAssurance.PHONE_MATCHED, Instant.now());
+                UUID.randomUUID(), "ORD-TEST", UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, Instant.now());
     }
 }

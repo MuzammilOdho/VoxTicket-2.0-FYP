@@ -39,6 +39,7 @@ public class DirectProcedureResponseRenderer {
         String rendered = switch (outcome.code()) {
             case "VERIFICATION_REQUIRED" -> verificationRequired(lang, metadata);
             case "VERIFICATION_FAILED" -> verificationFailed(lang, metadata);
+            case "OTP_AMBIGUOUS" -> otpAmbiguous(lang);
             case "VERIFICATION_RATE_LIMITED" -> verificationRateLimited(lang, metadata);
             case "NO_PENDING_VERIFICATION" -> noPendingVerification(lang);
             case "CANCELLED" -> cancelled(lang, metadata);
@@ -49,6 +50,21 @@ public class DirectProcedureResponseRenderer {
             case "EXPIRED" -> expired(lang);
             case "IDENTITY_NOT_VERIFIED" -> identityNotVerified(lang);
             case "EXECUTION_FAILED" -> executionFailed(lang);
+            // Pass 2D-B cleanup: every outcome promoteDeferredIntent can
+            // legitimately return has deterministic customer-facing handling.
+            // ALREADY_PENDING / ALREADY_DEFERRED / PROCEDURE_DEFERRED /
+            // PENDING_REQUEST_LIMIT_REACHED / DEFERRED_REQUEST_PENDING are
+            // unreachable from promotion by construction (the active slot is
+            // empty and the intent is the one being promoted), so they keep
+            // the safe fallback rather than a fabricated rendering.
+            case "CONFIRMATION_REQUIRED" -> confirmationRequired(lang, metadata);
+            case "NOT_ELIGIBLE" -> notEligible(lang, metadata);
+            case "NOT_FOUND_FOR_ACCOUNT" -> notFoundForAccount(lang, metadata);
+            case "ITEM_REQUIRED" -> itemRequired(lang, metadata);
+            case "REASON_REQUIRED" -> reasonRequired(lang, metadata);
+            case "PROBLEM_REQUIRED" -> problemRequired(lang, metadata);
+            case "QUANTITY_REQUIRED" -> quantityRequired(lang, metadata);
+            case "PROMOTION_FAILED" -> promotionFailed(lang);
             default -> {
                 log.warn("event=direct_response_unknown_code code={} language={}", outcome.code(), lang);
                 yield fallback(lang);
@@ -74,6 +90,15 @@ public class DirectProcedureResponseRenderer {
             default -> masked != null
                     ? "I've sent a 6-digit verification code to " + masked + ". Could you read that back to me once you receive it?"
                     : "I've sent you a 6-digit verification code. Could you read that back to me once you receive it?";
+        };
+    }
+
+    private String otpAmbiguous(ConversationLanguage lang) {
+        return switch (lang) {
+            case URDU -> "آپ کے پیغام میں ایک سے زیادہ کوڈ نظر آ رہے ہیں۔ براہ کرم صرف 6 ہندسوں والا تصدیقی کوڈ الگ سے بھیجیں۔";
+            case ROMAN_URDU -> "Aap ke message mein ek se zyada codes nazar aa rahe hain. Barah-e-karam sirf 6 hisson wala tasdeeqi code alag se bhejein.";
+            case CODE_SWITCH -> "Aap ke message mein ek se zyada codes hain. Please sirf 6-digit verification code alag se send karein.";
+            default -> "I see more than one code in your message. Please send just the 6-digit verification code on its own.";
         };
     }
 
@@ -246,6 +271,276 @@ public class DirectProcedureResponseRenderer {
             case ROMAN_URDU -> "Is amal mein koi masla pesh aaya hai. Barah-e-karam dobara koshish karein ya insani numainde se rabta karein.";
             case CODE_SWITCH -> "Is process mein kuch issue aaya hai. Please dobara try karein ya human agent se baat karein.";
             default -> "Something went wrong while processing that. Please try again, or ask for a human agent.";
+        };
+    }
+
+    // ---- promotion outcomes (Pass 2D-B cleanup) ----
+    //
+    // Every outcome ProcedureCoordinator.promoteDeferredIntent can
+    // legitimately return is rendered deterministically here from the
+    // outcome code and safe structured metadata only. Rendered from the
+    // same templates in all four language modes; nothing is parsed from
+    // ProcedureOutcome.message() and no internal identifiers ever surface.
+
+    /**
+     * A promoted claim reached CONFIRMATION_REQUIRED: the newly promoted
+     * claim is ready and needs explicit confirmation - never a generic
+     * failure. No refund or replacement is promised; claim resolution stays
+     * manual review unless authoritative state says otherwise.
+     */
+    private String confirmationRequired(ConversationLanguage lang, Map<String, String> metadata) {
+        String orderRef = metadata.getOrDefault("orderReference", "").strip();
+        String itemName = metadata.getOrDefault("itemName", "").strip();
+        String reasonPhrase = claimReasonPhrase(lang, metadata.getOrDefault("claimReason", ""));
+        String described = metadata.getOrDefault("problemDescription", "").strip();
+        String describedPart = described.isEmpty() ? "" : switch (lang) {
+            case URDU -> " آپ نے بتایا: \"" + described + "\"۔";
+            case ROMAN_URDU -> " Aap ne bataya: \"" + described + "\".";
+            case CODE_SWITCH -> " Aap ne bataya: \"" + described + "\".";
+            default -> " You described it as: \"" + described + "\".";
+        };
+        return switch (lang) {
+            case URDU -> "آرڈر " + orderRef + " پر " + itemName + " کے لیے آپ کا دعویٰ" + reasonPhrase
+                    + " دائر کرنے کے لیے تیار ہے۔" + describedPart
+                    + " براہ کرم دائر کرنے کے لیے واضح طور پر 'ہاں' لکھیں، یا چھوڑنے کے لیے 'نہیں'۔";
+            case ROMAN_URDU -> "Order " + orderRef + " par " + itemName + " ke liye aap ka claim" + reasonPhrase
+                    + " file karne ke liye tayyar hai." + describedPart
+                    + " File karne ke liye wazeh 'haan' likhein, ya chhorne ke liye 'nahi'.";
+            case CODE_SWITCH -> "Order " + orderRef + " par " + itemName + " ke liye aapka claim" + reasonPhrase
+                    + " file karne ke liye ready hai." + describedPart
+                    + " File karne ke liye clear 'yes' reply karein, ya drop karne ke liye 'no'.";
+            default -> "Your claim for the " + itemName + " on order " + orderRef + reasonPhrase
+                    + " is ready to file." + describedPart
+                    + " Please reply with a clear yes to file it, or no to drop it.";
+        };
+    }
+
+    private String claimReasonPhrase(ConversationLanguage lang, String claimReason) {
+        return switch (claimReason) {
+            case "DAMAGED" -> switch (lang) {
+                case URDU -> " (خراب)";
+                case ROMAN_URDU -> " (kharab)";
+                default -> " (damaged)";
+            };
+            case "DEFECTIVE" -> switch (lang) {
+                case URDU -> " (ناقص)";
+                case ROMAN_URDU -> " (naqis)";
+                default -> " (defective)";
+            };
+            case "WRONG_ITEM" -> switch (lang) {
+                case URDU -> " (غلط چیز موصول ہوئی)";
+                case ROMAN_URDU -> " (ghalat cheez mili)";
+                default -> " (wrong item received)";
+            };
+            case "MISSING_ITEM" -> switch (lang) {
+                case URDU -> " (چیز غائب)";
+                case ROMAN_URDU -> " (cheez ghaib)";
+                default -> " (missing item)";
+            };
+            case "OTHER" -> switch (lang) {
+                case URDU -> " (دیگر مسئلہ)";
+                case ROMAN_URDU -> " (doosra masla)";
+                default -> " (other issue)";
+            };
+            default -> "";
+        };
+    }
+
+    /**
+     * Deterministic denial for a promotion that found the deferred action no
+     * longer eligible. The denial reason enum is translated, never the
+     * coordinator's English prose.
+     */
+    private String notEligible(ConversationLanguage lang, Map<String, String> metadata) {
+        String orderRef = metadata.getOrDefault("orderReference", "").strip();
+        String itemName = metadata.getOrDefault("itemName", "").strip();
+        String denialReason = metadata.getOrDefault("denialReason", "");
+        String reasonSentence = denialReasonSentence(lang, denialReason);
+        String reasonPart = reasonSentence.isEmpty() ? "" : " " + reasonSentence;
+        if (itemName.isEmpty()) {
+            // Cancellation denial.
+            return switch (lang) {
+                case URDU -> "آرڈر " + orderRef + " منسوخ نہیں ہو سکتا۔" + reasonPart;
+                case ROMAN_URDU -> "Order " + orderRef + " cancel nahi ho sakta." + reasonPart;
+                case CODE_SWITCH -> "Order " + orderRef + " cancel nahi ho sakta." + reasonPart;
+                default -> "Order " + orderRef + " can't be cancelled." + reasonPart;
+            };
+        }
+        if (denialReason.isEmpty()) {
+            // Claim denial: the only current claim NOT_ELIGIBLE is a
+            // cancelled order (see ProcedureCoordinator.startClaim).
+            return switch (lang) {
+                case URDU -> "آرڈر " + orderRef + " پر " + itemName + " کے لیے دعویٰ دائر نہیں ہو سکتا - آرڈر منسوخ ہے۔";
+                case ROMAN_URDU -> "Order " + orderRef + " par " + itemName + " ke liye claim file nahi ho sakta - order cancel hai.";
+                case CODE_SWITCH -> "Order " + orderRef + " par " + itemName + " ke liye claim file nahi ho sakta - order cancelled hai.";
+                default -> "A claim can't be filed for the " + itemName + " on order " + orderRef + " - the order was cancelled.";
+            };
+        }
+        // Return denial.
+        return switch (lang) {
+            case URDU -> "آرڈر " + orderRef + " پر " + itemName + " واپس نہیں ہو سکتا۔" + reasonPart;
+            case ROMAN_URDU -> "Order " + orderRef + " par " + itemName + " return nahi ho sakta." + reasonPart;
+            case CODE_SWITCH -> "Order " + orderRef + " par " + itemName + " return nahi ho sakta." + reasonPart;
+            default -> "The " + itemName + " on order " + orderRef + " can't be returned." + reasonPart;
+        };
+    }
+
+    private String denialReasonSentence(ConversationLanguage lang, String denialReason) {
+        return switch (denialReason) {
+            case "ALREADY_CANCELLED" -> switch (lang) {
+                case URDU -> "یہ پہلے ہی منسوخ ہے۔";
+                case ROMAN_URDU -> "Yeh pehle hi cancel hai.";
+                case CODE_SWITCH -> "Yeh already cancelled hai.";
+                default -> "It's already cancelled.";
+            };
+            case "ORDER_ALREADY_COMPLETED" -> switch (lang) {
+                case URDU -> "یہ پہلے ہی مکمل ہو چکا ہے۔";
+                case ROMAN_URDU -> "Yeh pehle hi complete ho chuka hai.";
+                case CODE_SWITCH -> "Yeh already complete ho chuka hai.";
+                default -> "It's already completed.";
+            };
+            case "ORDER_FULFILLED" -> switch (lang) {
+                case URDU -> "یہ پہلے ہی ڈیلیور ہو چکا ہے۔";
+                case ROMAN_URDU -> "Yeh pehle hi deliver ho chuka hai.";
+                case CODE_SWITCH -> "Yeh already deliver ho chuka hai.";
+                default -> "It has already been fulfilled.";
+            };
+            case "PAYMENT_STATE_INCOMPATIBLE" -> switch (lang) {
+                case URDU -> "اس کی ادائیگی کی حالت منسوخی کی اجازت نہیں دیتی۔";
+                case ROMAN_URDU -> "Iski payment state cancellation ki ijazat nahi deti.";
+                case CODE_SWITCH -> "Iski payment state cancellation allow nahi karti.";
+                default -> "Its payment state doesn't allow cancellation.";
+            };
+            case "ITEM_NOT_DELIVERED" -> switch (lang) {
+                case URDU -> "یہ ابھی ڈیلیور نہیں ہوا ہے۔";
+                case ROMAN_URDU -> "Yeh abhi deliver nahi hua hai.";
+                case CODE_SWITCH -> "Yeh abhi deliver nahi hua hai.";
+                default -> "It hasn't been delivered yet.";
+            };
+            case "RETURN_WINDOW_EXPIRED" -> switch (lang) {
+                case URDU -> "واپسی کی مدت ختم ہو چکی ہے۔";
+                case ROMAN_URDU -> "Return ki muddat khatam ho chuki hai.";
+                case CODE_SWITCH -> "Return window expire ho chuki hai.";
+                default -> "The return window has expired.";
+            };
+            case "ITEM_FINAL_SALE" -> switch (lang) {
+                case URDU -> "یہ فائنل سیل پر تھا۔";
+                case ROMAN_URDU -> "Yeh final sale par tha.";
+                case CODE_SWITCH -> "Yeh final sale par tha.";
+                default -> "It was sold as a final sale.";
+            };
+            case "ITEM_NOT_RETURNABLE" -> switch (lang) {
+                case URDU -> "یہ واپس نہیں ہو سکتا۔";
+                case ROMAN_URDU -> "Yeh return nahi ho sakta.";
+                case CODE_SWITCH -> "Yeh returnable nahi hai.";
+                default -> "It isn't returnable.";
+            };
+            case "NO_REMAINING_RETURNABLE_QUANTITY" -> switch (lang) {
+                case URDU -> "اس کی کوئی قابلِ واپسی مقدار باقی نہیں ہے۔";
+                case ROMAN_URDU -> "Iski koi returnable quantity baqi nahi hai.";
+                case CODE_SWITCH -> "Iski koi returnable quantity baqi nahi hai.";
+                default -> "There's no returnable quantity left.";
+            };
+            default -> "";
+        };
+    }
+
+    private String notFoundForAccount(ConversationLanguage lang, Map<String, String> metadata) {
+        String orderRef = metadata.getOrDefault("orderReference", "").strip();
+        return switch (lang) {
+            case URDU -> "آپ کے اکاؤنٹ پر آرڈر " + orderRef + " نہیں ملا۔";
+            case ROMAN_URDU -> "Aap ke account par order " + orderRef + " nahi mila.";
+            case CODE_SWITCH -> "Aapke account par order " + orderRef + " nahi mila.";
+            default -> "I couldn't find order " + orderRef + " on your account.";
+        };
+    }
+
+    private String itemRequired(ConversationLanguage lang, Map<String, String> metadata) {
+        String orderRef = metadata.getOrDefault("orderReference", "").strip();
+        StringBuilder candidates = new StringBuilder();
+        for (int i = 1; i <= 5; i++) {
+            String candidate = metadata.get("candidateItem." + i);
+            if (candidate == null || candidate.isBlank()) {
+                break;
+            }
+            if (candidates.length() > 0) {
+                candidates.append(", ");
+            }
+            candidates.append(candidate);
+        }
+        if (candidates.length() > 0) {
+            return switch (lang) {
+                case URDU -> "آرڈر " + orderRef + " پر چند چیزیں مل سکتی ہیں: " + candidates + "۔ آپ کا مطلب کون سی ہے؟";
+                case ROMAN_URDU -> "Order " + orderRef + " par chand cheezein match ho sakti hain: " + candidates + ". Aap ka matlab kaun si hai?";
+                case CODE_SWITCH -> "Order " + orderRef + " par kuch items match ho sakte hain: " + candidates + ". Aap ka matlab kaun sa hai?";
+                default -> "This order has a few items that could match: " + candidates + ". Which one did you mean?";
+            };
+        }
+        return switch (lang) {
+            case URDU -> "آرڈر " + orderRef + " پر اس چیز کی شناخت نہیں ہو سکی۔ براہ کرم بتائیں آپ کا مطلب کون سی چیز ہے؟";
+            case ROMAN_URDU -> "Order " + orderRef + " par is cheez ki shanakht nahi ho saki. Barah-e-karam batayein aap ka matlab kaun si cheez hai?";
+            case CODE_SWITCH -> "Order " + orderRef + " par is item ko match nahi kar saka. Please batayein aap ka matlab kaun sa item hai?";
+            default -> "I couldn't match that to an item on order " + orderRef + ". Could you describe which item you mean?";
+        };
+    }
+
+    private String reasonRequired(ConversationLanguage lang, Map<String, String> metadata) {
+        String itemName = metadata.getOrDefault("itemName", "").strip();
+        return switch (lang) {
+            case URDU -> "براہ کرم بتائیں آپ " + itemName + " کیوں واپس کرنا چاہتے ہیں - مثلاً غلط سائز، خراب، یا ارادہ بدل گیا؟";
+            case ROMAN_URDU -> "Barah-e-karam batayein aap " + itemName + " kyun wapas karna chahte hain - masalan ghalat size, kharab, ya irada badal gaya?";
+            case CODE_SWITCH -> "Please batayein aap " + itemName + " kyun return karna chahte hain - for example wrong size, damaged, ya mind change ho gaya?";
+            default -> "Could you tell me why you'd like to return the " + itemName + " - for example wrong size, damaged, or you changed your mind?";
+        };
+    }
+
+    private String problemRequired(ConversationLanguage lang, Map<String, String> metadata) {
+        String itemName = metadata.getOrDefault("itemName", "").strip();
+        return switch (lang) {
+            case URDU -> "براہ کرم بتائیں " + itemName + " کے ساتھ کیا ہوا - مثلاً کیا وہ خراب تھی، ناقص تھی، غلط چیز تھی، یا غائب ہے؟";
+            case ROMAN_URDU -> "Barah-e-karam batayein " + itemName + " ke saath kya hua - masalan kya woh kharab thi, naqis thi, ghalat cheez thi, ya ghaib hai?";
+            case CODE_SWITCH -> "Please batayein " + itemName + " ke saath kya hua - for example damaged, defective, wrong item, ya missing?";
+            default -> "Could you tell me what happened with the " + itemName + " - for example was it damaged, defective, the wrong item, or missing?";
+        };
+    }
+
+    private String quantityRequired(ConversationLanguage lang, Map<String, String> metadata) {
+        String itemName = metadata.getOrDefault("itemName", "").strip();
+        String max = metadata.getOrDefault("maxReturnableQuantity", "").strip();
+        String maxPart = max.isEmpty() ? "" : switch (lang) {
+            case URDU -> " زیادہ سے زیادہ " + max + " واپس ہو سکتی ہیں۔";
+            case ROMAN_URDU -> " Zyada se zyada " + max + " wapas ho sakti hain.";
+            case CODE_SWITCH -> " Maximum " + max + " return ho sakti hain.";
+            default -> " Up to " + max + " can still be returned.";
+        };
+        return switch (lang) {
+            case URDU -> "آپ " + itemName + " کی کتنی اکائیاں واپس کرنا چاہتے ہیں؟" + maxPart;
+            case ROMAN_URDU -> "Aap " + itemName + " ki kitni units wapas karna chahte hain?" + maxPart;
+            case CODE_SWITCH -> "Aap " + itemName + " ki kitni units return karna chahte hain?" + maxPart;
+            default -> "How many units of the " + itemName + " would you like to return?" + maxPart;
+        };
+    }
+
+    /**
+     * The deferred promotion hit an unexpected technical failure. The
+     * already-completed active mutation keeps its own rendered result (the
+     * caller composes this notice after it); the queued request stays
+     * queued. No exception text, no internal identifiers.
+     */
+    /**
+     * Pass 2D-B final cleanup: the queued request could not be started after
+     * the first action succeeded. The notice must NOT promise automatic
+     * processing later - it communicates only that the queued request could
+     * not be started, that it remains saved, and that the customer may retry
+     * or continue it later. It is always composed after the successful
+     * first-action text.
+     */
+    private String promotionFailed(ConversationLanguage lang) {
+        return switch (lang) {
+            case URDU -> "آپ کی قطار والی درخواست شروع نہیں ہو سکی - وہ محفوظ ہے، آپ بعد میں اسے جاری رکھنے کے لیے کہہ سکتے ہیں۔";
+            case ROMAN_URDU -> "Aap ki queued darkhwast shuru nahi ho saki - woh mehfooz hai, aap baad mein usay continue karne ke liye keh saktay hain.";
+            case CODE_SWITCH -> "Aapki queued request start nahi ho saki - woh saved hai, aap baad mein continue karne ke liye keh saktay hain.";
+            default -> "I couldn't start your queued request - it's still saved, and you can ask me to continue with it later.";
         };
     }
 

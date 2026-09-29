@@ -40,9 +40,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Unit-level (all dependencies mocked) rather than a full Testcontainers
- * integration test - this isolates the exact fix (does beginProcedure mark
- * the procedure FAILED before evicting it on a rate-limited OTP issue)
- * without depending on real rate-limit thresholds or database state.
+ * integration test - this isolates the exact fix (does the coordinator mark
+ * the procedure FAILED and clear the single active slot on a rate-limited
+ * OTP issue) without depending on real rate-limit thresholds or database
+ * state.
  */
 class ProcedureCoordinatorRateLimitTest {
 
@@ -78,6 +79,6 @@ class ProcedureCoordinatorRateLimitTest {
         assertThat(outcome.success()).isFalse();
         assertThat(outcome.code()).isEqualTo("VERIFICATION_RATE_LIMITED");
         assertThat(session.getActiveProcedure()).isEmpty();
-        assertThat(session.getPausedProcedure()).isEmpty();
+        assertThat(session.getDeferredIntent()).isEmpty();
     }
 }

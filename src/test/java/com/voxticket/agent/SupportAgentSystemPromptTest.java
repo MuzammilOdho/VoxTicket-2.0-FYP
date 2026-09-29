@@ -77,7 +77,7 @@ class SupportAgentSystemPromptTest {
         ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
         procedure.setPendingDescription("cancel order ORD-10001");
         procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
-        session.beginProcedure(procedure);
+        session.startActiveProcedure(procedure);
         session.recordAction(new RecentAction(RecentActionType.ORDER_CANCELLED, "ORD-10003", "REFUND_REQUIRED", null, "ORD-10003", Instant.now()));
 
         String prompt = agent.buildSystemPrompt(session);
@@ -114,7 +114,7 @@ class SupportAgentSystemPromptTest {
         ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"),
                 Map.of("itemReference", "SKU-1", "reason", "DAMAGED", "description", "torn seam"), IdentityAssurance.PHONE_MATCHED);
         procedure.setPendingDescription("file a claim for Cotton Bedsheet Set on order ORD-10001 (damaged)");
-        session.beginProcedure(procedure);
+        session.startActiveProcedure(procedure);
 
         String prompt = agent.buildSystemPrompt(session);
 
@@ -130,7 +130,7 @@ class SupportAgentSystemPromptTest {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         ProcedureState procedure = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.PHONE_MATCHED);
         procedure.setPendingDescription("file a claim for Running Shoes on order ORD-10001 (damaged)");
-        session.beginProcedure(procedure);
+        session.startActiveProcedure(procedure);
 
         String prompt = agent.buildSystemPrompt(session);
 
@@ -141,21 +141,25 @@ class SupportAgentSystemPromptTest {
     }
 
     @Test
-    void aPausedProcedureIsRepresentedCompactlyAlongsideTheActiveOne() {
+    void aDeferredIntentIsRepresentedCompactlyAlongsideTheActiveProcedure() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-        ProcedureState first = new ProcedureState(ProcedureType.CLAIM, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.PHONE_MATCHED);
-        first.setPendingDescription("file a claim for Running Shoes on order ORD-10001 (damaged)");
-        ProcedureState second = new ProcedureState(ProcedureType.RETURN, dummyRef("ORD-20002"), Map.of(), IdentityAssurance.OTP_VERIFIED);
-        second.setPendingDescription("start a return for Cotton T-Shirt from order ORD-20002");
-        session.beginProcedure(first);
-        session.beginProcedure(second);
+        ProcedureState active = new ProcedureState(ProcedureType.RETURN, dummyRef("ORD-20002"), Map.of(), IdentityAssurance.OTP_VERIFIED);
+        active.setPendingDescription("start a return for Cotton T-Shirt from order ORD-20002");
+        session.startActiveProcedure(active);
+        session.setDeferredIntent(new com.voxticket.procedure.DeferredProcedureIntent(
+                ProcedureType.CLAIM, "ORD-10001", UUID.randomUUID(), "Running Shoes", "SKU-RS-9", "DAMAGED", "1", null, Instant.now()));
 
         String prompt = agent.buildSystemPrompt(session);
 
         assertThat(prompt).contains("activeProcedure: RETURN");
         assertThat(prompt).contains("activeTarget: start a return for Cotton T-Shirt from order ORD-20002");
-        assertThat(prompt).contains("pausedProcedure: CLAIM");
-        assertThat(prompt).contains("pausedTarget: file a claim for Running Shoes on order ORD-10001 (damaged)");
+        assertThat(prompt).contains("deferredProcedure: CLAIM");
+        assertThat(prompt).contains("deferredTarget: ORD-10001");
+        assertThat(prompt).contains("deferredItem: Running Shoes");
+        // The retained scoped item identity (SKU) is internal-only: the
+        // model sees the display name, never the SKU.
+        assertThat(prompt).doesNotContain("SKU-RS-9");
+        assertThat(prompt).doesNotContain("pausedProcedure:");
     }
 
     @Test
@@ -214,7 +218,7 @@ class SupportAgentSystemPromptTest {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         ProcedureState procedure = new ProcedureState(ProcedureType.RETURN, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
         procedure.setPendingDescription("start a return for Cotton Bedsheet Set from order ORD-10001");
-        session.beginProcedure(procedure);
+        session.startActiveProcedure(procedure);
 
         String fallback = agent.blankResponseFallback(session);
 
@@ -227,7 +231,7 @@ class SupportAgentSystemPromptTest {
         ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
         procedure.setPendingDescription("cancel order ORD-10001");
         procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
-        session.beginProcedure(procedure);
+        session.startActiveProcedure(procedure);
 
         String fallback = agent.blankResponseFallback(session);
 

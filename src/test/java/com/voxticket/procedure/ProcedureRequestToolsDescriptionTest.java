@@ -45,7 +45,7 @@ class ProcedureRequestToolsDescriptionTest {
 
     @Test
     void returnDescriptionInvitesEarlyCallsWithUnknownItemOrReason() throws Exception {
-        String description = toolDescription("requestReturn", String.class, String.class, String.class);
+        String description = toolDescription("requestReturn", String.class, String.class, String.class, String.class);
 
         assertThat(description).contains("deterministic return procedure");
         assertThat(description).contains("Call even when the item or reason is not yet known");
@@ -70,13 +70,15 @@ class ProcedureRequestToolsDescriptionTest {
 
     @Test
     void returnToolParamsAreOptionalInTheAnnotationContract() throws Exception {
-        Method method = ProcedureRequestTools.class.getMethod("requestReturn", String.class, String.class, String.class);
+        Method method = ProcedureRequestTools.class.getMethod("requestReturn", String.class, String.class, String.class, String.class);
 
         assertThat(method.getParameters()[0].getAnnotation(ToolParam.class).required()).isTrue();
         assertThat(method.getParameters()[1].getAnnotation(ToolParam.class).required())
                 .as("itemReference").isFalse();
         assertThat(method.getParameters()[2].getAnnotation(ToolParam.class).required())
                 .as("reason").isFalse();
+        assertThat(method.getParameters()[3].getAnnotation(ToolParam.class).required())
+                .as("quantity").isFalse();
     }
 
     @Test

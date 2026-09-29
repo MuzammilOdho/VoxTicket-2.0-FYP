@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.identity.IdentityAssurance;
+import com.voxticket.procedure.DeferredProcedureIntent;
 import com.voxticket.procedure.ProcedureState;
 import com.voxticket.procedure.ProcedureType;
 import java.util.Map;
@@ -27,6 +28,11 @@ class StructuralFeatureExtractorTest {
 
     private static ProcedureState procedure() {
         return new ProcedureState(ProcedureType.CLAIM, null, Map.of(), IdentityAssurance.PHONE_MATCHED);
+    }
+
+    private static DeferredProcedureIntent deferredIntent() {
+        return new DeferredProcedureIntent(ProcedureType.CANCELLATION, "ORD-10002",
+                java.util.UUID.randomUUID(), null, null, null, "1", null, java.time.Instant.now());
     }
 
     @Test
@@ -74,14 +80,14 @@ class StructuralFeatureExtractorTest {
     @Test
     void complexSessionStateNeedsBothSlotsAndSubstantiveMessage() {
         ConversationSession both = session();
-        both.beginProcedure(procedure());
-        both.beginProcedure(procedure());
+        both.startActiveProcedure(procedure());
+        both.setDeferredIntent(deferredIntent());
         String substantive = "Actually also check the second item in that same order please";
 
         var features = extractor.extract(both, substantive);
 
         assertThat(features.hasActiveProcedure()).isTrue();
-        assertThat(features.hasPausedProcedure()).isTrue();
+        assertThat(features.hasDeferredIntent()).isTrue();
         assertThat(extractor.isComplexSessionState(features, substantive)).isTrue();
         // A bare ack is not a substantive new request.
         assertThat(extractor.isComplexSessionState(features, "yes")).isFalse();
@@ -90,7 +96,7 @@ class StructuralFeatureExtractorTest {
     @Test
     void complexSessionStateNeedsBothProcedureSlots() {
         ConversationSession onlyActive = session();
-        onlyActive.beginProcedure(procedure());
+        onlyActive.startActiveProcedure(procedure());
         var features = extractor.extract(onlyActive, "This is a long substantive message about my claim");
 
         assertThat(extractor.isComplexSessionState(features, "This is a long substantive message about my claim"))
@@ -103,13 +109,13 @@ class StructuralFeatureExtractorTest {
     @Test
     void featuresExposeProcedureSlotPresence() {
         ConversationSession both = session();
-        both.beginProcedure(procedure());
-        both.beginProcedure(procedure());
+        both.startActiveProcedure(procedure());
+        both.setDeferredIntent(deferredIntent());
 
         var features = extractor.extract(both, "hi");
 
         assertThat(features.hasActiveProcedure()).isTrue();
-        assertThat(features.hasPausedProcedure()).isTrue();
+        assertThat(features.hasDeferredIntent()).isTrue();
     }
 
     @Test

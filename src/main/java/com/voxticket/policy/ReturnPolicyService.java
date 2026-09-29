@@ -10,8 +10,17 @@ import com.voxticket.persistence.repository.ReturnItemRepository;
 import com.voxticket.persistence.repository.ShipmentRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,11 +66,43 @@ public class ReturnPolicyService {
      */
     @Transactional(readOnly = true)
     public ReturnEligibility evaluate(Order order, OrderItem item) {
+        return decide(item, latestDeliveryDate(order), alreadyCommittedQuantity(item), Instant.now());
+    }
+
+    /**
+     * Bulk read-path evaluation for aggregate order views: loads delivery
+     * state once per order and committed return quantities once per item
+     * set, then computes every per-item {@link ReturnEligibility} in memory.
+     * The returned map is keyed by the internal {@link OrderItem} ID and must
+     * not be exposed model-side. Semantics are exactly those of
+     * {@link #evaluate(Order, OrderItem)} - see {@link #decide}; the two are
+     * pinned equal by test.
+     *
+     * <p>Execution-time callers (returns procedure, ReturnService) keep using
+     * the single-item {@code evaluate} for their authoritative rechecks.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, ReturnEligibility> evaluateAll(Order order, List<OrderItem> items) {
         Instant deliveredAt = latestDeliveryDate(order);
+        Map<UUID, Integer> committedByItem = bulkCommittedQuantities(itemIds(items));
+        Instant now = Instant.now();
+        Map<UUID, ReturnEligibility> result = new LinkedHashMap<>();
+        for (OrderItem item : items) {
+            result.put(item.getId(), decide(item, deliveredAt, committedByItem.getOrDefault(item.getId(), 0), now));
+        }
+        return Collections.unmodifiableMap(result);
+    }
+
+    /**
+     * The exact per-item decision shared by both the single-item and bulk
+     * paths. Rule order is deliberate and unchanged: delivery and window
+     * first, then final-sale and returnability, then remaining quantity.
+     */
+    private ReturnEligibility decide(OrderItem item, Instant deliveredAt, int alreadyCommitted, Instant now) {
         if (deliveredAt == null) {
             return ReturnEligibility.denied(ReturnDenialReason.ITEM_NOT_DELIVERED);
         }
-        if (deliveredAt.plus(returnWindowDays, ChronoUnit.DAYS).isBefore(Instant.now())) {
+        if (deliveredAt.plus(returnWindowDays, ChronoUnit.DAYS).isBefore(now)) {
             return ReturnEligibility.denied(ReturnDenialReason.RETURN_WINDOW_EXPIRED);
         }
         // Final sale overrides everything else, even if returnable happens to also be true.
@@ -72,7 +113,7 @@ public class ReturnPolicyService {
             return ReturnEligibility.denied(ReturnDenialReason.ITEM_NOT_RETURNABLE);
         }
 
-        int remaining = item.getQuantity() - alreadyCommittedQuantity(item);
+        int remaining = item.getQuantity() - alreadyCommitted;
         if (remaining <= 0) {
             return ReturnEligibility.denied(ReturnDenialReason.NO_REMAINING_RETURNABLE_QUANTITY);
         }
@@ -93,5 +134,30 @@ public class ReturnPolicyService {
                 .filter(ri -> !NON_CONSUMING_STATUSES.contains(ri.getReturnRequest().getStatus()))
                 .mapToInt(ReturnItem::getQuantity)
                 .sum();
+    }
+
+    /**
+     * Same committed-quantity accounting as {@link #alreadyCommittedQuantity},
+     * but loaded with one query for the whole item set instead of one per
+     * item. Transient items (null IDs, used in unit tests) are skipped from
+     * the lookup and default to zero committed.
+     */
+    private Map<UUID, Integer> bulkCommittedQuantities(List<UUID> orderItemIds) {
+        List<UUID> persistedIds = orderItemIds.stream().filter(Objects::nonNull).toList();
+        if (persistedIds.isEmpty()) {
+            return Map.of();
+        }
+        return returnItemRepository.findByOrderItemIdIn(persistedIds).stream()
+                .filter(ri -> !NON_CONSUMING_STATUSES.contains(ri.getReturnRequest().getStatus()))
+                .collect(Collectors.groupingBy(
+                        ri -> ri.getOrderItem().getId(), Collectors.summingInt(ReturnItem::getQuantity)));
+    }
+
+    private List<UUID> itemIds(List<OrderItem> items) {
+        List<UUID> ids = new ArrayList<>(items.size());
+        for (OrderItem item : items) {
+            ids.add(item.getId());
+        }
+        return ids;
     }
 }

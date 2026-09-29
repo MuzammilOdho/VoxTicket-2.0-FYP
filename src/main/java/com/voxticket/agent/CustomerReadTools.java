@@ -9,7 +9,7 @@ import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
-import com.voxticket.service.dto.OrderContextView;
+import com.voxticket.service.dto.OrderSupportContext;
 import java.time.Duration;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -44,13 +44,15 @@ public class CustomerReadTools {
         return safely("getMyRecentOrders", null, () -> queryService.getRecentOrders(identity, 5));
     }
 
-    @Tool(description = "Get the authoritative support context for one order owned by the current customer. Use for "
-            + "questions about that order's status, items, payment, shipping, tracking, cancellation eligibility, "
-            + "returns, refunds, or claims. Do not use for general store-policy questions. The application enforces "
-            + "customer ownership.")
+    @Tool(description = "Get the authoritative support context for one order owned by the current customer. This is "
+            + "the single complete support-state read: use it for questions about that order's status, items, payment, "
+            + "shipping, tracking, cancellation availability, per-item return and claim availability, refunds, "
+            + "returns, or claims. Capability fields are computed deterministically by the application - do not "
+            + "suggest a support action as available unless the returned capability data establishes it. Do not use "
+            + "for general store-policy questions. The application enforces customer ownership.")
     public Object getMyOrderContext(@ToolParam(description = "Order number, e.g. ORD-10001") String orderReference) {
-        Object result = safely("getMyOrderContext", orderReference, () -> queryService.getOrderContext(identity, orderReference));
-        if (result instanceof OrderContextView context) {
+        Object result = safely("getMyOrderContext", orderReference, () -> queryService.getOrderSupportContext(identity, orderReference));
+        if (result instanceof OrderSupportContext context) {
             session.recordFocusOrder(context.orderNumber());
         }
         return result;

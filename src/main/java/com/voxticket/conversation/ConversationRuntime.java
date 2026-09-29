@@ -7,8 +7,8 @@ import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
-import com.voxticket.procedure.ConfirmationClassifier;
 import com.voxticket.procedure.ConfirmationDecision;
+import com.voxticket.procedure.ExplicitConfirmationParser;
 import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureOutcome;
 import com.voxticket.procedure.ProcedureState;
@@ -18,8 +18,8 @@ import com.voxticket.safety.NormalizationResult;
 import com.voxticket.safety.PromptGuard;
 import com.voxticket.safety.PromptGuardVerdict;
 import com.voxticket.safety.SafeLogging;
-import com.voxticket.verification.OtpInputClassifier;
-import com.voxticket.verification.OtpInputResult;
+import com.voxticket.verification.SensitiveTurn;
+import com.voxticket.verification.SensitiveTurnParser;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,8 +52,8 @@ public class ConversationRuntime {
     private final SupportAgent supportAgent;
     private final InputNormalizer inputNormalizer;
     private final PromptGuard promptGuard;
-    private final ConfirmationClassifier confirmationClassifier;
-    private final OtpInputClassifier otpInputClassifier;
+    private final ExplicitConfirmationParser confirmationParser;
+    private final SensitiveTurnParser sensitiveTurnParser;
     private final ProcedureCoordinator procedureCoordinator;
     private final TurnMetrics turnMetrics;
     private final ConversationAuditService auditService;
@@ -66,8 +66,8 @@ public class ConversationRuntime {
             SupportAgent supportAgent,
             InputNormalizer inputNormalizer,
             PromptGuard promptGuard,
-            ConfirmationClassifier confirmationClassifier,
-            OtpInputClassifier otpInputClassifier,
+            ExplicitConfirmationParser confirmationParser,
+            SensitiveTurnParser sensitiveTurnParser,
             ProcedureCoordinator procedureCoordinator,
             TurnMetrics turnMetrics,
             ConversationAuditService auditService,
@@ -78,8 +78,8 @@ public class ConversationRuntime {
         this.supportAgent = supportAgent;
         this.inputNormalizer = inputNormalizer;
         this.promptGuard = promptGuard;
-        this.confirmationClassifier = confirmationClassifier;
-        this.otpInputClassifier = otpInputClassifier;
+        this.confirmationParser = confirmationParser;
+        this.sensitiveTurnParser = sensitiveTurnParser;
         this.procedureCoordinator = procedureCoordinator;
         this.turnMetrics = turnMetrics;
         this.auditService = auditService;
@@ -131,42 +131,96 @@ public class ConversationRuntime {
             Optional<ProcedureState> active = session.getActiveProcedure();
 
             if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
-                turnNumber = session.recordUserMessage(normalizedText);
-                auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
-                OtpInputResult input = otpInputClassifier.classify(normalizedText);
-                ProcedureOutcome outcome = switch (input.type()) {
-                    case CODE -> submitVerificationWithSafeFallback(session, input.code());
-                    case RESEND_REQUESTED -> procedureCoordinator.resendVerificationCode(session);
-                    case OTHER -> null;
-                };
-                if (outcome != null) {
+                // Pass 2D-A: parse and redact BEFORE anything is stored. OTP
+                // plaintext must never enter conversation history, audit, or
+                // model input - the raw code survives only in the in-memory
+                // local variable handed to the verification service.
+                SensitiveTurn sensitive = sensitiveTurnParser.parse(normalizedText);
+                log.info("event=sensitive_turn sessionId={} otpCandidatePresent={} multipleCandidates={} resendRequested={} residualPresent={}",
+                        session.getSessionId(), sensitive.hasOtpCandidate(), sensitive.multipleCandidates(),
+                        sensitive.resendRequested(), sensitive.hasResidual());
+                String historyText = sensitive.redactedText();
+                turnNumber = session.recordUserMessage(historyText);
+                auditService.recordMessage(session, turnNumber, MessageRole.USER, historyText);
+
+                if (sensitive.multipleCandidates()) {
+                    // Never guess between distinct codes: ask for one code and submit nothing.
+                    ProcedureOutcome ambiguous = ProcedureOutcome.error("OTP_AMBIGUOUS", "multiple verification codes in one message");
+                    responseText = renderDirect(session, ambiguous);
+                    // Pass 2C security cleanup: the AssistantTurn boundary is
+                    // customer-facing, so only allowlisted safe fields cross it.
+                    turnMetadata = safeDirectTurnMetadata(ambiguous);
+                    outcomeLabel = "verification_ambiguous";
+                } else if (sensitive.hasOtpCandidate()) {
                     // Pass 2C: the direct path never reaches the LLM. Presentation is
                     // rendered deterministically from the stable outcome code and
                     // safe metadata in the customer's language.
+                    ProcedureOutcome outcome = submitVerificationWithSafeFallback(session, sensitive.otpCandidate());
                     responseText = renderDirect(session, outcome);
-                    // Pass 2C security cleanup: the AssistantTurn boundary is
-                    // customer-facing, so only allowlisted safe fields cross it.
-                    // Internal DEV metadata (devOtp, hashes, salts, internal IDs)
-                    // stays inside the verification/coordinator layer.
+                    // Pass 2C security cleanup: internal DEV metadata (devOtp,
+                    // hashes, salts, internal IDs) stays inside the
+                    // verification/coordinator layer.
                     turnMetadata = safeDirectTurnMetadata(outcome);
                     outcomeLabel = "verification";
+                    // Pass 2D-B: a terminal execution may have promoted the
+                    // deferred intent; its fresh start is communicated in the
+                    // same turn, deterministically rendered.
+                    responseText = appendPromotion(session, responseText, outcome);
+                    if (sensitive.hasResidual()) {
+                        // Pass 2D-B: GUARDED while a procedure is still live
+                        // (possibly the freshly promoted one); FULL only when
+                        // no procedure remains. The coordinator makes a second
+                        // live procedure impossible, so guarded turns no longer
+                        // need to be read-only.
+                        AgentResponse residual = isGuardedProcedureActive(session)
+                                ? respondGuardedViaAgent(session, sensitive.residualText())
+                                : respondViaAgent(session, sensitive.residualText());
+                        responseText = combineResponses(responseText, residual.text());
+                    }
+                } else if (sensitive.resendRequested()) {
+                    ProcedureOutcome outcome = procedureCoordinator.resendVerificationCode(session);
+                    responseText = renderDirect(session, outcome);
+                    turnMetadata = safeDirectTurnMetadata(outcome);
+                    outcomeLabel = "verification";
+                    if (sensitive.hasResidual()) {
+                        // The guarded verification is still unresolved.
+                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText());
+                        responseText = combineResponses(responseText, residual.text());
+                    }
                 } else {
-                    AgentResponse agentResponse = respondViaAgent(session, normalizedText);
+                    // Pass 2D-B: a guarded verification is unresolved - the
+                    // model gets GUARDED tools so it can understand a second
+                    // mutation request (deferred by the coordinator), a
+                    // correction, or an explicit replacement. A second live
+                    // procedure is impossible by coordinator construction.
+                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText);
                     responseText = agentResponse.text();
                     outcomeLabel = agentResponse.outcome().toTurnLabel("verification_unclear");
                 }
             } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
                 turnNumber = session.recordUserMessage(normalizedText);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
-                ConfirmationDecision decision = confirmationClassifier.classify(normalizedText);
+                ConfirmationDecision decision = confirmationParser.classify(normalizedText);
                 AgentResponse unclearResponse = null;
                 responseText = switch (decision) {
                     // Pass 2C: YES/NO advance the pending confirmation deterministically -
                     // only the customer presentation step goes through the direct renderer.
-                    case YES -> renderDirect(session, confirmWithSafeFallback(session));
-                    case NO -> renderDirect(session, procedureCoordinator.declineActive(session));
+                    // Pass 2D-B: a terminal outcome may promote the deferred intent;
+                    // both pieces are communicated deterministically in one turn.
+                    case YES -> {
+                        ProcedureOutcome confirmed = confirmWithSafeFallback(session);
+                        yield appendPromotion(session, renderDirect(session, confirmed), confirmed);
+                    }
+                    case NO -> {
+                        ProcedureOutcome declined = procedureCoordinator.declineActive(session);
+                        yield appendPromotion(session, renderDirect(session, declined), declined);
+                    }
                     case UNCLEAR -> {
-                        unclearResponse = respondViaAgent(session, normalizedText);
+                        // Pass 2D-B: confirmation is unresolved - answer guarded so the
+                        // agent can understand a second request (deferred by the
+                        // coordinator), a correction, or an explicit replacement.
+                        // The coordinator makes a second live procedure impossible.
+                        unclearResponse = respondGuardedViaAgent(session, normalizedText);
                         yield unclearResponse.text();
                     }
                 };
@@ -176,7 +230,14 @@ public class ConversationRuntime {
             } else {
                 turnNumber = session.recordUserMessage(normalizedText);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
-                AgentResponse agentResponse = respondViaAgent(session, normalizedText);
+                // Pass 2D-B: a queued deferred intent still needs guarding
+                // even with no live procedure (e.g. after abandonment) - the
+                // model gets the control tools so it can resolve the
+                // contested slot explicitly instead of the coordinator
+                // silently deciding the queued request's fate.
+                AgentResponse agentResponse = session.getDeferredIntent().isPresent()
+                        ? respondGuardedViaAgent(session, normalizedText)
+                        : respondViaAgent(session, normalizedText);
                 responseText = agentResponse.text();
                 outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
             }
@@ -237,6 +298,78 @@ public class ConversationRuntime {
         return Map.copyOf(safe);
     }
 
+    /**
+     * Pass 2D-B: the single predicate for the guarded-procedure invariant. A
+     * procedure is guarded while it is {@code AWAITING_VERIFICATION} or
+     * {@code AWAITING_CONFIRMATION}; any turn not directly consumed as the
+     * guarded authorization action must then use GUARDED (never FULL) agent
+     * mode.
+     *
+     * <p>Checked <em>after</em> OTP execution, because execution may have
+     * promoted the deferred intent into a fresh guarded procedure that must
+     * keep the residual guarded.
+     */
+    private boolean isGuardedProcedureActive(ConversationSession session) {
+        return session.getActiveProcedure()
+                .map(procedure -> {
+                    ProcedureStatus status = procedure.getStatus();
+                    return status == ProcedureStatus.AWAITING_VERIFICATION
+                            || status == ProcedureStatus.AWAITING_CONFIRMATION;
+                })
+                .orElse(false);
+    }
+
+    /**
+     * Pass 2D-B: guarded variant used while one procedure is still live. The
+     * model gets the procedure-request and safe control tools; the
+     * coordinator guarantees an identical request reuses the live procedure
+     * and a different request is deferred, so no second live procedure can
+     * start.
+     */
+    private AgentResponse respondGuardedViaAgent(ConversationSession session, String text) {
+        session.resetToolInvokedFlag();
+        AgentResponse response = supportAgent.respondGuarded(session, text);
+        checkForSuspectedFabrication(session, response);
+        return response;
+    }
+
+    /**
+     * Pass 2D-B: after a deterministic terminal procedure outcome, promote
+     * the deferred intent (if any) and append its deterministically rendered
+     * fresh start. One user turn still yields one AssistantTurn; the
+     * deterministic mutation outcome is never rewritten by the model.
+     * Promotion is skipped after EXECUTION_FAILED - the queued intent stays
+     * queued for the model to address on a later turn.
+     *
+     * <p>Pass 2D-B cleanup: the coordinator contains promotion failures and
+     * returns a safe PROMOTION_FAILED outcome instead of throwing, but this
+     * last-resort guard guarantees the invariant even if something
+     * unforeseen escapes - an already-rendered successful mutation result is
+     * never replaced by a turn-level failure. The deferred intent stays
+     * queued for the model to address on a later turn.
+     */
+    private String appendPromotion(ConversationSession session, String responseText, ProcedureOutcome outcome) {
+        if (outcome == null || "EXECUTION_FAILED".equals(outcome.code())) {
+            return responseText;
+        }
+        try {
+            return procedureCoordinator.promoteDeferredIntent(session)
+                    .map(promoted -> combineResponses(responseText, renderDirect(session, promoted)))
+                    .orElse(responseText);
+        } catch (RuntimeException e) {
+            // Last-resort containment: an unexpected promotion exception
+            // escapes nothing and cannot replace the already-rendered active
+            // success with a global failure. The customer is told the queued
+            // request could not be started (it survives in the session and
+            // will be retried next turn), so the request is not silently
+            // dropped while the completed mutation stays exactly as rendered.
+            log.warn("event=promotion_orchestration_failed sessionId={} errorType={}",
+                    session.getSessionId(), e.getClass().getSimpleName());
+            return combineResponses(responseText, renderDirect(session,
+                    ProcedureOutcome.error("PROMOTION_FAILED", "internal promotion exception")));
+        }
+    }
+
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
     private AgentResponse respondViaAgent(ConversationSession session, String normalizedText) {
         session.resetToolInvokedFlag();
@@ -245,13 +378,30 @@ public class ConversationRuntime {
         return response;
     }
 
+    /**
+     * Pass 2D-A: one user turn yields one AssistantTurn. The deterministic
+     * procedure text is never rewritten by the model; the residual agent text
+     * is appended plainly (no markdown), skipping empty fragments.
+     */
+    private String combineResponses(String directText, String residualText) {
+        String direct = directText == null ? "" : directText.strip();
+        String residual = residualText == null ? "" : residualText.strip();
+        if (direct.isEmpty()) {
+            return residual;
+        }
+        if (residual.isEmpty()) {
+            return direct;
+        }
+        return direct + " " + residual;
+    }
+
     private void checkForSuspectedFabrication(ConversationSession session, AgentResponse response) {
         // Fabrication detection applies ONLY to successful model responses: a provider/model
         // failure (MODEL_ERROR) or a blank fallback (BLANK_FALLBACK) is never evidence of
         // fabrication - the safe recovery text is static, never model output eligible for
         // grounding validation. Gating on the outcome (not the fallback text) keeps a real
         // provider outage from being mislabeled as suspected fabrication.
-        if (response.outcome() != AgentResponse.Outcome.SUCCESS) {
+        if (response == null || response.outcome() != AgentResponse.Outcome.SUCCESS) {
             return;
         }
         if (session.wasToolInvokedThisTurn() || response.text() == null) {

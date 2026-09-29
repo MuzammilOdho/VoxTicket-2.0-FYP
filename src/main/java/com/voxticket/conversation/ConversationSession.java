@@ -2,13 +2,14 @@ package com.voxticket.conversation;
 
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
-import com.voxticket.procedure.ProcedureSlotResult;
+import com.voxticket.procedure.DeferredProcedureIntent;
 import com.voxticket.procedure.ProcedureState;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,7 +27,13 @@ public class ConversationSession {
     private final Instant createdAt;
     private Instant lastActivityAt;
     private ProcedureState activeProcedure;
-    private ProcedureState pausedProcedure;
+    /**
+     * Pass 2D-B: at most ONE deferred customer mutation intent, and it is
+     * not a {@link ProcedureState} - it carries no OTP, no challenge, no
+     * confirmation authority, and no execution permission. See
+     * {@link DeferredProcedureIntent}.
+     */
+    private DeferredProcedureIntent deferredIntent;
     private boolean escalated;
     private UUID pendingVerificationChallengeId;
     private ConversationFocus focus;
@@ -84,30 +91,65 @@ public class ConversationSession {
         }
     }
 
-    public ProcedureSlotResult beginProcedure(ProcedureState newProcedure) {
-        if (activeProcedure == null) {
-            activeProcedure = newProcedure;
-            return ProcedureSlotResult.STARTED;
+    /**
+     * Pass 2D-B: starts the single live procedure for this session.
+     *
+     * <p>There is no second slot anymore: at most one {@link ProcedureState}
+     * may exist at a time, so a second live business-action/OTP/confirmation
+     * authority is structurally impossible. Callers
+     * ({@code ProcedureCoordinator}) decide idempotent reuse vs. deferral
+     * <em>before</em> calling this.
+     *
+     * <p>All production mutations of a session happen inside
+     * {@code SessionStore.withSession}, which holds a per-session lock, so
+     * the check-then-set here is atomic with respect to other turns.
+     *
+     * @throws IllegalStateException if a procedure is already active
+     */
+    public void startActiveProcedure(ProcedureState procedure) {
+        Objects.requireNonNull(procedure, "procedure");
+        if (activeProcedure != null) {
+            throw new IllegalStateException("An active procedure is already present; it must be completed, abandoned, or deferred first");
         }
-        if (pausedProcedure == null) {
-            pausedProcedure = activeProcedure;
-            activeProcedure = newProcedure;
-            return ProcedureSlotResult.STARTED_AND_PAUSED_PREVIOUS;
-        }
-        return ProcedureSlotResult.BOTH_SLOTS_OCCUPIED;
+        activeProcedure = procedure;
     }
 
+    /**
+     * Pass 2D-B: clearing the active procedure simply empties the slot. It
+     * never restores anything - the paused-procedure concept is gone.
+     */
     public void clearActiveProcedure() {
-        activeProcedure = pausedProcedure;
-        pausedProcedure = null;
+        activeProcedure = null;
     }
 
     public Optional<ProcedureState> getActiveProcedure() {
         return Optional.ofNullable(activeProcedure);
     }
 
-    public Optional<ProcedureState> getPausedProcedure() {
-        return Optional.ofNullable(pausedProcedure);
+    /**
+     * Pass 2D-B: the single deferred customer intent, if one was queued
+     * while another procedure was active. Never a live procedure.
+     */
+    public Optional<DeferredProcedureIntent> getDeferredIntent() {
+        return Optional.ofNullable(deferredIntent);
+    }
+
+    /**
+     * Queues the deferred intent. Refuses to overwrite an occupied slot -
+     * the coordinator returns {@code PENDING_REQUEST_LIMIT_REACHED} instead.
+     *
+     * @throws IllegalStateException if a deferred intent is already queued
+     */
+    public void setDeferredIntent(DeferredProcedureIntent intent) {
+        Objects.requireNonNull(intent, "intent");
+        if (deferredIntent != null) {
+            throw new IllegalStateException("A deferred intent is already queued; discard it first");
+        }
+        deferredIntent = intent;
+    }
+
+    public void clearDeferredIntent() {
+        deferredIntent = null;
     }
 
     public void markEscalated() {

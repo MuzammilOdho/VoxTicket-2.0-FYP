@@ -1,5 +1,6 @@
 package com.voxticket.conversation;
 
+import com.voxticket.verification.SensitiveTurnParser;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -13,8 +14,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>It inspects recent {@code USER} messages on the session, newest first,
  * and the newest message carrying a useful language signal wins. OTP digits,
- * order/reference identifiers, and punctuation-only input carry no language
- * signal, so they never reset a previously established language.
+ * the OTP redaction placeholder, order/reference identifiers, and
+ * punctuation-only input carry no language signal, so they never reset a
+ * previously established language.
  *
  * <p>No model, no embeddings, no network, no database. Raw user text is never
  * logged.
@@ -79,14 +81,23 @@ public class ConversationLanguageResolver {
 
     /**
      * Classifies a single user message. Empty when it carries no language
-     * signal (OTP digits, reference identifiers, punctuation/whitespace, or a
-     * weak generic confirmation).
+     * signal (OTP digits, the OTP redaction placeholder, reference
+     * identifiers, punctuation/whitespace, or a weak generic confirmation).
      */
     public Optional<ConversationLanguage> classify(String text) {
         if (text == null || text.isBlank()) {
             return Optional.empty();
         }
         String trimmed = text.strip();
+        // Pass 2D-A: the OTP redaction placeholder is system-inserted, not
+        // user language - it must never reset a previously established
+        // language. Any remaining text is genuine user language and is
+        // classified normally.
+        String withoutPlaceholder = trimmed.replace(SensitiveTurnParser.REDACTED_OTP_PLACEHOLDER, " ").strip();
+        if (withoutPlaceholder.isEmpty()) {
+            return Optional.empty();
+        }
+        trimmed = withoutPlaceholder;
         String lower = trimmed.toLowerCase(Locale.ROOT);
         if (WEAK_ENGLISH_CONFIRMATIONS.contains(lower)) {
             return Optional.empty();

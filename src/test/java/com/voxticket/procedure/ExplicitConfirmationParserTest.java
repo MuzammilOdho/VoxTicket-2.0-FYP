@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
-class ConfirmationClassifierTest {
+class ExplicitConfirmationParserTest {
 
-    private final ConfirmationClassifier classifier = new ConfirmationClassifier();
+    private final ExplicitConfirmationParser classifier = new ExplicitConfirmationParser();
 
     @Test
     void standaloneYesVariantsAreRecognized() {

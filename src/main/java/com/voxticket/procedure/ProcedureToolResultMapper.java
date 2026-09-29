@@ -30,6 +30,9 @@ public final class ProcedureToolResultMapper {
     /** Procedure label for the model-mediated human-support tool. */
     public static final String HUMAN_SUPPORT = "HUMAN_SUPPORT";
 
+    /** Procedure label for the safe procedure-control tools (abandon / discard). */
+    public static final String PROCEDURE_CONTROL = "PROCEDURE_CONTROL";
+
     /**
      * The only {@link ProcedureOutcome} metadata keys allowed into the
      * model-facing payload. All keys are attached by the coordinator at the
@@ -51,7 +54,11 @@ public final class ProcedureToolResultMapper {
             "claimNumber",
             "claimReason",
             "problemDescription",
-            "ticketNumber");
+            "ticketNumber",
+            // Pass 2D-B: stable stage code (VERIFICATION_REQUIRED or
+            // CONFIRMATION_REQUIRED) carried by ALREADY_PENDING so the
+            // model-facing next action stays correct.
+            "pendingStage");
 
     private ProcedureToolResultMapper() {
     }
@@ -78,11 +85,17 @@ public final class ProcedureToolResultMapper {
             details.put("candidateItems", List.copyOf(candidates));
         }
         typedMaxReturnableQuantity(metadata, details);
+        // Pass 2D-B: ALREADY_PENDING's next action depends on the live
+        // procedure's stage, carried as the pendingStage metadata code.
+        ProcedureNextAction nextAction = ProcedureNextAction.fromOutcomeCode(outcome.code());
+        if ("ALREADY_PENDING".equals(outcome.code())) {
+            nextAction = ProcedureNextAction.fromOutcomeCode(metadata.get("pendingStage"));
+        }
         return new ProcedureToolResult(
                 outcome.success(),
                 outcome.code(),
                 procedure,
-                ProcedureNextAction.fromOutcomeCode(outcome.code()),
+                nextAction,
                 metadata.get("orderReference"),
                 details);
     }

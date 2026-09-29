@@ -231,7 +231,7 @@ class ProcedureCoordinatorIntegrationTest {
     }
 
     @Test
-    void aThirdStatefulProcedureIsRejectedRatherThanDiscardingEitherExisting() {
+    void aThirdDistinctProcedureIsRefusedWithActiveAndDeferredUntouched() {
         Order orderA = newOrder(BigDecimal.valueOf(500));
         Order orderB = newOrder(BigDecimal.valueOf(600));
         Order orderC = newOrder(BigDecimal.valueOf(700));
@@ -242,16 +242,17 @@ class ProcedureCoordinatorIntegrationTest {
 
         procedureCoordinator.startClaim(session, orderA.getOrderNumber(), orderA.getItems().get(0).getSku(), "damaged");
         ProcedureOutcome second = procedureCoordinator.startClaim(session, orderB.getOrderNumber(), orderB.getItems().get(0).getSku(), "wrong item");
-        assertThat(second.code()).isEqualTo("CONFIRMATION_REQUIRED");
-        assertThat(session.getPausedProcedure()).isPresent();
+        assertThat(second.code()).isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(session.getDeferredIntent()).isPresent();
 
         ProcedureOutcome third = procedureCoordinator.startClaim(session, orderC.getOrderNumber(), orderC.getItems().get(0).getSku(), "missing item");
 
         assertThat(third.success()).isFalse();
-        assertThat(third.code()).isEqualTo("TOO_MANY_ACTIVE_PROCEDURES");
-        // Neither existing procedure was discarded:
+        assertThat(third.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
+        // Neither the active procedure nor the queued intent was overwritten or dropped:
         assertThat(session.getActiveProcedure()).isPresent();
-        assertThat(session.getPausedProcedure()).isPresent();
+        assertThat(session.getDeferredIntent()).isPresent();
+        assertThat(session.getDeferredIntent().orElseThrow().orderNumber()).isEqualTo(orderB.getOrderNumber());
     }
 
     @Test
@@ -370,7 +371,7 @@ class ProcedureCoordinatorIntegrationTest {
         shipmentRepository.save(shipment);
         ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
 
-        ProcedureOutcome outcome = procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "");
+        ProcedureOutcome outcome = procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "", null);
 
         assertThat(outcome.success()).isFalse();
         assertThat(outcome.code()).isEqualTo("REASON_REQUIRED");
@@ -401,14 +402,14 @@ class ProcedureCoordinatorIntegrationTest {
         ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
 
         // First attempt names the item explicitly and successfully establishes focus.
-        procedureCoordinator.startReturn(session, order.getOrderNumber(), "test product", "damaged");
+        procedureCoordinator.startReturn(session, order.getOrderNumber(), "test product", "damaged", null);
         assertThat(session.getFocus()).isPresent();
         assertThat(session.getFocus().get().itemSku()).isNotBlank();
 
         // Simulate the customer's "yes, I want to return it" on a LATER attempt with no item
         // text at all - this is a multi-item order, so blank text would normally be ambiguous.
         // The focus fallback must resolve it to the SAME item without asking again.
-        ProcedureOutcome secondAttempt = procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "changed my mind");
+        ProcedureOutcome secondAttempt = procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "changed my mind", null);
 
         assertThat(secondAttempt.code()).isNotEqualTo("ITEM_REQUIRED");
     }
@@ -421,7 +422,7 @@ class ProcedureCoordinatorIntegrationTest {
         shipmentRepository.save(shipment);
         ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
 
-        procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "damaged");
+        procedureCoordinator.startReturn(session, order.getOrderNumber(), "", "damaged", null);
         String code = procedureCoordinator.resendVerificationCode(session).metadata().get("devOtp");
 
         // Simulate the item becoming non-returnable between OTP issuance and verification.

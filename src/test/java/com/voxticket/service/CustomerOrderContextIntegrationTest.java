@@ -26,6 +26,7 @@ import com.voxticket.persistence.entity.enums.PaymentStatus;
 import com.voxticket.persistence.entity.enums.RefundReason;
 import com.voxticket.persistence.entity.enums.RefundStatus;
 import com.voxticket.persistence.entity.enums.ReturnReason;
+import com.voxticket.policy.ClaimCapabilityState;
 import com.voxticket.persistence.entity.enums.ReturnStatus;
 import com.voxticket.persistence.entity.enums.ShipmentStatus;
 import com.voxticket.persistence.repository.CustomerRepository;
@@ -35,7 +36,7 @@ import com.voxticket.persistence.repository.PaymentRepository;
 import com.voxticket.persistence.repository.RefundRepository;
 import com.voxticket.persistence.repository.ReturnRequestRepository;
 import com.voxticket.persistence.repository.ShipmentRepository;
-import com.voxticket.service.dto.OrderContextView;
+import com.voxticket.service.dto.OrderSupportContext;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -64,7 +65,7 @@ class CustomerOrderContextIntegrationTest {
     @Autowired
     private CustomerOrderQueryService queryService;
     @Autowired
-    private JsonMapper objectMapper;
+    private final JsonMapper objectMapper = new JsonMapper();
     @Autowired
     private CustomerRepository customerRepository;
     @Autowired
@@ -116,7 +117,7 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(1000));
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.AUTHORIZED));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
         assertThat(context.orderStatus()).isEqualTo(OrderStatus.OPEN);
         assertThat(context.fulfillmentStatus()).isEqualTo(FulfillmentStatus.UNFULFILLED);
@@ -129,7 +130,7 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(500));
         paymentRepository.save(new Payment(order, PaymentMethod.COD, order.getTotalAmount(), "PKR", PaymentStatus.PENDING));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
         assertThat(context.payment().amountCollected()).isEqualByComparingTo(BigDecimal.ZERO);
     }
@@ -139,7 +140,7 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(500));
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
         assertThat(context.payment().amountCollected()).isEqualByComparingTo(BigDecimal.valueOf(500));
     }
@@ -149,14 +150,14 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(500));
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
         String json = objectMapper.writeValueAsString(context);
 
         assertThat(context.items()).hasSize(1);
         assertThat(context.items().get(0).productName()).isEqualTo("Test Product");
         assertThat(json).doesNotContain("\"sku\"");
         assertThat(json).doesNotContain("SKU-");
-        assertThat(json).contains("\"productName\"").contains("\"returnEligibility\"");
+        assertThat(json).contains("\"productName\"").contains("\"returnCapability\"");
     }
 
     @Test
@@ -164,7 +165,7 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(500));
         Payment payment = paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
         String json = objectMapper.writeValueAsString(context);
 
         assertThat(json).doesNotContain(customer.getId().toString());
@@ -178,10 +179,10 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(1000), item("Running Shoes", 2, true, false));
         deliveredShipment(order, Instant.now());
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        var eligibility = context.items().get(0).returnEligibility();
-        assertThat(eligibility.eligible()).isTrue();
+        var eligibility = context.items().get(0).returnCapability();
+        assertThat(eligibility.available()).isTrue();
         assertThat(eligibility.denialReason()).isNull();
         assertThat(eligibility.maxReturnableQuantity()).isEqualTo(2);
     }
@@ -190,10 +191,10 @@ class CustomerOrderContextIntegrationTest {
     void undeliveredItemIsDeniedWithoutModelInference() {
         Order order = newOrder(BigDecimal.valueOf(500));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        var eligibility = context.items().get(0).returnEligibility();
-        assertThat(eligibility.eligible()).isFalse();
+        var eligibility = context.items().get(0).returnCapability();
+        assertThat(eligibility.available()).isFalse();
         assertThat(eligibility.denialReason()).isEqualTo("ITEM_NOT_DELIVERED");
         assertThat(eligibility.maxReturnableQuantity()).isZero();
     }
@@ -203,10 +204,10 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(500), item("Clearance Jacket", 1, true, true));
         deliveredShipment(order, Instant.now());
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        var eligibility = context.items().get(0).returnEligibility();
-        assertThat(eligibility.eligible()).isFalse();
+        var eligibility = context.items().get(0).returnCapability();
+        assertThat(eligibility.available()).isFalse();
         assertThat(eligibility.denialReason()).isEqualTo("ITEM_FINAL_SALE");
         assertThat(eligibility.maxReturnableQuantity()).isZero();
     }
@@ -216,10 +217,10 @@ class CustomerOrderContextIntegrationTest {
         Order order = newOrder(BigDecimal.valueOf(500));
         deliveredShipment(order, Instant.now().minus(31, ChronoUnit.DAYS));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        var eligibility = context.items().get(0).returnEligibility();
-        assertThat(eligibility.eligible()).isFalse();
+        var eligibility = context.items().get(0).returnCapability();
+        assertThat(eligibility.available()).isFalse();
         assertThat(eligibility.denialReason()).isEqualTo("RETURN_WINDOW_EXPIRED");
         assertThat(eligibility.maxReturnableQuantity()).isZero();
     }
@@ -233,10 +234,10 @@ class CustomerOrderContextIntegrationTest {
         returnRequest.addItem(new ReturnItem(orderItem, 1, ReturnReason.WRONG_SIZE));
         returnRequestRepository.save(returnRequest);
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        var eligibility = context.items().get(0).returnEligibility();
-        assertThat(eligibility.eligible()).isTrue();
+        var eligibility = context.items().get(0).returnCapability();
+        assertThat(eligibility.available()).isTrue();
         assertThat(eligibility.denialReason()).isNull();
         assertThat(eligibility.maxReturnableQuantity()).isEqualTo(1);
     }
@@ -256,7 +257,7 @@ class CustomerOrderContextIntegrationTest {
         claim.setStatus(ClaimStatus.IN_REVIEW);
         orderClaimRepository.save(claim);
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
         assertThat(context.shipments()).hasSize(1);
         assertThat(context.shipments().get(0).status()).isEqualTo(ShipmentStatus.IN_TRANSIT);
@@ -267,10 +268,29 @@ class CustomerOrderContextIntegrationTest {
         assertThat(context.refunds()).hasSize(1);
         assertThat(context.refunds().get(0).status()).isEqualTo(RefundStatus.FAILED);
         assertThat(context.refunds().get(0).failedAt()).isNotNull();
+        assertThat(context.refunds().get(0).reason()).isEqualTo("RETURN");
+        assertThat(context.refunds().get(0).relatedReturnNumber()).isEqualTo(returnRequest.getReturnNumber());
         assertThat(context.claims()).hasSize(1);
         assertThat(context.claims().get(0).status()).isEqualTo(ClaimStatus.IN_REVIEW);
         assertThat(context.claims().get(0).reason()).isEqualTo("DAMAGED");
         assertThat(context.claims().get(0).requestedResolution()).isEqualTo("REPLACEMENT");
+        assertThat(context.claims().get(0).itemName()).isEqualTo("Test Product");
+        assertThat(context.claims().get(0).createdAt()).isNotNull();
+        assertThat(context.claims().get(0).supportTicketNumber()).isNull();
+        assertThat(context.claims().get(0).supportTicketStatus()).isNull();
+        // IN_REVIEW claim on the only item -> EXISTING_ACTIVE, not a fresh opportunity
+        assertThat(context.items().get(0).claimCapability().state()).isEqualTo(ClaimCapabilityState.EXISTING_ACTIVE);
+        assertThat(context.items().get(0).claimCapability().existingClaim()).isNotNull();
+        assertThat(context.items().get(0).claimCapability().existingClaim().claimNumber()).isEqualTo(claim.getClaimNumber());
+        assertThat(context.supportCapabilities().anyClaimAvailable()).isFalse();
+        assertThat(context.returns().get(0).items()).isEmpty();
+        assertThat(context.returns().get(0).approvedAt()).isNull();
+        assertThat(context.returns().get(0).receivedAt()).isNull();
+        assertThat(context.returns().get(0).inspectedAt()).isNull();
+        assertThat(context.supportCapabilities().refundState().hasRefunds()).isTrue();
+        assertThat(context.supportCapabilities().refundState().latestStatus()).isEqualTo("FAILED");
+        assertThat(context.supportCapabilities().refundState().hasFailedRefund()).isTrue();
+        assertThat(context.supportCapabilities().refundState().hasPendingRefund()).isFalse();
     }
 
     @Test
@@ -285,28 +305,30 @@ class CustomerOrderContextIntegrationTest {
         refund.setFailedAt(failedAt);
         refundRepository.save(refund);
 
-        OrderContextView context = queryService.getOrderContext(identity, order.getOrderNumber());
+        OrderSupportContext context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
         String json = objectMapper.writeValueAsString(context);
         var refundsNode = objectMapper.readTree(json).get("refunds");
 
         assertThat(context.refunds()).hasSize(1);
         assertThat(context.refunds().get(0).status()).isEqualTo(RefundStatus.FAILED);
         assertThat(context.refunds().get(0).failedAt()).isNotNull();
+        assertThat(context.refunds().get(0).reason()).isEqualTo("RETURN");
+        assertThat(context.refunds().get(0).relatedReturnNumber()).isEqualTo(returnRequest.getReturnNumber());
         assertThat(refundsNode.get(0).get("status").asText()).isEqualTo("FAILED");
         assertThat(refundsNode.get(0).has("failedAt")).isTrue();
         assertThat(json).doesNotContain("failureReason").doesNotContain("failureCause").doesNotContain("errorMessage");
     }
 
     @Test
-    void cancellationEligibilityIsStructuredNotProse() {
+    void cancellationCapabilityIsStructuredNotProse() {
         Order order = newOrder(BigDecimal.valueOf(500));
         paymentRepository.save(new Payment(order, PaymentMethod.CARD, order.getTotalAmount(), "PKR", PaymentStatus.PAID));
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        assertThat(context.cancellationEligibility().eligible()).isTrue();
-        assertThat(context.cancellationEligibility().denialReason()).isNull();
-        assertThat(context.cancellationEligibility().paymentConsequence()).isEqualTo("REFUND_REQUIRED");
+        assertThat(context.cancellation().available()).isTrue();
+        assertThat(context.cancellation().denialReason()).isNull();
+        assertThat(context.cancellation().paymentConsequence()).isEqualTo("REFUND_REQUIRED");
     }
 
     @Test
@@ -318,11 +340,11 @@ class CustomerOrderContextIntegrationTest {
         order.setFulfillmentStatus(FulfillmentStatus.FULFILLED);
         orderRepository.save(order);
 
-        var context = queryService.getOrderContext(identity, order.getOrderNumber());
+        var context = queryService.getOrderSupportContext(identity, order.getOrderNumber());
 
-        assertThat(context.cancellationEligibility().eligible()).isFalse();
-        assertThat(context.cancellationEligibility().denialReason()).isEqualTo("ORDER_FULFILLED");
-        assertThat(context.cancellationEligibility().paymentConsequence()).isNull();
+        assertThat(context.cancellation().available()).isFalse();
+        assertThat(context.cancellation().denialReason()).isEqualTo("ORDER_FULFILLED");
+        assertThat(context.cancellation().paymentConsequence()).isNull();
     }
 
     @Test
@@ -331,7 +353,7 @@ class CustomerOrderContextIntegrationTest {
         Order theirOrder = new Order("ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(), otherCustomer, "PKR", BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.TEN, Instant.now());
         orderRepository.save(theirOrder);
 
-        assertThatThrownBy(() -> queryService.getOrderContext(identity, theirOrder.getOrderNumber()))
+        assertThatThrownBy(() -> queryService.getOrderSupportContext(identity, theirOrder.getOrderNumber()))
                 .isInstanceOf(ResourceNotFoundForAccountException.class);
     }
 }
