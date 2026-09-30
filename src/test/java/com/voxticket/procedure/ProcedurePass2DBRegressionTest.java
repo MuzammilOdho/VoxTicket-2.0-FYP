@@ -338,6 +338,73 @@ class ProcedurePass2DBRegressionTest {
         assertThat(session.getDeferredIntent().get().type()).isEqualTo(ProcedureType.RETURN);
     }
 
+    // ---- Phase 6: deferred-procedure UX completion ----
+
+    @Test
+    void abandonmentSurfacesTheSurvivingQueuedRequest() {
+        ConversationSession session = session();
+
+        coordinator.startCancellation(session, "ORD-10001");
+        coordinator.startReturn(session, "ORD-10002", itemName("ORD-10002"), "damaged", "2");
+
+        ProcedureOutcome abandoned = coordinator.abandonActiveProcedure(session);
+
+        assertThat(abandoned.code()).isEqualTo("ACTIVE_PROCEDURE_ABANDONED");
+        assertThat(abandoned.message()).contains("nothing was executed")
+                .contains("still queued")
+                .contains("return on order ORD-10002");
+        // The queued request itself is untouched - only surfaced.
+        assertThat(session.getDeferredIntent()).isPresent();
+        assertThat(session.getDeferredIntent().get().type()).isEqualTo(ProcedureType.RETURN);
+    }
+
+    @Test
+    void abandonmentWithoutAQueuedRequestKeepsThePlainMessage() {
+        ConversationSession session = session();
+
+        coordinator.startCancellation(session, "ORD-10001");
+
+        ProcedureOutcome abandoned = coordinator.abandonActiveProcedure(session);
+
+        assertThat(abandoned.code()).isEqualTo("ACTIVE_PROCEDURE_ABANDONED");
+        assertThat(abandoned.message())
+                .isEqualTo("The pending request has been dropped - nothing was executed.");
+    }
+
+    @Test
+    void contestedSlotConflictNamesTheQueuedRequestWithoutAfterwards() {
+        ConversationSession session = session();
+
+        coordinator.startCancellation(session, "ORD-10001");
+        coordinator.startReturn(session, "ORD-10002", itemName("ORD-10002"), "damaged", "2");
+        coordinator.abandonActiveProcedure(session);
+
+        ProcedureOutcome contested = coordinator.startClaim(session, "ORD-10003", itemName("ORD-10003"), "missing item");
+
+        assertThat(contested.code()).isEqualTo("DEFERRED_REQUEST_PENDING");
+        // No active procedure exists here, so "afterwards" would be wrong.
+        assertThat(contested.message()).contains("return on order ORD-10002")
+                .contains("queued")
+                .doesNotContain("afterwards");
+    }
+
+    @Test
+    void deferredRepeatWhileActiveKeepsBehindTheCurrentOneWording() {
+        ConversationSession session = session();
+
+        coordinator.startCancellation(session, "ORD-10001");
+        coordinator.startReturn(session, "ORD-10002", itemName("ORD-10002"), "damaged", "2");
+
+        // A compatible repeat of the queued request while the first procedure
+        // is still live: still queued behind the current one.
+        ProcedureOutcome repeat = coordinator.startReturn(session, "ORD-10002", itemName("ORD-10002"), "damaged", "2");
+
+        assertThat(repeat.code()).isEqualTo("ALREADY_DEFERRED");
+        assertThat(repeat.message()).contains("already queued behind the current one");
+        assertThat(session.getActiveProcedure()).isPresent();
+        assertThat(session.getDeferredIntent()).isPresent();
+    }
+
     // ---- Case G: discard deferred ----
 
     @Test

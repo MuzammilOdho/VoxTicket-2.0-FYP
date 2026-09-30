@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
+import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureControlTools;
@@ -35,7 +36,8 @@ class SupportAgentToolModeTest {
             mock(RagService.class),
             mock(ProcedureCoordinator.class),
             mock(TurnMetrics.class),
-            mock(ConversationAuditService.class));
+            mock(ConversationAuditService.class),
+            new ConversationLanguageResolver());
 
     private final ConversationSession session = ConversationSession.newSession("tool-mode", Channel.CHAT);
 

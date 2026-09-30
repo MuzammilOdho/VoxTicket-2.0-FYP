@@ -705,16 +705,19 @@ public class ProcedureCoordinator {
                 // untouched, with no new authorization.
                 log.info("event=deferred_compatible_repeat type={} orderNumber={}", type, target.orderNumber());
                 return recordOutcome(session, type,
-                        withMetadata(ProcedureOutcome.ok("ALREADY_DEFERRED",
-                                        "That request is already queued behind the current one."),
+                        withMetadata(ProcedureOutcome.ok("ALREADY_DEFERRED", alreadyQueuedMessage(session)),
                                 Map.of("orderReference", target.orderNumber())),
                         target.orderNumber(), startNanos);
             } else {
                 log.info("event=deferred_request_conflict type={} orderNumber={}", type, target.orderNumber());
                 return recordOutcome(session, type,
                         withMetadata(ProcedureOutcome.error("DEFERRED_REQUEST_PENDING",
+                                        // Phase 6: no active procedure exists on this path, so
+                                        // "do this afterwards" would be wrong - there is nothing
+                                        // to do it after. The customer picks between the queued
+                                        // request and the new one.
                                         "There's already a " + describeIntent(queued)
-                                                + " queued. Should I keep it queued and do this afterwards, or drop the queued one?"),
+                                                + " queued. Should I start the queued one instead, or drop it and go ahead with this?"),
                                 Map.of("orderReference", target.orderNumber())),
                         target.orderNumber(), startNanos);
             }
@@ -840,8 +843,7 @@ public class ProcedureCoordinator {
             // request is the same queued request.
             if (isCompatibleRepeat(existing.get(), candidate)) {
                 log.info("event=procedure_duplicate_deferred type={} orderNumber={}", candidate.type(), candidate.orderNumber());
-                return withMetadata(ProcedureOutcome.ok("ALREADY_DEFERRED",
-                                "That request is already queued behind the current one."),
+                return withMetadata(ProcedureOutcome.ok("ALREADY_DEFERRED", alreadyQueuedMessage(session)),
                         Map.of("orderReference", candidate.orderNumber()));
             }
             String activeDesc = session.getActiveProcedure().map(this::describe).orElse("one request");
@@ -1231,8 +1233,18 @@ public class ProcedureCoordinator {
         active.setStatus(ProcedureStatus.CANCELLED);
         session.clearActiveProcedure();
         log.info("event=procedure_abandoned type={} orderNumber={}", active.getType(), orderReference);
+        // Phase 6: a queued request deliberately survives abandonment (no
+        // silent promotion, no silent drop) - but the customer must be told
+        // it is still there, otherwise the queue goes silent and the request
+        // is effectively lost to them.
+        String message = "The pending request has been dropped - nothing was executed.";
+        Optional<DeferredProcedureIntent> queued = session.getDeferredIntent();
+        if (queued.isPresent()) {
+            message += " Your " + describeIntent(queued.get())
+                    + " is still queued - just say the word and I'll start it, or I can drop it too.";
+        }
         return recordOutcome(session, active.getType(), withMetadata(
-                ProcedureOutcome.ok("ACTIVE_PROCEDURE_ABANDONED", "The pending request has been dropped - nothing was executed."),
+                ProcedureOutcome.ok("ACTIVE_PROCEDURE_ABANDONED", message),
                 Map.of("orderReference", orderReference)), orderReference, startNanos);
     }
 
@@ -1338,6 +1350,18 @@ public class ProcedureCoordinator {
     private String describeIntent(DeferredProcedureIntent intent) {
         String base = intent.type().name().toLowerCase(Locale.ROOT) + " on order " + intent.orderNumber();
         return intent.itemDisplayName() != null ? base + " (" + intent.itemDisplayName() + ")" : base;
+    }
+
+    /**
+     * Phase 6: the already-queued wording depends on whether a procedure is
+     * still active. "Behind the current one" is only true while the active
+     * procedure is live; on the contested-slot path the active procedure is
+     * gone (e.g. just abandoned) and the request is simply queued.
+     */
+    private String alreadyQueuedMessage(ConversationSession session) {
+        return session.getActiveProcedure().isPresent()
+                ? "That request is already queued behind the current one."
+                : "That request is already queued.";
     }
 
     private String buildHandoffSummary(ConversationSession session, String reason) {

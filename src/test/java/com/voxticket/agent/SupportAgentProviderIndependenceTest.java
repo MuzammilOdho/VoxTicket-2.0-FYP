@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
+import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
@@ -39,7 +40,8 @@ class SupportAgentProviderIndependenceTest {
         var agent = new SupportAgent(
                 registry, mock(ContextBuilder.class), mock(ModelSelector.class),
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
-                mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class));
+                mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class),
+                new ConversationLanguageResolver());
 
         // Provider-agnostic behavior works with the real registry behind it.
         String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));

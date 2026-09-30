@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
@@ -31,7 +32,8 @@ class SupportAgentSystemPromptTest {
         return new SupportAgent(
                 mock(TierChatClientRegistry.class), mock(ContextBuilder.class), mock(ModelSelector.class),
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
-                mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class));
+                mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class),
+                new ConversationLanguageResolver());
     }
 
     private VerifiedOrderRef dummyRef(String orderNumber) {
@@ -243,5 +245,85 @@ class SupportAgentSystemPromptTest {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
 
         assertThat(agent.blankResponseFallback(session)).isEqualTo("Sorry, could you say that again?");
+    }
+
+    // ---- Phase 5: multilingual communication profile ----
+
+    @Test
+    void systemPromptInjectsTheResolvedCustomerLanguageProfile() {
+        ConversationSession session = ConversationSession.newSession("s5", Channel.CHAT);
+        session.recordUserMessage("میرا آرڈر کہاں ہے");
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("COMMUNICATION PROFILE");
+        assertThat(prompt).contains("customerLanguage: URDU");
+        assertThat(prompt).contains("Urdu script");
+    }
+
+    @Test
+    void systemPromptInjectsRomanUrduProfileForRomanUrduSpeech() {
+        ConversationSession session = ConversationSession.newSession("s5", Channel.CHAT);
+        session.recordUserMessage("mera order kahan hai");
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("customerLanguage: ROMAN_URDU");
+    }
+
+    @Test
+    void systemPromptInjectsCodeSwitchProfileForMixedSpeech() {
+        ConversationSession session = ConversationSession.newSession("s5", Channel.CHAT);
+        session.recordUserMessage("mera order kahan hai, please cancel kar dein");
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("customerLanguage: CODE_SWITCH");
+    }
+
+    @Test
+    void systemPromptDefaultsToEnglishProfileWithNoLanguageSignal() {
+        ConversationSession session = ConversationSession.newSession("s5", Channel.CHAT);
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("customerLanguage: ENGLISH");
+    }
+
+    @Test
+    void staticCommunicationSectionDefersToTheInjectedProfile() {
+        ConversationSession session = ConversationSession.newSession("s5", Channel.CHAT);
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        assertThat(prompt).contains("follow them exactly");
+        assertThat(prompt).doesNotContain("or code-switching");
+    }
+
+    @Test
+    void blankResponseFallbackRendersInTheSessionLanguage() {
+        ConversationSession urdu = ConversationSession.newSession("s5u", Channel.CHAT);
+        urdu.recordUserMessage("میرا آرڈر کہاں ہے");
+        ConversationSession romanUrdu = ConversationSession.newSession("s5r", Channel.CHAT);
+        romanUrdu.recordUserMessage("mera order kahan hai");
+        ConversationSession codeSwitch = ConversationSession.newSession("s5c", Channel.CHAT);
+        codeSwitch.recordUserMessage("mera order kahan hai, please cancel kar dein");
+
+        assertThat(agent.blankResponseFallback(urdu)).isEqualTo("معذرت، کیا آپ دوبارہ کہہ سکتے ہیں؟");
+        assertThat(agent.blankResponseFallback(romanUrdu)).isEqualTo("Maaf kijiye, kya aap dobara keh sakte hain?");
+        assertThat(agent.blankResponseFallback(codeSwitch)).isEqualTo("Sorry, kya aap dobara keh sakte hain?");
+    }
+
+    @Test
+    void blankResponseFallbackForPendingVerificationRendersInTheSessionLanguage() {
+        ConversationSession session = ConversationSession.newSession("s5", Channel.CHAT);
+        session.recordUserMessage("میرا آرڈر کہاں ہے");
+        ProcedureState procedure = new ProcedureState(ProcedureType.CANCELLATION, dummyRef("ORD-10001"), Map.of(), IdentityAssurance.OTP_VERIFIED);
+        procedure.setPendingDescription("cancel order ORD-10001");
+        procedure.setStatus(ProcedureStatus.AWAITING_VERIFICATION);
+        session.startActiveProcedure(procedure);
+
+        assertThat(agent.blankResponseFallback(session))
+                .isEqualTo("معذرت، کیا آپ دوبارہ کہہ سکتے ہیں؟ میں اب بھی تصدیقی کوڈ کا انتظار کر رہا ہوں۔");
     }
 }

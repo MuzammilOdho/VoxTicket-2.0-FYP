@@ -1,6 +1,9 @@
 package com.voxticket.agent;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.conversation.CommunicationProfile;
+import com.voxticket.conversation.ConversationLanguage;
+import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
@@ -38,9 +41,11 @@ public class SupportAgent {
             cancellations, claims, support tickets, and store policies.
 
             COMMUNICATION
-            Reply naturally in the customer's language and style: English, Urdu, Roman Urdu,
-            or code-switching. Responses must work when spoken aloud. Use plain sentences,
-            no markdown, tables, headings, or list formatting. Usually answer in 1-3 sentences.
+            The customer's language and writing profile are injected below in
+            COMMUNICATION PROFILE - follow them exactly, and never switch
+            languages mid-reply. Responses must work when spoken aloud. Use plain
+            sentences, no markdown, tables, headings, or list formatting. Usually
+            answer in 1-3 sentences.
 
             GROUNDING
             Use tools for customer-specific or current account facts. Use policy search for
@@ -77,6 +82,10 @@ public class SupportAgent {
     private final ProcedureCoordinator procedureCoordinator;
     private final TurnMetrics turnMetrics;
     private final ConversationAuditService auditService;
+    // Phase 5: the deterministic language resolver drives the injected
+    // communication profile. The model follows the resolved profile; it
+    // never guesses the customer's language.
+    private final ConversationLanguageResolver languageResolver;
 
     public SupportAgent(
             TierChatClientRegistry clientRegistry,
@@ -86,7 +95,8 @@ public class SupportAgent {
             RagService ragService,
             ProcedureCoordinator procedureCoordinator,
             TurnMetrics turnMetrics,
-            ConversationAuditService auditService) {
+            ConversationAuditService auditService,
+            ConversationLanguageResolver languageResolver) {
         this.clientRegistry = clientRegistry;
         this.contextBuilder = contextBuilder;
         this.modelSelector = modelSelector;
@@ -95,6 +105,7 @@ public class SupportAgent {
         this.procedureCoordinator = procedureCoordinator;
         this.turnMetrics = turnMetrics;
         this.auditService = auditService;
+        this.languageResolver = languageResolver;
     }
 
 
@@ -211,14 +222,35 @@ public class SupportAgent {
         }
     }
     String blankResponseFallback(ConversationSession session) {
+        // Phase 5: the fallback is customer-facing, so it follows the same
+        // resolved language as every other deterministic surface. English
+        // output is unchanged; the pending description stays in its stored
+        // (English) form inside the localized wrapper.
+        ConversationLanguage language = languageResolver.resolve(session);
         Optional<ProcedureState> active = session.getActiveProcedure();
         if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
-            return "Sorry, could you say that again? I still need a yes or no on whether you'd like to " + active.get().getPendingDescription() + ".";
+            String pending = active.get().getPendingDescription();
+            return switch (language) {
+                case URDU -> "معذرت، کیا آپ دوبارہ کہہ سکتے ہیں؟ مجھے اب بھی اس بات کی تصدیق درکار ہے کہ آپ " + pending + " چاہتے ہیں یا نہیں۔";
+                case ROMAN_URDU -> "Maaf kijiye, kya aap dobara keh sakte hain? Mujhe ab bhi confirm karna hai ke aap " + pending + " chahte hain ya nahi.";
+                case CODE_SWITCH -> "Sorry, kya aap dobara keh sakte hain? I still need a yes or no ke aap " + pending + " chahte hain ya nahi.";
+                case ENGLISH -> "Sorry, could you say that again? I still need a yes or no on whether you'd like to " + pending + ".";
+            };
         }
         if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
-            return "Sorry, could you repeat that? I'm still waiting for the verification code.";
+            return switch (language) {
+                case URDU -> "معذرت، کیا آپ دوبارہ کہہ سکتے ہیں؟ میں اب بھی تصدیقی کوڈ کا انتظار کر رہا ہوں۔";
+                case ROMAN_URDU -> "Maaf kijiye, kya aap dobara keh sakte hain? Main ab bhi verification code ka intezar kar raha hoon.";
+                case CODE_SWITCH -> "Sorry, kya aap repeat kar sakte hain? Main ab bhi verification code ka wait kar raha hoon.";
+                case ENGLISH -> "Sorry, could you repeat that? I'm still waiting for the verification code.";
+            };
         }
-        return GENERIC_BLANK_FALLBACK;
+        return switch (language) {
+            case URDU -> "معذرت، کیا آپ دوبارہ کہہ سکتے ہیں؟";
+            case ROMAN_URDU -> "Maaf kijiye, kya aap dobara keh sakte hain?";
+            case CODE_SWITCH -> "Sorry, kya aap dobara keh sakte hain?";
+            case ENGLISH -> GENERIC_BLANK_FALLBACK;
+        };
     }
 
     private void recordTokenUsage(ChatResponse chatResponse, String provider, String model) {
@@ -240,6 +272,11 @@ public class SupportAgent {
 
     String buildSystemPrompt(ConversationSession session) {
         StringBuilder prompt = new StringBuilder(SYSTEM_PROMPT_BASE);
+
+        // Phase 5: the resolved language and its writing profile are
+        // injected deterministically - the model follows the profile and
+        // never guesses the customer's language.
+        prompt.append("\n\n").append(CommunicationProfile.render(languageResolver.resolve(session)));
 
         String state = buildConversationState(session);
         if (!state.isBlank()) {

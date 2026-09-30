@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
+import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureCoordinator;
@@ -68,7 +69,8 @@ class SupportAgentErrorMetricsTest {
 
         agent = new SupportAgent(registry, contextBuilder, modelSelector,
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
-                mock(ProcedureCoordinator.class), turnMetrics, mock(ConversationAuditService.class));
+                mock(ProcedureCoordinator.class), turnMetrics, mock(ConversationAuditService.class),
+                new ConversationLanguageResolver());
     }
 
     private static ChatResponse textResponse(String text) {
