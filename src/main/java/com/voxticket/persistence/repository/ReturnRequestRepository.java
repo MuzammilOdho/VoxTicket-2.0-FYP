@@ -15,6 +15,19 @@ public interface ReturnRequestRepository extends JpaRepository<ReturnRequest, UU
     List<ReturnRequest> findByOrderId(UUID orderId);
 
     /**
+     * Aggregate read-path fetch: returns with their items and each item's
+     * order item in one statement. The plain {@link #findByOrderId} leaves
+     * {@code items} lazy, which turned the support-context return history
+     * into an N+1 chain (one query per return, then one per return item).
+     * {@code getReturnStatus} keeps the plain method - it renders no items.
+     */
+    @Query("select distinct r from ReturnRequest r "
+            + "left join fetch r.items i "
+            + "left join fetch i.orderItem "
+            + "where r.order.id = :orderId")
+    List<ReturnRequest> findByOrderIdWithItems(@Param("orderId") UUID orderId);
+
+    /**
      * Row-locked return-request fetch for inspection completion.
      * The {@code PESSIMISTIC_WRITE} lock serializes concurrent inspections of
      * the same return request: without it, two simultaneous approvals could

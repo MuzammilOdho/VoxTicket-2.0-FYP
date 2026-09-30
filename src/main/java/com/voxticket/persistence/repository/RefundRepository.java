@@ -18,6 +18,19 @@ public interface RefundRepository extends JpaRepository<Refund, UUID> {
     List<Refund> findByPaymentId(UUID paymentId);
 
     /**
+     * Aggregate read-path fetch: refunds with their return request and
+     * payment in one statement. The plain {@link #findByOrderId} leaves both
+     * associations lazy: the support-context refund history paid one query
+     * per refund for the return number, and {@code getLatestRefund} paid one
+     * for the payment currency.
+     */
+    @Query("select r from Refund r "
+            + "left join fetch r.returnRequest "
+            + "left join fetch r.payment "
+            + "where r.order.id = :orderId")
+    List<Refund> findByOrderIdWithDetails(@Param("orderId") UUID orderId);
+
+    /**
      * Row-locked refund fetch, available for read-modify-write flows that
      * need to serialize on a single refund row. Callers must already run
      * inside a transaction.

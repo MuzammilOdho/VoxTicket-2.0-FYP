@@ -202,15 +202,16 @@ class OrderSupportContextCapabilitiesTest {
             UUID orderId = UUID.randomUUID();
             when(ownedOrderResolver.resolve(identity, orderNumber)).thenReturn(
                     new VerifiedOrderRef(orderId, orderNumber, customerId, IdentityAssurance.PHONE_MATCHED, Instant.now()));
-            when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+            when(orderRepository.findByIdWithItems(orderId)).thenReturn(Optional.of(order));
             when(paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(orderId))
                     .thenReturn(Optional.ofNullable(payment));
             // The bulk policy path uses findByOrderId/findByOrderItemIdIn; the
             // verified ref id differs from the transient order id - any() covers both.
+            // Read methods use the fetch-join variants so no lazy N+1 chain remains.
             when(shipmentRepository.findByOrderId(any())).thenReturn(shipments);
-            when(returnRequestRepository.findByOrderId(any())).thenReturn(returns);
-            when(refundRepository.findByOrderId(any())).thenReturn(refunds);
-            when(orderClaimRepository.findByOrderId(any())).thenReturn(claims);
+            when(returnRequestRepository.findByOrderIdWithItems(any())).thenReturn(returns);
+            when(refundRepository.findByOrderIdWithDetails(any())).thenReturn(refunds);
+            when(orderClaimRepository.findByOrderIdWithDetails(any())).thenReturn(claims);
             when(returnItemRepository.findByOrderItemIdIn(any())).thenReturn(returnItems);
             return queryService.getOrderSupportContext(identity, orderNumber);
         }
@@ -557,12 +558,11 @@ class OrderSupportContextCapabilitiesTest {
 
         f.context();
 
-        // The aggregate read calls findByOrderId twice: once for the shipments
-        // history section and once inside evaluateAll. Task 5's one-per-invocation
-        // bound pins evaluateAll itself (see ReturnPolicyBulkEvaluationTest) -
-        // this test pins the read-wide bound: one bulk return-item query per
-        // order and no per-item queries.
-        verify(shipmentRepository, times(2)).findByOrderId(any());
+        // The aggregate read loads shipments once for the history section and
+        // reuses that same list inside evaluateAll (Phase 7) - no duplicate
+        // shipment query. This pins the read-wide bound: one bulk return-item
+        // query per order and no per-item queries.
+        verify(shipmentRepository, times(1)).findByOrderId(any());
         verify(returnItemRepository, never()).findByOrderItemId(any());
         verify(returnItemRepository, times(1)).findByOrderItemIdIn(any());
     }

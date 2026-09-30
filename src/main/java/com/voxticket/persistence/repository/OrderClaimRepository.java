@@ -17,6 +17,18 @@ public interface OrderClaimRepository extends JpaRepository<OrderClaim, UUID> {
     List<OrderClaim> findByOrderId(UUID orderId);
 
     /**
+     * Aggregate read-path fetch: claims with their order item and support
+     * ticket in one statement. The plain {@link #findByOrderId} leaves both
+     * associations lazy, which turned the support-context claim history into
+     * two queries per claim (item, then ticket).
+     */
+    @Query("select c from OrderClaim c "
+            + "left join fetch c.orderItem "
+            + "left join fetch c.supportTicket "
+            + "where c.order.id = :orderId")
+    List<OrderClaim> findByOrderIdWithDetails(@Param("orderId") UUID orderId);
+
+    /**
      * Write-boundary pre-check for the active-claim domain invariant (see
      * {@code V7__dedupe_active_claims_per_item.sql}): at most one OPEN or
      * IN_REVIEW claim may exist per order item. The partial unique index is

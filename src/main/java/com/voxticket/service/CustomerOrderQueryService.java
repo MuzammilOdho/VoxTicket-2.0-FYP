@@ -122,16 +122,20 @@ public class CustomerOrderQueryService {
     public OrderSupportContext getOrderSupportContext(CustomerIdentity identity, String orderNumber) {
         requireAssurance(identity);
         VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
-        Order order = orderRepository.findById(ref.orderId()).orElseThrow();
+        Order order = orderRepository.findByIdWithItems(ref.orderId()).orElseThrow();
         Optional<Payment> payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(ref.orderId());
         List<Shipment> shipments = shipmentRepository.findByOrderId(ref.orderId());
-        List<ReturnRequest> returns = returnRequestRepository.findByOrderId(ref.orderId());
-        List<Refund> refunds = refundRepository.findByOrderId(ref.orderId());
-        List<OrderClaim> claims = orderClaimRepository.findByOrderId(ref.orderId());
+        List<ReturnRequest> returns = returnRequestRepository.findByOrderIdWithItems(ref.orderId());
+        List<Refund> refunds = refundRepository.findByOrderIdWithDetails(ref.orderId());
+        List<OrderClaim> claims = orderClaimRepository.findByOrderIdWithDetails(ref.orderId());
 
-        // Bulk return evaluation: one shipment query and one return-item
-        // query for the whole order, then per-item decisions in memory.
-        Map<UUID, ReturnEligibility> returnEligibilityByItem = returnPolicyService.evaluateAll(order, order.getItems());
+        // Bulk return evaluation reuses the shipments loaded above for the
+        // history section, and the return-item query below fetches each
+        // item's return request and order item eagerly - the whole context
+        // read stays at a flat, bounded statement count no matter how many
+        // returns, claims, or items the order carries.
+        Map<UUID, ReturnEligibility> returnEligibilityByItem =
+                returnPolicyService.evaluateAll(order, order.getItems(), shipments);
 
         List<OrderSupportItemView> items = order.getItems().stream()
                 .map(item -> toOrderSupportItemView(order, item, returnEligibilityByItem.get(item.getId()), claims))
@@ -299,7 +303,7 @@ public class CustomerOrderQueryService {
     public OrderSummaryView getOrderSummary(CustomerIdentity identity, String orderNumber) {
         requireAssurance(identity);
         VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
-        Order order = orderRepository.findById(ref.orderId()).orElseThrow();
+        Order order = orderRepository.findByIdWithItems(ref.orderId()).orElseThrow();
         return toOrderSummaryView(order);
     }
 
@@ -333,7 +337,7 @@ public class CustomerOrderQueryService {
     public Optional<RefundStatusView> getLatestRefund(CustomerIdentity identity, String orderNumber) {
         requireAssurance(identity);
         VerifiedOrderRef ref = ownedOrderResolver.resolve(identity, orderNumber);
-        return refundRepository.findByOrderId(ref.orderId()).stream()
+        return refundRepository.findByOrderIdWithDetails(ref.orderId()).stream()
                 .max(Comparator.comparing(Refund::getInitiatedAt))
                 .map(refund -> toRefundStatusView(refund, ref.orderNumber()));
     }

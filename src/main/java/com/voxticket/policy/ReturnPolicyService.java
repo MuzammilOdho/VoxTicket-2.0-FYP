@@ -66,7 +66,7 @@ public class ReturnPolicyService {
      */
     @Transactional(readOnly = true)
     public ReturnEligibility evaluate(Order order, OrderItem item) {
-        return decide(item, latestDeliveryDate(order), alreadyCommittedQuantity(item), Instant.now());
+        return decide(item, latestDeliveryDate(shipmentRepository.findByOrderId(order.getId())), alreadyCommittedQuantity(item), Instant.now());
     }
 
     /**
@@ -83,7 +83,19 @@ public class ReturnPolicyService {
      */
     @Transactional(readOnly = true)
     public Map<UUID, ReturnEligibility> evaluateAll(Order order, List<OrderItem> items) {
-        Instant deliveredAt = latestDeliveryDate(order);
+        return evaluateAll(order, items, shipmentRepository.findByOrderId(order.getId()));
+    }
+
+    /**
+     * Same as {@link #evaluateAll(Order, List)} but takes an already-loaded
+     * shipment list, so aggregate readers that fetched shipments for their
+     * own history section (e.g. {@code CustomerOrderQueryService}) do not pay
+     * for the same shipment query twice. Semantics are identical - the
+     * shipment list is only consulted for the latest DELIVERED date.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, ReturnEligibility> evaluateAll(Order order, List<OrderItem> items, List<Shipment> shipments) {
+        Instant deliveredAt = latestDeliveryDate(shipments);
         Map<UUID, Integer> committedByItem = bulkCommittedQuantities(itemIds(items));
         Instant now = Instant.now();
         Map<UUID, ReturnEligibility> result = new LinkedHashMap<>();
@@ -120,8 +132,8 @@ public class ReturnPolicyService {
         return ReturnEligibility.eligible(remaining);
     }
 
-    private Instant latestDeliveryDate(Order order) {
-        return shipmentRepository.findByOrderId(order.getId()).stream()
+    private Instant latestDeliveryDate(List<Shipment> shipments) {
+        return shipments.stream()
                 .filter(s -> s.getStatus() == ShipmentStatus.DELIVERED && s.getDeliveredAt() != null)
                 .map(Shipment::getDeliveredAt)
                 .max(Comparator.naturalOrder())

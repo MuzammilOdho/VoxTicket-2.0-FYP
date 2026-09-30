@@ -30,4 +30,15 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") UUID id);
+
+    /**
+     * Aggregate read-path fetch: the order plus its items in one statement.
+     * The plain {@link #findById} leaves {@code items} lazy, so every
+     * order-context read paid one extra query per order; callers that render
+     * items ({@code getOrderSupportContext}, {@code getOrderSummary}) use
+     * this instead. Mutation paths keep the plain {@code findById} - they do
+     * not need the items and must not pay for them.
+     */
+    @Query("select distinct o from Order o left join fetch o.items where o.id = :id")
+    Optional<Order> findByIdWithItems(@Param("id") UUID id);
 }
