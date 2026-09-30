@@ -67,4 +67,24 @@ class GroqMlPromptGuardTest {
 
         assertThat(guard.evaluate("test").suspicious()).isFalse();
     }
+
+    @Test
+    void guardClassifierTierIsDeterministic() {
+        // Phase 2: the ML guard compares a numeric score against a threshold,
+        // so the classifier must run at temperature 0 - sampling noise at a
+        // chat-like temperature could flip the verdict for identical input.
+        var tier = PromptGuardConfiguration.guardTierProperties(properties);
+
+        assertThat(tier.provider()).isEqualTo(com.voxticket.agent.AiProvider.GROQ);
+        assertThat(tier.model()).isEqualTo("meta-llama/llama-prompt-guard-2-86m");
+        assertThat(tier.temperature()).isZero();
+        assertThat(tier.maxOutputTokens()).isEqualTo(10);
+        assertThat(tier.reasoningEffort()).isEqualTo("none");
+        assertThat(tier.maxRetries()).isZero();
+
+        // The zero temperature must survive into the actual provider options.
+        var options = new com.voxticket.agent.ProviderChatModelFactory()
+                .chatOptionsFor(com.voxticket.agent.AiProvider.GROQ, tier);
+        assertThat(options.getTemperature()).isZero();
+    }
 }

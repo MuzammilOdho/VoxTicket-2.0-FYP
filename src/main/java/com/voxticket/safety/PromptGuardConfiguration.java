@@ -31,11 +31,22 @@ public class PromptGuardConfiguration {
         // so the guard builds its own client from the GROQ provider section -
         // same endpoint and key the old auto-configured client used.
         ProviderProperties groq = requireUsableGroq(providers);
-        TierChatProperties guardTier = new TierChatProperties(
-                AiProvider.GROQ, properties.mlModel(), 0.7, properties.mlMaxTokens(), "none", 20, 0);
         ChatModel guardModel = chatModelFactory.chatModelFor(
-                AiProvider.GROQ, groq, guardTier, observationRegistry, meterRegistry);
+                AiProvider.GROQ, groq, guardTierProperties(properties), observationRegistry, meterRegistry);
         return new GroqMlPromptGuard(ChatClient.builder(guardModel).build(), fallback, properties, turnMetrics);
+    }
+
+    /**
+     * The tier options for the ML prompt-guard classifier. Package-visible for tests.
+     *
+     * <p>Phase 2: temperature is 0, not a chat default. The guard expects a single
+     * numeric jailbreak-probability score compared against a threshold
+     * ({@link GroqMlPromptGuard#parseScore}), so any sampling noise can flip the
+     * verdict for the same input - classification must be deterministic.
+     */
+    static TierChatProperties guardTierProperties(PromptGuardProperties properties) {
+        return new TierChatProperties(
+                AiProvider.GROQ, properties.mlModel(), 0.0, properties.mlMaxTokens(), "none", 20, 0);
     }
 
     private ProviderProperties requireUsableGroq(AiProvidersProperties providers) {
