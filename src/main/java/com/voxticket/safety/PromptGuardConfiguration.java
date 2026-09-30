@@ -25,14 +25,18 @@ public class PromptGuardConfiguration {
             ProviderChatModelFactory chatModelFactory, AiProvidersProperties providers,
             HeuristicPromptGuard fallback, PromptGuardProperties properties, TurnMetrics turnMetrics,
             ObservationRegistry observationRegistry, MeterRegistry meterRegistry) {
-        // The opt-in ML guard is Groq-specific: GroqMlPromptGuard calls a
-        // Groq-hosted classifier model with a per-request model override.
+        // The opt-in ML guard is Groq-specific: GroqMlPromptGuard calls the
+        // Groq-hosted classifier model. The guard ChatClient is built on a
+        // ChatModel whose defaults already target that model (see below), so
+        // the guard issues no per-request options of its own. The guard model
+        // rejects Groq's include_reasoning parameter, so it is built through
+        // guardChatModel, whose options omit that field (tiers keep it).
         // spring.ai.model.chat=none disables every auto-configured chat model,
         // so the guard builds its own client from the GROQ provider section -
         // same endpoint and key the old auto-configured client used.
         ProviderProperties groq = requireUsableGroq(providers);
-        ChatModel guardModel = chatModelFactory.chatModelFor(
-                AiProvider.GROQ, groq, guardTierProperties(properties), observationRegistry, meterRegistry);
+        ChatModel guardModel = chatModelFactory.guardChatModel(
+                groq, guardTierProperties(properties), observationRegistry, meterRegistry);
         return new GroqMlPromptGuard(ChatClient.builder(guardModel).build(), fallback, properties, turnMetrics);
     }
 

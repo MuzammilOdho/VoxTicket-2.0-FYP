@@ -113,6 +113,14 @@ public class Customer extends BaseEntity {
         return createdAt;
     }
 
+    /**
+     * Overrides the constructor-stamped creation time. Used by deterministic
+     * seed data (and tests) so generated datasets never depend on wall-clock time.
+     */
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public String getFullName() {
         return firstName + " " + lastName;
     }

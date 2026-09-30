@@ -121,7 +121,7 @@ voxticket:
         model: qwen/qwen3.8-27b
         temperature: 0.3
         max-output-tokens: 1000
-        reasoning-effort: none
+        reasoning-effort: low
         timeout-seconds: 20
         max-retries: 0
       tier2:
@@ -129,7 +129,7 @@ voxticket:
         model: openai/gpt-oss-120b
         temperature: 0.3
         max-output-tokens: 1536
-        reasoning-effort: high
+        reasoning-effort: medium
         timeout-seconds: 20
         max-retries: 0
 
@@ -160,7 +160,7 @@ voxticket:
     similarity-threshold: 0.5
   safety:
     prompt-guard:
-      provider: heuristic
+      provider: ml
       ml-model: meta-llama/llama-prompt-guard-2-86m
       ml-threshold: 0.5
       ml-max-tokens: 10

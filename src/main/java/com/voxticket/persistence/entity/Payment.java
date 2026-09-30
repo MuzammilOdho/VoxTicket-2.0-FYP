@@ -131,6 +131,14 @@ public class Payment extends BaseEntity {
         return createdAt;
     }
 
+    /**
+     * Overrides the constructor-stamped creation time. Used by deterministic
+     * seed data (and tests) so generated datasets never depend on wall-clock time.
+     */
+    public void setCreatedAt(Instant createdAt) {
+        this.createdAt = createdAt;
+    }
+
     @Override
     public String toString() {
         return "Payment{id=" + getId() + ", method=" + method + ", status=" + status + ", amount=" + amount + "}";

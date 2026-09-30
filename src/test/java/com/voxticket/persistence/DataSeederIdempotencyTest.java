@@ -35,8 +35,8 @@ class DataSeederIdempotencyTest {
         // The seeder already ran once during context startup (CommandLineRunner).
         long customersAfterStartup = customerRepository.count();
         long ordersAfterStartup = orderRepository.count();
-        assertThat(customersAfterStartup).isEqualTo(3);
-        assertThat(ordersAfterStartup).isEqualTo(14);
+        assertThat(customersAfterStartup).isEqualTo(12);
+        assertThat(ordersAfterStartup).isEqualTo(54);
 
         // Running it again must be a no-op.
         dataSeeder.run();

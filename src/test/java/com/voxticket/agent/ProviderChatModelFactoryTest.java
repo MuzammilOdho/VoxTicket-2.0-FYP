@@ -20,7 +20,9 @@ import org.springframework.ai.openai.OpenAiChatOptions;
  * <p>Regression focus: Groq's {@code include_reasoning} previously leaked into
  * every provider's options and made Google fail with
  * {@code 400 INVALID_ARGUMENT: Unknown name "include_reasoning"}. These tests
- * pin the isolation down per provider.
+ * pin the isolation down per provider. The same field is rejected by Groq's
+ * prompt-guard classifier model with {@code 400 invalid_request_error}, so
+ * the guard model is pinned to options without it.
  */
 class ProviderChatModelFactoryTest {
 
@@ -92,6 +94,25 @@ class ProviderChatModelFactoryTest {
                     .as("cerebras reasoning-effort=%s must not carry include_reasoning", effort)
                     .isTrue();
         }
+    }
+
+    @Test
+    void guardModelOmitsIncludeReasoning() {
+        // meta-llama/llama-prompt-guard-2-86m rejects Groq's include_reasoning
+        // with 400 invalid_request_error, so the ML prompt guard's model must
+        // be built without that field while keeping the standard options.
+        var model = (OpenAiChatModel) factory.guardChatModel(
+                providerProps("groq-key", "https://api.groq.com/openai/v1"),
+                tier(AiProvider.GROQ, "meta-llama/llama-prompt-guard-2-86m", "none"),
+                ObservationRegistry.NOOP, new SimpleMeterRegistry());
+
+        var options = (OpenAiChatOptions) model.getDefaultOptions();
+        assertThat(options.getModel()).isEqualTo("meta-llama/llama-prompt-guard-2-86m");
+        assertThat(options.getMaxCompletionTokens()).isEqualTo(1024);
+        assertThat(options.getExtraBody() == null
+                || !options.getExtraBody().containsKey("include_reasoning"))
+                .as("guard model must not carry include_reasoning")
+                .isTrue();
     }
 
     @Test

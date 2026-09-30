@@ -112,6 +112,14 @@ public class ReturnRequest extends BaseEntity {
         return requestedAt;
     }
 
+    /**
+     * Overrides the constructor-stamped request time. Used by deterministic
+     * seed data (and tests) so generated datasets never depend on wall-clock time.
+     */
+    public void setRequestedAt(Instant requestedAt) {
+        this.requestedAt = requestedAt;
+    }
+
     public Instant getApprovedAt() {
         return approvedAt;
     }

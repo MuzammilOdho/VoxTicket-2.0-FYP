@@ -40,6 +40,13 @@ import org.springframework.stereotype.Component;
  * "include_reasoning"}. Cerebras gets only standard OpenAI-compatible fields.
  * Google uses the native GenAI SDK, which has no such field at all.
  *
+ * <p>The same field is rejected by Groq's prompt-guard classifier model
+ * ({@code meta-llama/llama-prompt-guard-2-86m}) with
+ * {@code 400 invalid_request_error}, so the ML prompt guard builds its model
+ * through {@link #guardChatModel}, which uses guard-specific Groq options
+ * without the extra body field. Tier chat calls keep
+ * {@code include_reasoning=false}.
+ *
  * <p>Nothing outside this class branches on {@link AiProvider}: not
  * SupportAgent, not metrics, not business logic.
  */
@@ -75,6 +82,26 @@ public class ProviderChatModelFactory {
             case GROQ -> groqChatOptions(tierProperties);
             case CEREBRAS -> cerebrasChatOptions(tierProperties);
         };
+    }
+
+    /**
+     * Builds the chat model for the ML prompt-guard classifier.
+     * Construction performs no network I/O - the model is ready for
+     * {@code ChatClient.builder(chatModel).build()} by the caller.
+     *
+     * <p>The guard is a classifier, not a chat tier: it uses the Groq
+     * OpenAI-compatible path but with guard-specific options that omit
+     * Groq's {@code include_reasoning}. The guard model
+     * ({@code meta-llama/llama-prompt-guard-2-86m}) rejects that parameter
+     * with {@code 400 invalid_request_error}, while the chat tiers keep
+     * {@code include_reasoning=false}.
+     */
+    public ChatModel guardChatModel(
+            ProviderProperties providerProperties,
+            TierChatProperties tierProperties,
+            ObservationRegistry observationRegistry,
+            MeterRegistry meterRegistry) {
+        return openAiChatModel(providerProperties, tierProperties, groqGuardChatOptions(tierProperties), observationRegistry, meterRegistry);
     }
 
     // ------------------------------------------------------------------
@@ -187,6 +214,25 @@ public class ProviderChatModelFactory {
         builder.extraBody(Map.of("include_reasoning", false));
         // VoxTicket "none" means: omit reasoning_effort entirely (plus the
         // include_reasoning=false above). low/medium/high are sent natively.
+        if (tier.reasoningEffort() != null && !tier.reasoningEffort().equalsIgnoreCase("none")) {
+            builder.reasoningEffort(tier.reasoningEffort());
+        }
+        return builder.build();
+    }
+
+    /**
+     * Guard-specific Groq options: the same standard fields as
+     * {@link #groqChatOptions}, but without the chat-only extra body.
+     * {@code include_reasoning} is rejected by the prompt-guard classifier
+     * model ({@code meta-llama/llama-prompt-guard-2-86m}) with
+     * {@code 400 invalid_request_error}, so it is deliberately NOT sent here.
+     */
+    private OpenAiChatOptions groqGuardChatOptions(TierChatProperties tier) {
+        var builder = OpenAiChatOptions.builder()
+                .model(tier.model())
+                .temperature(tier.temperature())
+                .maxCompletionTokens(tier.maxOutputTokens())
+                .timeout(Duration.ofSeconds(tier.timeoutSeconds()));
         if (tier.reasoningEffort() != null && !tier.reasoningEffort().equalsIgnoreCase("none")) {
             builder.reasoningEffort(tier.reasoningEffort());
         }

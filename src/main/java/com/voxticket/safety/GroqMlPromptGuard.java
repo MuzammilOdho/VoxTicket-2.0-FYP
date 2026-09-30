@@ -5,7 +5,6 @@ import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.prompt.ChatOptions;
 
 public class GroqMlPromptGuard implements PromptGuard {
 
@@ -30,9 +29,12 @@ public class GroqMlPromptGuard implements PromptGuard {
         }
         long start = System.nanoTime();
         try {
+            // No per-request options: the ChatClient is built on the guard ChatModel
+            // whose defaults already carry the classifier model, temperature and
+            // maxCompletionTokens. Setting maxTokens here as well would send both
+            // max_tokens and max_completion_tokens, which Groq rejects with 400.
             String raw = chatClient.prompt()
                     .user(userInput)
-                    .options(ChatOptions.builder().model(properties.mlModel()).maxTokens(properties.mlMaxTokens()))
                     .call()
                     .content();
             long durationMs = (System.nanoTime() - start) / 1_000_000;

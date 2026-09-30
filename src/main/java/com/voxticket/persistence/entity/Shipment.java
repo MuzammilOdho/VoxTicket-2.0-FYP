@@ -119,6 +119,14 @@ public class Shipment extends BaseEntity {
         return updatedAt;
     }
 
+    /**
+     * Overrides the constructor/setter-stamped update time. Used by deterministic
+     * seed data (and tests) so generated datasets never depend on wall-clock time.
+     */
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
     @Override
     public String toString() {
         return "Shipment{id=" + getId() + ", trackingNumber='" + trackingNumber + "', status=" + status + "}";

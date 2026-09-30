@@ -138,6 +138,14 @@ public class Refund extends BaseEntity {
         return initiatedAt;
     }
 
+    /**
+     * Overrides the constructor-stamped initiation time. Used by deterministic
+     * seed data (and tests) so generated datasets never depend on wall-clock time.
+     */
+    public void setInitiatedAt(Instant initiatedAt) {
+        this.initiatedAt = initiatedAt;
+    }
+
     public Instant getCompletedAt() {
         return completedAt;
     }

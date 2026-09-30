@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Answers.RETURNS_DEEP_STUBS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -56,35 +57,28 @@ class GroqMlPromptGuardTest {
     }
 
     @Test
+    void doesNotSetPerRequestOptions() {
+        // Regression: the guard ChatClient already defaults to the classifier
+        // model with maxCompletionTokens set. Adding per-request options with
+        // maxTokens made Spring AI send both max_tokens and
+        // max_completion_tokens, which Groq rejects with 400 Bad Request.
+        ChatClient client = mock(ChatClient.class, RETURNS_DEEP_STUBS);
+        when(client.prompt().user("hi").call().content()).thenReturn("0.1");
+        GroqMlPromptGuard guard = new GroqMlPromptGuard(client, fallback, properties, turnMetrics);
+
+        assertThat(guard.evaluate("hi").suspicious()).isFalse();
+        verify(client.prompt(), never()).options(any(ChatOptions.Builder.class));
+    }
+
+    @Test
     void aDifferentConfiguredThresholdChangesTheOutcomeWithoutCodeChanges() {
         // A score of 0.6 is malicious against the default 0.5 threshold but benign against 0.7.
         ChatClient lenientClient = mock(ChatClient.class, RETURNS_DEEP_STUBS);
-        when(lenientClient.prompt().user("test").options(any(ChatOptions.Builder.class))
-                .call().content()).thenReturn("0.6");
+        when(lenientClient.prompt().user("test").call().content()).thenReturn("0.6");
         PromptGuardProperties lenientProperties = new PromptGuardProperties("ml", "meta-llama/llama-prompt-guard-2-86m", 0.7, 10);
 
         GroqMlPromptGuard guard = new GroqMlPromptGuard(lenientClient, fallback, lenientProperties, turnMetrics);
 
         assertThat(guard.evaluate("test").suspicious()).isFalse();
-    }
-
-    @Test
-    void guardClassifierTierIsDeterministic() {
-        // Phase 2: the ML guard compares a numeric score against a threshold,
-        // so the classifier must run at temperature 0 - sampling noise at a
-        // chat-like temperature could flip the verdict for identical input.
-        var tier = PromptGuardConfiguration.guardTierProperties(properties);
-
-        assertThat(tier.provider()).isEqualTo(com.voxticket.agent.AiProvider.GROQ);
-        assertThat(tier.model()).isEqualTo("meta-llama/llama-prompt-guard-2-86m");
-        assertThat(tier.temperature()).isZero();
-        assertThat(tier.maxOutputTokens()).isEqualTo(10);
-        assertThat(tier.reasoningEffort()).isEqualTo("none");
-        assertThat(tier.maxRetries()).isZero();
-
-        // The zero temperature must survive into the actual provider options.
-        var options = new com.voxticket.agent.ProviderChatModelFactory()
-                .chatOptionsFor(com.voxticket.agent.AiProvider.GROQ, tier);
-        assertThat(options.getTemperature()).isZero();
     }
 }
