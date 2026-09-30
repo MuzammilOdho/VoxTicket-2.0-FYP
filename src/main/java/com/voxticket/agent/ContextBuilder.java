@@ -11,12 +11,13 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Component;
 
 /**
- * Spec §5 (ContextBuilder). For this phase, assembles conversation history
- * into Spring AI {@link Message} objects only - no RAG prefetch yet
- * (Phase 6). The returned list already includes the current turn's user
- * message (recorded into the session before the agent is called), so
- * callers should pass this directly as {@code .messages(...)} without also
- * separately appending the current message.
+ * Spec §5 (ContextBuilder). Assembles conversation history into Spring AI
+ * {@link Message} objects only. Store-policy knowledge is NOT prefetched
+ * into the context - the model searches it on demand via the searchPolicy
+ * tool (Phase 8, tool-based RAG). The returned list already includes the
+ * current turn's user message (recorded into the session before the agent
+ * is called), so callers should pass this directly as {@code .messages(...)}
+ * without also separately appending the current message.
  */
 @Component
 public class ContextBuilder {

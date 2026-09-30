@@ -46,8 +46,19 @@ class RagServiceTest {
     }
 
     @Test
-    void differentTopKAndThresholdConfigurationChangesTheSearchRequestWithoutCodeChanges() {
-        RagService tunedService = new RagService(vectorStore, new RagProperties(10, 0.9), mock(TurnMetrics.class));
+    void prefixesQueryWithBgeM3RetrievalInstructionForTheEmbeddingCall() {
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
+
+        ragService.searchPolicy("how long do I have to return something");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(SearchRequest.class);
+        org.mockito.Mockito.verify(vectorStore).similaritySearch(captor.capture());
+        assertThat(captor.getValue().getQuery()).isEqualTo(
+                RagService.QUERY_INSTRUCTION + "how long do I have to return something");
+    }
+
+    @Test
+    void differentTopKAndThresholdConfigurationChangesTheSearchRequestWithoutCodeChanges() {        RagService tunedService = new RagService(vectorStore, new RagProperties(10, 0.9), mock(TurnMetrics.class));
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
 
         tunedService.searchPolicy("test");

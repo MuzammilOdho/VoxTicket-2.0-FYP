@@ -15,6 +15,14 @@ public class RagService {
 
     private static final Logger log = LoggerFactory.getLogger(RagService.class);
 
+    /**
+     * Phase 8: bge-m3 retrieval instruction, prepended to the query ONLY for
+     * the embedding call. Mirrors what the routing path already does with
+     * the E5 {@code query:} prefix - query and document embeddings are
+     * asymmetric without it. Logging and audit still use the original query.
+     */
+    static final String QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: ";
+
     private final VectorStore vectorStore;
     private final RagProperties properties;
     private final TurnMetrics turnMetrics;
@@ -27,8 +35,11 @@ public class RagService {
 
     public List<PolicySnippet> searchPolicy(String query) {
         long start = System.nanoTime();
+        // The instruction prefix is for the embedding model only - the raw
+        // user query is what gets logged and audited.
+        String retrievalQuery = QUERY_INSTRUCTION + (query == null ? "" : query);
         List<Document> results = vectorStore.similaritySearch(
-                SearchRequest.builder().query(query).topK(properties.topK()).similarityThreshold(properties.similarityThreshold()).build());
+                SearchRequest.builder().query(retrievalQuery).topK(properties.topK()).similarityThreshold(properties.similarityThreshold()).build());
         long durationMs = (System.nanoTime() - start) / 1_000_000;
 
         List<PolicySnippet> snippets = results.stream()

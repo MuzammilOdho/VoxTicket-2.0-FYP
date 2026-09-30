@@ -33,8 +33,9 @@ public class PolicyKnowledgeTools {
     }
 
     @Tool(description = "Search authoritative store policy. Use for general questions about how cancellation, "
-            + "returns, refunds, shipping, delivery, payments, claims, or human support work. Do not use to determine "
-            + "eligibility or current state of a specific order.")
+            + "returns, refunds, shipping, delivery, payments, or claims work. Do not use to determine "
+            + "eligibility or current state of a specific order. Do not use when the customer wants to reach "
+            + "a human now - that is requestHumanSupport, not a policy lookup.")
     public Object searchPolicy(@ToolParam(description = "A natural-language question about company policy") String query) {
         session.markToolInvoked();
         long start = System.nanoTime();

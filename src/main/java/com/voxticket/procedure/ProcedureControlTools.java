@@ -24,9 +24,10 @@ public class ProcedureControlTools {
 
     @Tool(description = "Abandon the currently pending procedure WITHOUT executing it. Use only when the customer "
             + "explicitly asks to abandon, replace, correct, or stop the currently pending action - for example "
-            + "'forget this return', 'cancel that instead', 'not this item, the other one', or 'don't do this, do "
+            + "'forget this return', 'never mind, forget this', 'not this item, the other one', or 'don't do this, do "
             + "the claim instead'. This drops the pending request and invalidates any verification code tied to it; "
-            + "it never executes a commerce mutation and is NOT the same as cancelling an order's business state.")
+            + "it never executes a commerce mutation and is NOT the same as cancelling an order's business state. "
+            + "If the customer says 'cancel my order', that is requestCancellation, not this tool.")
     public ProcedureToolResult abandonActiveProcedure() {
         session.markToolInvoked();
         return ProcedureToolResultMapper.toToolResult(ProcedureToolResultMapper.PROCEDURE_CONTROL,
