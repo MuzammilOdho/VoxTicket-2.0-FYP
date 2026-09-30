@@ -120,7 +120,7 @@ voxticket:
         provider: GROQ
         model: qwen/qwen3.8-27b
         temperature: 0.3
-        max-output-tokens: 1024
+        max-output-tokens: 1000
         reasoning-effort: none
         timeout-seconds: 20
         max-retries: 0
@@ -140,7 +140,7 @@ voxticket:
       # containing model.onnx + tokenizer.json (download once from
       # https://huggingface.co/intfloat/multilingual-e5-small/tree/main/onnx).
       # Startup fails fast with an actionable error if they are missing.
-      strategy: always_tier_1
+      strategy: HYBRID
       structural:
         long-message-threshold: 300
         min-order-references-for-tier2: 2

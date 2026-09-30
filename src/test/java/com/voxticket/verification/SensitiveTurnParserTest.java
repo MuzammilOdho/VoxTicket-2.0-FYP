@@ -52,6 +52,45 @@ class SensitiveTurnParserTest {
     }
 
     @Test
+    void interleavedRepeatedCodesRedactInSourceOrderWithoutException() {
+        // Pass 2D cleanup: grouping by canonical code used to flatten spans
+        // out of positional order, which broke cursor-based redaction.
+        SensitiveTurn turn = parser.parse("111111 222222 111111");
+
+        assertThat(turn.multipleCandidates()).isTrue();
+        assertThat(turn.otpCandidate()).isNull();
+        assertThat(turn.redactedText())
+                .isEqualTo("[verification code provided] [verification code provided] [verification code provided]");
+        assertThat(turn.redactedText()).doesNotContain("111111").doesNotContain("222222");
+    }
+
+    @Test
+    void interleavedCodesResidualPreservesTheNonCodeContent() {
+        SensitiveTurn turn = parser.parse("111111 then 222222 then 111111 and check my order");
+
+        assertThat(turn.multipleCandidates()).isTrue();
+        assertThat(turn.residualText()).isEqualTo("check my order");
+        assertThat(turn.redactedText()).doesNotContain("111111").doesNotContain("222222");
+    }
+
+    @Test
+    void tabSeparatedGroupsCanonicalizeToSixAsciiDigits() {
+        SensitiveTurn turn = parser.parse("482\t916");
+
+        assertThat(turn.multipleCandidates()).isFalse();
+        assertThat(turn.otpCandidate()).isEqualTo("482916");
+        assertThat(turn.redactedText()).isEqualTo("[verification code provided]");
+        assertThat(turn.redactedText()).doesNotContain("482\t916");
+    }
+
+    @Test
+    void newlineSeparatedGroupsCanonicalizeToSixAsciiDigits() {
+        SensitiveTurn turn = parser.parse("482\n916");
+
+        assertThat(turn.otpCandidate()).isEqualTo("482916");
+    }
+
+    @Test
     void arabicIndicDigitsNormalizeToAsciiCandidate() {
         // Arabic-Indic digits ٤٨٢٩١٦ == 482916
         SensitiveTurn turn = parser.parse("٤٨٢٩١٦");
