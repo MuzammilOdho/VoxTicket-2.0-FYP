@@ -111,11 +111,31 @@ public class ConversationRuntime {
             }
 
             String normalizedText = normalization.text();
-            PromptGuardVerdict verdict = promptGuard.evaluate(normalizedText);
+
+            String responseText;
+            int turnNumber;
+            String outcomeLabel;
+            Map<String, String> turnMetadata = Map.of();
+            Optional<ProcedureState> active = session.getActiveProcedure();
+
+            // Phase 1B: while a verification challenge is pending, parse and
+            // redact BEFORE the prompt guard runs. An ML-backed guard is a
+            // remote call, so OTP plaintext must never reach it - the guard
+            // only ever sees the redacted text. The raw code survives solely
+            // in the in-memory SensitiveTurn handed to the local verification
+            // logic below. Non-verification turns keep the current behavior.
+            SensitiveTurn preParsedSensitive = null;
+            String guardInput = normalizedText;
+            if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
+                preParsedSensitive = sensitiveTurnParser.parse(normalizedText);
+                guardInput = preParsedSensitive.redactedText();
+            }
+
+            PromptGuardVerdict verdict = promptGuard.evaluate(guardInput);
             if (verdict.suspicious()) {
                 log.warn("event=input_blocked sessionId={} category={} inputLength={} inputHash={}",
                         session.getSessionId(), verdict.category(), normalizedText.length(), SafeLogging.hash(normalizedText));
-                int turnNumber = session.recordUserMessage(REDACTED_FLAGGED_PLACEHOLDER);
+                turnNumber = session.recordUserMessage(REDACTED_FLAGGED_PLACEHOLDER);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, REDACTED_FLAGGED_PLACEHOLDER);
                 auditService.recordEvent(session, turnNumber, ConversationEventType.SAFETY_BLOCKED, "category=" + verdict.category());
                 session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
@@ -124,18 +144,11 @@ public class ConversationRuntime {
                 return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
             }
 
-            String responseText;
-            int turnNumber;
-            String outcomeLabel;
-            Map<String, String> turnMetadata = Map.of();
-            Optional<ProcedureState> active = session.getActiveProcedure();
-
             if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
-                // Pass 2D-A: parse and redact BEFORE anything is stored. OTP
-                // plaintext must never enter conversation history, audit, or
-                // model input - the raw code survives only in the in-memory
-                // local variable handed to the verification service.
-                SensitiveTurn sensitive = sensitiveTurnParser.parse(normalizedText);
+                // Parsed above, before the prompt guard ran: reuse it here so
+                // the turn is parsed exactly once and OTP plaintext never
+                // entered history, audit, model input, or the guard.
+                SensitiveTurn sensitive = preParsedSensitive;
                 log.info("event=sensitive_turn sessionId={} otpCandidatePresent={} multipleCandidates={} resendRequested={} residualPresent={}",
                         session.getSessionId(), sensitive.hasOtpCandidate(), sensitive.multipleCandidates(),
                         sensitive.resendRequested(), sensitive.hasResidual());

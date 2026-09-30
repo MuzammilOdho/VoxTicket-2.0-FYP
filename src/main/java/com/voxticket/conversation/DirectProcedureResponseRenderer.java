@@ -400,9 +400,12 @@ public class DirectProcedureResponseRenderer {
                 default -> "It's already completed.";
             };
             case "ORDER_FULFILLED" -> switch (lang) {
-                case URDU -> "یہ پہلے ہی ڈیلیور ہو چکا ہے۔";
-                case ROMAN_URDU -> "Yeh pehle hi deliver ho chuka hai.";
-                case CODE_SWITCH -> "Yeh already deliver ho chuka hai.";
+                // Phase 1C: this denial fires for PARTIALLY_FULFILLED as well
+                // as FULFILLED, so "delivered" would be false. "Shipped /
+                // dispatched" is true in every case the code covers.
+                case URDU -> "یہ پہلے ہی بھیج دیا گیا ہے۔";
+                case ROMAN_URDU -> "Yeh pehle hi bhej diya gaya hai.";
+                case CODE_SWITCH -> "Yeh already dispatch ho chuka hai.";
                 default -> "It has already been fulfilled.";
             };
             case "PAYMENT_STATE_INCOMPATIBLE" -> switch (lang) {

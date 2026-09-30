@@ -15,10 +15,12 @@ import com.voxticket.persistence.entity.enums.RefundReason;
 import com.voxticket.persistence.entity.enums.TicketCategory;
 import com.voxticket.persistence.entity.enums.TicketPriority;
 import com.voxticket.persistence.repository.OrderClaimRepository;
+import com.voxticket.persistence.repository.OrderItemRepository;
 import com.voxticket.persistence.repository.OrderRepository;
 import com.voxticket.persistence.repository.PaymentRepository;
 import com.voxticket.persistence.repository.SupportTicketRepository;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +39,7 @@ public class ClaimService {
 
     private final OrderRepository orderRepository;
     private final OwnedOrderItemResolver ownedOrderItemResolver;
+    private final OrderItemRepository orderItemRepository;
     private final OrderClaimRepository orderClaimRepository;
     private final SupportTicketRepository supportTicketRepository;
     private final PaymentRepository paymentRepository;
@@ -46,6 +49,7 @@ public class ClaimService {
     public ClaimService(
             OrderRepository orderRepository,
             OwnedOrderItemResolver ownedOrderItemResolver,
+            OrderItemRepository orderItemRepository,
             OrderClaimRepository orderClaimRepository,
             SupportTicketRepository supportTicketRepository,
             PaymentRepository paymentRepository,
@@ -53,12 +57,21 @@ public class ClaimService {
             ReferenceNumberGenerator referenceNumberGenerator) {
         this.orderRepository = orderRepository;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
+        this.orderItemRepository = orderItemRepository;
         this.orderClaimRepository = orderClaimRepository;
         this.supportTicketRepository = supportTicketRepository;
         this.paymentRepository = paymentRepository;
         this.refundService = refundService;
         this.referenceNumberGenerator = referenceNumberGenerator;
     }
+
+    /**
+     * The claim statuses that count as "already has a live claim", mirroring
+     * {@code ClaimPolicyService} read-side reporting and the partial unique
+     * index in {@code V7__dedupe_active_claims_per_item.sql}. RESOLVED and
+     * REJECTED claims never block refiling.
+     */
+    private static final List<ClaimStatus> ACTIVE_CLAIM_STATUSES = List.of(ClaimStatus.OPEN, ClaimStatus.IN_REVIEW);
 
     public OrderClaim fileClaim(
             VerifiedOrderRef orderRef, String sku, ClaimReason reason, ClaimResolution requestedResolution, String customerDescription) {
@@ -67,6 +80,20 @@ public class ClaimService {
             throw new IllegalStateException("Cannot file a claim against a cancelled order: " + order.getOrderNumber());
         }
         OrderItem item = ownedOrderItemResolver.resolveBySku(orderRef, sku);
+        // Domain invariant at the write boundary: the same order item must
+        // not carry two active claims, even across sessions or concurrent
+        // requests. The item row is locked first so concurrent filings
+        // serialize: the loser blocks here until the winner commits, then
+        // observes the winner's claim in the pre-check below and fails with
+        // the clean domain error. The partial unique index in
+        // V7__dedupe_active_claims_per_item.sql is the backstop for any
+        // writer that bypasses this service.
+        orderItemRepository.findByIdForUpdate(item.getId())
+                .orElseThrow(() -> new IllegalStateException("Order item no longer exists: " + sku));
+        if (orderClaimRepository.existsByOrderItemIdAndStatusIn(item.getId(), ACTIVE_CLAIM_STATUSES)) {
+            throw new IllegalStateException("An active claim already exists for item " + sku
+                    + " on order " + order.getOrderNumber());
+        }
 
         TicketPriority priority = reason == ClaimReason.OTHER ? TicketPriority.MEDIUM : TicketPriority.HIGH;
         SupportTicket ticket = supportTicketRepository.save(new SupportTicket(

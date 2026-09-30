@@ -201,4 +201,36 @@ class DirectProcedureResponseRendererTest {
         }
         assertThat(renderer.render(null, outcome("CANCELLED", Map.of()))).isNotBlank();
     }
+
+    // Phase 1C: ORDER_FULFILLED denies cancellation for PARTIALLY_FULFILLED
+    // as well as FULFILLED orders, so no language may state "delivered".
+
+    @ParameterizedTest
+    @EnumSource(ConversationLanguage.class)
+    void orderFulfilledDenialNeverClaimsDelivered(ConversationLanguage language) {
+        String rendered = renderer.render(language, outcome("NOT_ELIGIBLE",
+                Map.of("orderReference", "ORD-10001", "denialReason", "ORDER_FULFILLED",
+                        "paymentConsequence", "NO_REFUND_REQUIRED")));
+
+        assertThat(rendered).doesNotContain("Something went wrong");
+        assertThat(rendered.toLowerCase()).doesNotContain("deliver");
+        assertThat(rendered).doesNotContain("ڈیلیور");
+    }
+
+    @Test
+    void orderFulfilledDenialWordingPerLanguage() {
+        Map<ConversationLanguage, String> expected = Map.of(
+                ConversationLanguage.ENGLISH, "It has already been fulfilled.",
+                ConversationLanguage.URDU, "یہ پہلے ہی بھیج دیا گیا ہے۔",
+                ConversationLanguage.ROMAN_URDU, "Yeh pehle hi bhej diya gaya hai.",
+                ConversationLanguage.CODE_SWITCH, "Yeh already dispatch ho chuka hai.");
+        for (var entry : expected.entrySet()) {
+            String rendered = renderer.render(entry.getKey(), outcome("NOT_ELIGIBLE",
+                    Map.of("orderReference", "ORD-10001", "denialReason", "ORDER_FULFILLED",
+                            "paymentConsequence", "NO_REFUND_REQUIRED")));
+            assertThat(rendered)
+                    .as("ORDER_FULFILLED in %s", entry.getKey())
+                    .contains(entry.getValue());
+        }
+    }
 }
