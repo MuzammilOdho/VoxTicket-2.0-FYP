@@ -141,10 +141,15 @@ public class ProviderChatModelFactory {
     }
 
     private GoogleGenAiChatOptions googleChatOptions(TierChatProperties tier) {
+        GoogleGenAiChatModel.ChatModel chatModel = resolveGoogleModel(tier.model());
         GoogleGenAiChatOptions.Builder builder = GoogleGenAiChatOptions.builder()
-                .model(resolveGoogleModel(tier.model()))
+                .model(chatModel)
                 .maxOutputTokens(tier.maxOutputTokens());
-        builder.temperature(tier.temperature());
+        // Gemini 3.x deprecates temperature (ignored or 400 INVALID_ARGUMENT
+        // per Google's migration guide) - only send it for 2.x models.
+        if (!chatModel.name().startsWith("GEMINI_3")) {
+            builder.temperature(tier.temperature());
+        }
         // Spec: never expose chain-of-thought. The native GenAI API only
         // returns thoughts when explicitly asked, so this is belt-and-braces.
         builder.includeThoughts(false);
@@ -154,6 +159,7 @@ public class ProviderChatModelFactory {
         }
         return builder.build();
     }
+
 
     /**
      * The configured model must be a model the Spring AI Google integration
