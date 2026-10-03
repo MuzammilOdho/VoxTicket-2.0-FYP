@@ -58,6 +58,13 @@ voxticket:
   commerce:
     returns:
       window-days: 30
+  voice:
+    # service-key: shared secret the voice service sends as the
+    #   X-Voice-Service-Key request header. Valid values: any non-blank
+    #   string, read ONLY from the VOXTICKET_VOICE_SERVICE_KEY environment
+    #   variable, never pasted into this file. When blank, every voice
+    #   request is rejected with 401.
+    service-key: ${VOXTICKET_VOICE_SERVICE_KEY:}
   ai:
     # Each tier independently names exactly one provider and one model.
     # Switching either is a config-only change: no Java changes, no fallback
@@ -189,3 +196,4 @@ voxticket:
     email-from: no-reply@voxticket.example
     # delivery: not set here on purpose - defaults to "dev" in dev/test profiles.
     # Set to "email" (plus real spring.mail.* config) to switch delivery.
+

@@ -106,7 +106,7 @@ class ProviderChatModelFactoryTest {
                 tier(AiProvider.GROQ, "meta-llama/llama-prompt-guard-2-86m", "none"),
                 ObservationRegistry.NOOP, new SimpleMeterRegistry());
 
-        var options = (OpenAiChatOptions) model.getDefaultOptions();
+        var options = (OpenAiChatOptions) model.getOptions();
         assertThat(options.getModel()).isEqualTo("meta-llama/llama-prompt-guard-2-86m");
         assertThat(options.getMaxCompletionTokens()).isEqualTo(1024);
         assertThat(options.getExtraBody() == null
@@ -139,7 +139,11 @@ class ProviderChatModelFactoryTest {
         assertThat(none.getIncludeThoughts()).isFalse();
         assertThat(none.getThinkingLevel()).isNull();
         assertThat(none.getModel()).isEqualTo(GoogleGenAiChatModel.ChatModel.GEMINI_3_6_FLASH.getValue());
-        assertThat(none.getTemperature()).isEqualTo(0.3);
+        // Gemini 3.x: the tier's configured temperature is deliberately not applied
+        // (Google deprecates the parameter for 3.x). Spring AI backfills its own
+        // 0.7 default instead, which is what reaches the wire - see
+        // ProviderChatModelFactory#googleChatOptions.
+        assertThat(none.getTemperature()).isEqualTo(0.7);
         assertThat(none.getMaxOutputTokens()).isEqualTo(1024);
 
         var high = (GoogleGenAiChatOptions) factory.chatOptionsFor(
@@ -150,6 +154,12 @@ class ProviderChatModelFactoryTest {
         var low = (GoogleGenAiChatOptions) factory.chatOptionsFor(
                 AiProvider.GOOGLE, tier(AiProvider.GOOGLE, "gemini-3.6-flash", "low"));
         assertThat(low.getThinkingLevel()).isEqualTo(GoogleGenAiThinkingLevel.LOW);
+
+        var twoFive = (GoogleGenAiChatOptions) factory.chatOptionsFor(
+                AiProvider.GOOGLE, tier(AiProvider.GOOGLE, "gemini-2.5-flash", "none"));
+        // 2.x models are unaffected by the 3.x deprecation: the tier's
+        // configured temperature is applied as-is.
+        assertThat(twoFive.getTemperature()).isEqualTo(0.3);
     }
 
     @Test

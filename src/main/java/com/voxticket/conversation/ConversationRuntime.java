@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -265,6 +266,182 @@ public class ConversationRuntime {
         });
     }
 
+
+    /**
+     * Voice entry point. Runs the exact same turn logic as {@link #processTurn}
+     * - same normalization, guard, procedure, and audit semantics - but the
+     * model-generated text is forwarded to {@code deltaSink} as native
+     * provider deltas while it streams, so a voice pipeline can speak
+     * incrementally. Deterministic (non-LLM) responses are delivered to the
+     * sink as a single chunk at the point they are produced; they are local
+     * and fast, so streaming them would add nothing.
+     *
+     * <p>The stream is consumed inside the session lock, so one session still
+     * processes one turn at a time and history/audit never observe partial
+     * text: the assembled response is recorded exactly once, after the
+     * stream completes.
+     *
+     * @return the same {@link AssistantTurn} {@code processTurn} would return
+     */
+    public AssistantTurn streamTurn(UserTurn turn, Consumer<String> deltaSink) {
+        long startNanos = System.nanoTime();
+        return sessionStore.withSession(turn.sessionId(), turn.channel(), session -> {
+            if (StringUtils.hasText(turn.callerPhone())) {
+                CustomerIdentity resolved = identityService.resolveByPhone(turn.callerPhone());
+                session.applyResolvedIdentity(resolved);
+            }
+            auditService.recordSessionTouch(session);
+
+            log.info("event=turn_start sessionId={} channel={} turnNumber={} identityAssurance={} streaming=true",
+                    session.getSessionId(), session.getChannel(), session.getTurnCount() + 1, session.getCustomerIdentity().assuranceLevel());
+
+            NormalizationResult normalization = inputNormalizer.normalize(turn.text());
+            if (!normalization.accepted()) {
+                log.info("event=input_rejected sessionId={} reason=INPUT_TOO_LONG length={}", session.getSessionId(), normalization.rejectedLength());
+                int turnNumber = session.recordUserMessage("[message rejected - too long: " + normalization.rejectedLength() + " characters]");
+                auditService.recordMessage(session, turnNumber, MessageRole.USER, "[message rejected - too long: " + normalization.rejectedLength() + " characters]");
+                session.recordAssistantMessage(TOO_LONG_MESSAGE);
+                auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, TOO_LONG_MESSAGE);
+                completeTurn(session, turnNumber, startNanos, "input_too_long");
+                deltaSink.accept(TOO_LONG_MESSAGE);
+                return new AssistantTurn(TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
+            }
+
+            String normalizedText = normalization.text();
+
+            String responseText;
+            int turnNumber;
+            String outcomeLabel;
+            Map<String, String> turnMetadata = Map.of();
+            Optional<ProcedureState> active = session.getActiveProcedure();
+
+            // Same OTP-privacy ordering as processTurn: parse and redact
+            // BEFORE the prompt guard runs, so OTP plaintext never reaches
+            // the guard, history, audit, or model input.
+            SensitiveTurn preParsedSensitive = null;
+            String guardInput = normalizedText;
+            if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
+                preParsedSensitive = sensitiveTurnParser.parse(normalizedText);
+                guardInput = preParsedSensitive.redactedText();
+            }
+
+            PromptGuardVerdict verdict = promptGuard.evaluate(guardInput);
+            if (verdict.suspicious()) {
+                log.warn("event=input_blocked sessionId={} category={} inputLength={} inputHash={}",
+                        session.getSessionId(), verdict.category(), normalizedText.length(), SafeLogging.hash(normalizedText));
+                turnNumber = session.recordUserMessage(REDACTED_FLAGGED_PLACEHOLDER);
+                auditService.recordMessage(session, turnNumber, MessageRole.USER, REDACTED_FLAGGED_PLACEHOLDER);
+                auditService.recordEvent(session, turnNumber, ConversationEventType.SAFETY_BLOCKED, "category=" + verdict.category());
+                session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
+                auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, SAFE_DEFLECTION_MESSAGE);
+                completeTurn(session, turnNumber, startNanos, "blocked");
+                deltaSink.accept(SAFE_DEFLECTION_MESSAGE);
+                return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
+            }
+
+            if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
+                SensitiveTurn sensitive = preParsedSensitive;
+                log.info("event=sensitive_turn sessionId={} otpCandidatePresent={} multipleCandidates={} resendRequested={} residualPresent={}",
+                        session.getSessionId(), sensitive.hasOtpCandidate(), sensitive.multipleCandidates(),
+                        sensitive.resendRequested(), sensitive.hasResidual());
+                String historyText = sensitive.redactedText();
+                turnNumber = session.recordUserMessage(historyText);
+                auditService.recordMessage(session, turnNumber, MessageRole.USER, historyText);
+
+                if (sensitive.multipleCandidates()) {
+                    ProcedureOutcome ambiguous = ProcedureOutcome.error("OTP_AMBIGUOUS", "multiple verification codes in one message");
+                    responseText = renderDirect(session, ambiguous);
+                    turnMetadata = safeDirectTurnMetadata(ambiguous);
+                    outcomeLabel = "verification_ambiguous";
+                    deltaSink.accept(responseText);
+                } else if (sensitive.hasOtpCandidate()) {
+                    ProcedureOutcome outcome = submitVerificationWithSafeFallback(session, sensitive.otpCandidate());
+                    responseText = renderDirect(session, outcome);
+                    turnMetadata = safeDirectTurnMetadata(outcome);
+                    outcomeLabel = "verification";
+                    responseText = appendPromotion(session, responseText, outcome);
+                    deltaSink.accept(responseText);
+                    if (sensitive.hasResidual()) {
+                        AgentResponse residual = isGuardedProcedureActive(session)
+                                ? streamGuardedViaAgent(session, sensitive.residualText(), deltaSink)
+                                : streamViaAgent(session, sensitive.residualText(), deltaSink);
+                        responseText = combineResponses(responseText, residual.text());
+                    }
+                } else if (sensitive.resendRequested()) {
+                    ProcedureOutcome outcome = procedureCoordinator.resendVerificationCode(session);
+                    responseText = renderDirect(session, outcome);
+                    turnMetadata = safeDirectTurnMetadata(outcome);
+                    outcomeLabel = "verification";
+                    deltaSink.accept(responseText);
+                    if (sensitive.hasResidual()) {
+                        AgentResponse residual = streamGuardedViaAgent(session, sensitive.residualText(), deltaSink);
+                        responseText = combineResponses(responseText, residual.text());
+                    }
+                } else {
+                    AgentResponse agentResponse = streamGuardedViaAgent(session, normalizedText, deltaSink);
+                    responseText = agentResponse.text();
+                    outcomeLabel = agentResponse.outcome().toTurnLabel("verification_unclear");
+                }
+            } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
+                turnNumber = session.recordUserMessage(normalizedText);
+                auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
+                ConfirmationDecision decision = confirmationParser.classify(normalizedText);
+                AgentResponse unclearResponse = null;
+                responseText = switch (decision) {
+                    case YES -> {
+                        ProcedureOutcome confirmed = confirmWithSafeFallback(session);
+                        yield appendPromotion(session, renderDirect(session, confirmed), confirmed);
+                    }
+                    case NO -> {
+                        ProcedureOutcome declined = procedureCoordinator.declineActive(session);
+                        yield appendPromotion(session, renderDirect(session, declined), declined);
+                    }
+                    case UNCLEAR -> {
+                        unclearResponse = streamGuardedViaAgent(session, normalizedText, deltaSink);
+                        yield unclearResponse.text();
+                    }
+                };
+                if (unclearResponse == null) {
+                    deltaSink.accept(responseText);
+                }
+                outcomeLabel = unclearResponse != null
+                        ? unclearResponse.outcome().toTurnLabel("confirmation_unclear")
+                        : "confirmation_" + decision.name().toLowerCase();
+            } else {
+                turnNumber = session.recordUserMessage(normalizedText);
+                auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
+                AgentResponse agentResponse = session.getDeferredIntent().isPresent()
+                        ? streamGuardedViaAgent(session, normalizedText, deltaSink)
+                        : streamViaAgent(session, normalizedText, deltaSink);
+                responseText = agentResponse.text();
+                outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
+            }
+            session.recordAssistantMessage(responseText);
+            auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, responseText);
+
+            ProcedureStatus activeStatus = session.getActiveProcedure().map(ProcedureState::getStatus).orElse(null);
+            boolean requiresVerification = activeStatus == ProcedureStatus.AWAITING_VERIFICATION;
+            boolean requiresConfirmation = activeStatus == ProcedureStatus.AWAITING_CONFIRMATION;
+            completeTurn(session, turnNumber, startNanos, outcomeLabel);
+            return new AssistantTurn(responseText, requiresVerification, requiresConfirmation, stateView(session, turnNumber), turnMetadata);
+        });
+    }
+
+    /** Streaming variant of {@link #respondViaAgent}. */
+    private AgentResponse streamViaAgent(ConversationSession session, String normalizedText, Consumer<String> deltaSink) {
+        session.resetToolInvokedFlag();
+        AgentResponse response = supportAgent.streamResponse(session, normalizedText, deltaSink);
+        checkForSuspectedFabrication(session, response);
+        return response;
+    }
+
+    /** Streaming variant of {@link #respondGuardedViaAgent}. */
+    private AgentResponse streamGuardedViaAgent(ConversationSession session, String normalizedText, Consumer<String> deltaSink) {
+        session.resetToolInvokedFlag();
+        AgentResponse response = supportAgent.streamGuardedResponse(session, normalizedText, deltaSink);
+        checkForSuspectedFabrication(session, response);
+        return response;
+    }
 
     /**
      * Pass 2C security cleanup: the direct OTP/confirmation path must never

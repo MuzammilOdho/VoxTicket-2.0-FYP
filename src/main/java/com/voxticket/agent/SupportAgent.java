@@ -21,9 +21,12 @@ import com.voxticket.service.CustomerOrderQueryService;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Service;
 
@@ -141,6 +144,26 @@ public class SupportAgent {
     }
 
     /**
+     * Streaming variant of {@link #respond}: identical setup (model selection,
+     * history, tools, system prompt) but the provider response is consumed as
+     * native streaming deltas via {@code chatClient.prompt()...stream()}.
+     * Each non-empty delta is forwarded to {@code deltaSink} as it arrives so
+     * a voice pipeline can speak incrementally; the full text is still
+     * assembled and returned in the {@link AgentResponse} so session history,
+     * audit, and the fabrication check see exactly what was spoken.
+     */
+    public AgentResponse streamResponse(ConversationSession session, String currentUserMessage, Consumer<String> deltaSink) {
+        return streamWithMode(session, currentUserMessage, ToolAccessMode.FULL, deltaSink);
+    }
+
+    /**
+     * Streaming variant of {@link #respondGuarded}.
+     */
+    public AgentResponse streamGuardedResponse(ConversationSession session, String currentUserMessage, Consumer<String> deltaSink) {
+        return streamWithMode(session, currentUserMessage, ToolAccessMode.GUARDED, deltaSink);
+    }
+
+    /**
      * The tool objects attached to the chat call for a mode. Package-visible
      * for tests: READ_ONLY must never contain a {@code ProcedureRequestTools}
      * instance; GUARDED must contain both {@code ProcedureRequestTools} and
@@ -198,7 +221,7 @@ public class SupportAgent {
 
             String content = chatResponse.getResult().getOutput().getText();
             long durationMs = (System.nanoTime() - start) / 1_000_000;
-            recordTokenUsage(chatResponse, providerLabel, modelLabel);
+            recordTokenUsage(chatResponse.getMetadata() == null ? null : chatResponse.getMetadata().getUsage(), providerLabel, modelLabel);
 
             if (content == null || content.isBlank()) {
                 log.warn("event=support_agent_blank_response sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
@@ -220,6 +243,112 @@ public class SupportAgent {
             return new AgentResponse("I'm having trouble processing that right now - please try again in a moment.",
                     AgentResponse.Outcome.MODEL_ERROR);
         }
+    }
+
+    /**
+     * Mirrors {@link #respondWithMode} but consumes the model response as a
+     * stream. Per the Spring AI ChatClient API, {@code stream()} returns the
+     * provider's native deltas as a {@code Flux<ChatResponse>} - they are
+     * forwarded to {@code deltaSink} unchanged, never rechunked.
+     *
+     * <p>If the stream fails after partial deltas were already forwarded, the
+     * honest record is what was actually spoken: the partial text is returned
+     * with {@code MODEL_ERROR} so history matches the caller's experience.
+     * Only when nothing was spoken does the caller hear/see the safe generic
+     * fallback instead.
+     */
+    private AgentResponse streamWithMode(ConversationSession session, String currentUserMessage, ToolAccessMode mode,
+            Consumer<String> deltaSink) {
+        long start = System.nanoTime();
+        String tierLabel = "UNKNOWN";
+        String providerLabel = "unknown";
+        String modelLabel = "unknown";
+        StringBuilder spoken = new StringBuilder();
+        try {
+            var selection = modelSelector.select(session, currentUserMessage);
+            tierLabel = selection.tier().name();
+            var resolution = clientRegistry.resolutionFor(selection.tier());
+            providerLabel = resolution.provider().name();
+            modelLabel = resolution.model();
+            turnMetrics.recordModelSelection(tierLabel, providerLabel, modelLabel, selection.reason());
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.MODEL_SELECTED,
+                    "tier=" + tierLabel + " provider=" + providerLabel + " model=" + modelLabel + " reason=" + selection.reason());
+            log.info("event=model_selected sessionId={} tier={} provider={} model={} reason={} streaming=true", session.getSessionId(), tierLabel, providerLabel, modelLabel, selection.reason());
+
+            var history = contextBuilder.buildHistory(session, currentUserMessage);
+            Object[] tools = toolObjectsForMode(mode, session);
+            String systemPrompt = buildSystemPrompt(session);
+
+            log.info("event=support_agent_stream_start sessionId={} tier={} provider={} model={} mode={}", session.getSessionId(), tierLabel, providerLabel, modelLabel, mode);
+
+            // No per-prompt advisors: same single ToolCallingAdvisor default as
+            // the blocking path (configured once in TierChatClientRegistry).
+            ChatClient chatClient = clientRegistry.clientFor(selection.tier());
+            AtomicReference<Usage> lastUsage = new AtomicReference<>();
+            chatClient.prompt()
+                    .system(systemPrompt)
+                    .messages(history)
+                    .tools(tools)
+                    .stream()
+                    .chatResponse()
+                    .doOnNext(chunk -> {
+                        String delta = deltaText(chunk);
+                        if (delta != null && !delta.isEmpty()) {
+                            spoken.append(delta);
+                            deltaSink.accept(delta);
+                        }
+                        Usage usage = usageOf(chunk);
+                        if (usage != null) {
+                            lastUsage.set(usage);
+                        }
+                    })
+                    .blockLast();
+
+            String content = spoken.toString();
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            recordTokenUsage(lastUsage.get(), providerLabel, modelLabel);
+
+            if (content.isBlank()) {
+                log.warn("event=support_agent_blank_response sessionId={} tier={} model={} streaming=true", session.getSessionId(), tierLabel, modelLabel);
+                turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                        AgentResponse.Outcome.BLANK_FALLBACK.toLlmMetricLabel());
+                String fallback = blankResponseFallback(session);
+                deltaSink.accept(fallback);
+                return new AgentResponse(fallback, AgentResponse.Outcome.BLANK_FALLBACK);
+            }
+
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                    AgentResponse.Outcome.SUCCESS.toLlmMetricLabel());
+            log.info("event=support_agent_stream_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
+            return new AgentResponse(content, AgentResponse.Outcome.SUCCESS);
+        } catch (Exception e) {
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                    AgentResponse.Outcome.MODEL_ERROR.toLlmMetricLabel());
+            log.error("event=support_agent_stream_end sessionId={} outcome=model_error errorType={} durationMs={}",
+                    session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
+            if (spoken.isEmpty()) {
+                String fallback = "I'm having trouble processing that right now - please try again in a moment.";
+                deltaSink.accept(fallback);
+                return new AgentResponse(fallback, AgentResponse.Outcome.MODEL_ERROR);
+            }
+            return new AgentResponse(spoken.toString(), AgentResponse.Outcome.MODEL_ERROR);
+        }
+    }
+
+    /** Native provider delta text from one streamed {@link ChatResponse}; null when the chunk carries no text. */
+    private static String deltaText(ChatResponse chatResponse) {
+        if (chatResponse == null || chatResponse.getResult() == null || chatResponse.getResult().getOutput() == null) {
+            return null;
+        }
+        return chatResponse.getResult().getOutput().getText();
+    }
+
+    private static Usage usageOf(ChatResponse chatResponse) {
+        if (chatResponse == null || chatResponse.getMetadata() == null) {
+            return null;
+        }
+        return chatResponse.getMetadata().getUsage();
     }
     String blankResponseFallback(ConversationSession session) {
         // Phase 5: the fallback is customer-facing, so it follows the same
@@ -253,9 +382,8 @@ public class SupportAgent {
         };
     }
 
-    private void recordTokenUsage(ChatResponse chatResponse, String provider, String model) {
+    private void recordTokenUsage(Usage usage, String provider, String model) {
         try {
-            var usage = chatResponse.getMetadata() == null ? null : chatResponse.getMetadata().getUsage();
             if (usage == null) {
                 return;
             }
