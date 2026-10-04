@@ -127,6 +127,12 @@
             <artifactId>spring-ai-starter-model-google-genai</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>io.livekit</groupId>
+            <artifactId>livekit-server</artifactId>
+            <version>0.16.0</version>
+        </dependency>
+
 
     </dependencies>
 
@@ -146,6 +152,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
         </dependencies>
     </dependencyManagement>
 

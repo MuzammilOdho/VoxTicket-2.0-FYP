@@ -58,6 +58,13 @@ voxticket:
   commerce:
     returns:
       window-days: 30
+
+  voice:
+    livekit:
+      url: ${LIVEKIT_URL:}
+      api-key: ${LIVEKIT_API_KEY:}
+      api-secret: ${LIVEKIT_API_SECRET:}
+
   ai:
     # Each tier independently names exactly one provider and one model.
     # Switching either is a config-only change: no Java changes, no fallback

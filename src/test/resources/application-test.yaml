@@ -21,6 +21,11 @@ spring:
         enabled: false
 
 voxticket:
+  voice:
+    livekit:
+      url: ws://localhost:7880
+      api-key: test-key
+      api-secret: test-secret
   ai:
     providers:
       google:

@@ -24,6 +24,25 @@ application-secret.yaml
 *.onnx
 models/
 
+### Python (voice worker) ###
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+pip-wheel-metadata/
+*.egg-info/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
 ### Logs ###
 *.log
 logs/
