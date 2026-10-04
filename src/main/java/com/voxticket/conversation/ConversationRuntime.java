@@ -2,6 +2,7 @@ package com.voxticket.conversation;
 
 import com.voxticket.agent.AgentResponse;
 import com.voxticket.agent.SupportAgent;
+import com.voxticket.agent.ToolAccessMode;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityService;
@@ -27,6 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -88,6 +90,33 @@ public class ConversationRuntime {
     }
 
     public AssistantTurn processTurn(UserTurn turn) {
+        return processTurnInternal(turn, null);
+    }
+
+    /**
+     * Streaming variant of {@link #processTurn(UserTurn)}: identical branch
+     * logic, but LLM-backed branches emit token deltas to {@code deltaSink}
+     * as they generate, and deterministic branches emit their full text as
+     * one delta. {@code deltaSink} must throw
+     * {@link com.voxticket.api.voice.TurnAbortedException} (unchecked) when
+     * the client disconnected; it unwinds through the per-session lock,
+     * skipping assistant-message recording for the aborted turn.
+     */
+    public AssistantTurn processTurnStream(UserTurn turn, Consumer<String> deltaSink) {
+        if (deltaSink == null) {
+            throw new IllegalArgumentException("deltaSink must not be null");
+        }
+        return processTurnInternal(turn, deltaSink);
+    }
+
+    /** Emits a deterministic reply into the stream; no-op when not streaming. */
+    private static void emit(Consumer<String> deltaSink, String text) {
+        if (deltaSink != null && text != null && !text.isEmpty()) {
+            deltaSink.accept(text);
+        }
+    }
+
+    private AssistantTurn processTurnInternal(UserTurn turn, Consumer<String> deltaSink) {
         long startNanos = System.nanoTime();
         return sessionStore.withSession(turn.sessionId(), turn.channel(), session -> {
             if (StringUtils.hasText(turn.callerPhone())) {
@@ -107,6 +136,7 @@ public class ConversationRuntime {
                 session.recordAssistantMessage(TOO_LONG_MESSAGE);
                 auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, TOO_LONG_MESSAGE);
                 completeTurn(session, turnNumber, startNanos, "input_too_long");
+                emit(deltaSink, TOO_LONG_MESSAGE);
                 return new AssistantTurn(TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
             }
 
@@ -141,6 +171,7 @@ public class ConversationRuntime {
                 session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
                 auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, SAFE_DEFLECTION_MESSAGE);
                 completeTurn(session, turnNumber, startNanos, "blocked");
+                emit(deltaSink, SAFE_DEFLECTION_MESSAGE);
                 return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
             }
 
@@ -164,6 +195,7 @@ public class ConversationRuntime {
                     // customer-facing, so only allowlisted safe fields cross it.
                     turnMetadata = safeDirectTurnMetadata(ambiguous);
                     outcomeLabel = "verification_ambiguous";
+                    emit(deltaSink, responseText);
                 } else if (sensitive.hasOtpCandidate()) {
                     // Pass 2C: the direct path never reaches the LLM. Presentation is
                     // rendered deterministically from the stable outcome code and
@@ -179,6 +211,7 @@ public class ConversationRuntime {
                     // deferred intent; its fresh start is communicated in the
                     // same turn, deterministically rendered.
                     responseText = appendPromotion(session, responseText, outcome);
+                    emit(deltaSink, responseText);
                     if (sensitive.hasResidual()) {
                         // Pass 2D-B: GUARDED while a procedure is still live
                         // (possibly the freshly promoted one); FULL only when
@@ -186,8 +219,8 @@ public class ConversationRuntime {
                         // live procedure impossible, so guarded turns no longer
                         // need to be read-only.
                         AgentResponse residual = isGuardedProcedureActive(session)
-                                ? respondGuardedViaAgent(session, sensitive.residualText())
-                                : respondViaAgent(session, sensitive.residualText());
+                                ? respondGuardedViaAgent(session, sensitive.residualText(), deltaSink)
+                                : respondViaAgent(session, sensitive.residualText(), deltaSink);
                         responseText = combineResponses(responseText, residual.text());
                     }
                 } else if (sensitive.resendRequested()) {
@@ -195,9 +228,10 @@ public class ConversationRuntime {
                     responseText = renderDirect(session, outcome);
                     turnMetadata = safeDirectTurnMetadata(outcome);
                     outcomeLabel = "verification";
+                    emit(deltaSink, responseText);
                     if (sensitive.hasResidual()) {
                         // The guarded verification is still unresolved.
-                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText());
+                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText(), deltaSink);
                         responseText = combineResponses(responseText, residual.text());
                     }
                 } else {
@@ -206,7 +240,7 @@ public class ConversationRuntime {
                     // mutation request (deferred by the coordinator), a
                     // correction, or an explicit replacement. A second live
                     // procedure is impossible by coordinator construction.
-                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText);
+                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText, deltaSink);
                     responseText = agentResponse.text();
                     outcomeLabel = agentResponse.outcome().toTurnLabel("verification_unclear");
                 }
@@ -233,10 +267,13 @@ public class ConversationRuntime {
                         // agent can understand a second request (deferred by the
                         // coordinator), a correction, or an explicit replacement.
                         // The coordinator makes a second live procedure impossible.
-                        unclearResponse = respondGuardedViaAgent(session, normalizedText);
+                        unclearResponse = respondGuardedViaAgent(session, normalizedText, deltaSink);
                         yield unclearResponse.text();
                     }
                 };
+                if (unclearResponse == null) {
+                    emit(deltaSink, responseText);
+                }
                 outcomeLabel = unclearResponse != null
                         ? unclearResponse.outcome().toTurnLabel("confirmation_unclear")
                         : "confirmation_" + decision.name().toLowerCase();
@@ -249,8 +286,8 @@ public class ConversationRuntime {
                 // contested slot explicitly instead of the coordinator
                 // silently deciding the queued request's fate.
                 AgentResponse agentResponse = session.getDeferredIntent().isPresent()
-                        ? respondGuardedViaAgent(session, normalizedText)
-                        : respondViaAgent(session, normalizedText);
+                        ? respondGuardedViaAgent(session, normalizedText, deltaSink)
+                        : respondViaAgent(session, normalizedText, deltaSink);
                 responseText = agentResponse.text();
                 outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
             }
@@ -338,10 +375,15 @@ public class ConversationRuntime {
      * coordinator guarantees an identical request reuses the live procedure
      * and a different request is deferred, so no second live procedure can
      * start.
+     *
+     * <p>When {@code deltaSink} is non-null the agent streams token deltas to
+     * it; {@code null} keeps the classic blocking behavior.
      */
-    private AgentResponse respondGuardedViaAgent(ConversationSession session, String text) {
+    private AgentResponse respondGuardedViaAgent(ConversationSession session, String text, Consumer<String> deltaSink) {
         session.resetToolInvokedFlag();
-        AgentResponse response = supportAgent.respondGuarded(session, text);
+        AgentResponse response = deltaSink == null
+                ? supportAgent.respondGuarded(session, text)
+                : supportAgent.respondStream(session, text, ToolAccessMode.GUARDED, deltaSink);
         checkForSuspectedFabrication(session, response);
         return response;
     }
@@ -384,9 +426,11 @@ public class ConversationRuntime {
     }
 
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
-    private AgentResponse respondViaAgent(ConversationSession session, String normalizedText) {
+    private AgentResponse respondViaAgent(ConversationSession session, String normalizedText, Consumer<String> deltaSink) {
         session.resetToolInvokedFlag();
-        AgentResponse response = supportAgent.respond(session, normalizedText);
+        AgentResponse response = deltaSink == null
+                ? supportAgent.respond(session, normalizedText)
+                : supportAgent.respondStream(session, normalizedText, ToolAccessMode.FULL, deltaSink);
         checkForSuspectedFabrication(session, response);
         return response;
     }

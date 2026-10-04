@@ -3,6 +3,8 @@ package com.voxticket.rag;
 import com.voxticket.observability.TurnMetrics;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -27,6 +29,19 @@ public class RagService {
     private final RagProperties properties;
     private final TurnMetrics turnMetrics;
 
+    /**
+     * Latency: every policy question paid a remote embedding + vector-search
+     * round-trip, even repeats of the same question. Policies change rarely,
+     * so successful searches are cached briefly. Keyed on the normalized raw
+     * query (the instruction prefix is embedding-only and constant).
+     */
+    private static final Duration SEARCH_CACHE_TTL = Duration.ofMinutes(10);
+    private static final int SEARCH_CACHE_MAX_ENTRIES = 200;
+    private final ConcurrentHashMap<String, CachedSearch> searchCache = new ConcurrentHashMap<>();
+
+    private record CachedSearch(List<PolicySnippet> snippets, long expiresAtMillis) {
+    }
+
     public RagService(VectorStore vectorStore, RagProperties properties, TurnMetrics turnMetrics) {
         this.vectorStore = vectorStore;
         this.properties = properties;
@@ -34,6 +49,14 @@ public class RagService {
     }
 
     public List<PolicySnippet> searchPolicy(String query) {
+        String cacheKey = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+        CachedSearch hit = searchCache.get(cacheKey);
+        if (hit != null && hit.expiresAtMillis() > System.currentTimeMillis()) {
+            turnMetrics.recordRagSearch(Duration.ZERO, hit.snippets().size());
+            log.debug("event=rag_search_cached retrievedCount={} queryLength={}", hit.snippets().size(), query == null ? 0 : query.length());
+            return hit.snippets();
+        }
+
         long start = System.nanoTime();
         // The instruction prefix is for the embedding model only - the raw
         // user query is what gets logged and audited.
@@ -51,6 +74,9 @@ public class RagService {
                 properties.topK(), properties.similarityThreshold(), snippets.size(), categories, query == null ? 0 : query.length(), durationMs);
         turnMetrics.recordRagSearch(Duration.ofMillis(durationMs), snippets.size());
 
+        if (searchCache.size() < SEARCH_CACHE_MAX_ENTRIES) {
+            searchCache.put(cacheKey, new CachedSearch(snippets, System.currentTimeMillis() + SEARCH_CACHE_TTL.toMillis()));
+        }
         return snippets;
     }
 

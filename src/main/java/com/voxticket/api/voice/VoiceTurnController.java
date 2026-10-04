@@ -5,13 +5,18 @@ import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationRuntime;
 import com.voxticket.conversation.UserTurn;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * The voice brain endpoint. The LiveKit worker POSTs one STT transcript per
@@ -20,13 +25,13 @@ import org.springframework.web.bind.annotation.RestController;
  * and runs it through the shared {@link ConversationRuntime#processTurn}.
  *
  * <p>Intentionally thin, like ChatController: no business logic lives here.
- * The turn is fully blocking (same as chat); see the README for why true
- * streaming is a Phase 2, not a Phase 1, concern.
  */
 @RestController
 @RequestMapping("/api/v1/voice")
 @Profile({"dev", "test"})
 public class VoiceTurnController {
+
+    private static final Logger log = LoggerFactory.getLogger(VoiceTurnController.class);
 
     private final ConversationRuntime conversationRuntime;
 
@@ -39,5 +44,46 @@ public class VoiceTurnController {
         UserTurn turn = new UserTurn(
                 request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), Map.of());
         return ChatResponse.from(conversationRuntime.processTurn(turn));
+    }
+
+    /**
+     * Streaming variant of {@link #turn()}: Server-Sent Events, one
+     * {@code data: {"delta": "..."}} per LLM token batch and a final
+     * {@code data: {"done": true}}. Deterministic turns (OTP, confirmations,
+     * guard rejections) arrive as a single delta - they never touch the LLM.
+     *
+     * <p>Client disconnect (barge-in / hang-up) surfaces as an
+     * {@link IOException} on the next emit, which becomes a
+     * {@link TurnAbortedException}: the runtime drops the partial reply and
+     * releases the per-session lock immediately.
+     */
+    @PostMapping("/turn/stream")
+    public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request) {
+        SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
+        UserTurn turn = new UserTurn(
+                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), Map.of());
+        try {
+            conversationRuntime.processTurnStream(turn, delta -> {
+                try {
+                    emitter.send(SseEmitter.event().data(Map.of("delta", delta)));
+                } catch (IOException | IllegalStateException e) {
+                    throw new TurnAbortedException(e);
+                }
+            });
+            try {
+                emitter.send(SseEmitter.event().data(Map.of("done", true)));
+            } catch (IOException | IllegalStateException e) {
+                // Hung up after the last delta: the same abort, just quieter.
+                throw new TurnAbortedException(e);
+            }
+            emitter.complete();
+        } catch (TurnAbortedException aborted) {
+            log.debug("voice turn stream aborted by client disconnect");
+            emitter.complete();
+        } catch (Exception e) {
+            log.error("voice turn stream failed", e);
+            emitter.completeWithError(e);
+        }
+        return emitter;
     }
 }

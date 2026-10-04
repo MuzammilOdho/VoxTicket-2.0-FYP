@@ -1,6 +1,7 @@
 package com.voxticket.agent;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.api.voice.TurnAbortedException;
 import com.voxticket.conversation.CommunicationProfile;
 import com.voxticket.conversation.ConversationLanguage;
 import com.voxticket.conversation.ConversationLanguageResolver;
@@ -21,6 +22,7 @@ import com.voxticket.service.CustomerOrderQueryService;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -158,6 +160,92 @@ public class SupportAgent {
             return new Object[]{customerTools, policyTools, procedureTools, controlTools};
         }
         return new Object[]{customerTools, policyTools, procedureTools};
+    }
+
+    /**
+     * Streaming variant of {@link #respondWithMode}: identical setup (model
+     * selection, history, tools, system prompt), but the model response is
+     * consumed as a token stream and each non-empty delta is handed to
+     * {@code deltaSink} immediately - so a voice client can start speaking
+     * the first sentence while the rest is still generating.
+     *
+     * <p>{@code deltaSink} must throw {@link TurnAbortedException} (unchecked)
+     * when the client disconnected; it propagates unwrapped so the runtime
+     * can drop the partial reply and release the per-session lock.
+     */
+    public AgentResponse respondStream(ConversationSession session, String currentUserMessage,
+            ToolAccessMode mode, Consumer<String> deltaSink) {
+        long start = System.nanoTime();
+        String tierLabel = "UNKNOWN";
+        String providerLabel = "unknown";
+        String modelLabel = "unknown";
+        try {
+            var selection = modelSelector.select(session, currentUserMessage);
+            tierLabel = selection.tier().name();
+            var resolution = clientRegistry.resolutionFor(selection.tier());
+            providerLabel = resolution.provider().name();
+            modelLabel = resolution.model();
+            turnMetrics.recordModelSelection(tierLabel, providerLabel, modelLabel, selection.reason());
+            auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.MODEL_SELECTED,
+                    "tier=" + tierLabel + " provider=" + providerLabel + " model=" + modelLabel + " reason=" + selection.reason());
+            log.info("event=model_selected sessionId={} tier={} provider={} model={} reason={}", session.getSessionId(), tierLabel, providerLabel, modelLabel, selection.reason());
+
+            var history = contextBuilder.buildHistory(session, currentUserMessage);
+            Object[] tools = toolObjectsForMode(mode, session);
+            String systemPrompt = buildSystemPrompt(session);
+
+            log.info("event=support_agent_stream_start sessionId={} tier={} provider={} model={} mode={}", session.getSessionId(), tierLabel, providerLabel, modelLabel, mode);
+
+            ChatClient chatClient = clientRegistry.clientFor(selection.tier());
+            StringBuilder fullText = new StringBuilder();
+            final ChatResponse[] lastChunk = new ChatResponse[1];
+            for (ChatResponse chunk : chatClient.prompt()
+                    .system(systemPrompt)
+                    .messages(history)
+                    .tools(tools)
+                    .stream()
+                    .chatResponse()
+                    .toIterable()) {
+                lastChunk[0] = chunk;
+                String delta = chunk.getResult() == null || chunk.getResult().getOutput() == null
+                        ? null
+                        : chunk.getResult().getOutput().getText();
+                if (delta != null && !delta.isEmpty()) {
+                    fullText.append(delta);
+                    deltaSink.accept(delta);
+                }
+            }
+
+            String content = fullText.toString();
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            recordTokenUsage(lastChunk[0], providerLabel, modelLabel);
+
+            if (content.isBlank()) {
+                log.warn("event=support_agent_blank_response sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
+                turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                        AgentResponse.Outcome.BLANK_FALLBACK.toLlmMetricLabel());
+                String fallback = blankResponseFallback(session);
+                deltaSink.accept(fallback);
+                return new AgentResponse(fallback, AgentResponse.Outcome.BLANK_FALLBACK);
+            }
+
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                    AgentResponse.Outcome.SUCCESS.toLlmMetricLabel());
+            log.info("event=support_agent_stream_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
+            return new AgentResponse(content, AgentResponse.Outcome.SUCCESS);
+        } catch (TurnAbortedException aborted) {
+            // Client disconnected mid-stream: not a model error. Propagate so
+            // the runtime drops the partial reply and releases the lock.
+            throw aborted;
+        } catch (Exception e) {
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
+                    AgentResponse.Outcome.MODEL_ERROR.toLlmMetricLabel());
+            log.error("event=support_agent_stream_end sessionId={} outcome=model_error errorType={} durationMs={}",
+                    session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
+            return new AgentResponse("I'm having trouble processing that right now - please try again in a moment.",
+                    AgentResponse.Outcome.MODEL_ERROR);
+        }
     }
 
     private AgentResponse respondWithMode(ConversationSession session, String currentUserMessage, ToolAccessMode mode) {

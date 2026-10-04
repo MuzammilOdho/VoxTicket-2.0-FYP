@@ -25,6 +25,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * matching the same principle already applied to token-usage extraction
  * elsewhere in this codebase.
  *
+ * <p>Writes are synchronous by design: callers (and the admin dashboard)
+ * may read audit data back immediately after recording it, and the test
+ * suite pins this read-after-write contract. The per-write cost is a few
+ * milliseconds next to seconds of model time, so this stays on the turn's
+ * critical path deliberately - reliability over latency.
+ *
  * <p>NEVER pass into detail: OTP values, secrets, chain-of-thought, hidden/
  * provider reasoning, or the raw system prompt. Every call site in this
  * codebase only ever passes short structured summaries (tool names,
