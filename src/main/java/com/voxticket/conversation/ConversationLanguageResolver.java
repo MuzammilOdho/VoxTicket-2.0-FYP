@@ -119,6 +119,14 @@ public class ConversationLanguageResolver {
             return Optional.of(hasLatinLetters ? ConversationLanguage.CODE_SWITCH : ConversationLanguage.URDU);
         }
 
+        if (containsDevanagariLetters(trimmed)) {
+            // AssemblyAI detects spoken Urdu/Hindi (Hindustani) as "hi" and
+            // transcribes it in Devanagari script. VoxTicket serves it as
+            // Urdu: same spoken language, Urdu voice on the way out. Without
+            // this, Devanagari input fell through to ENGLISH below.
+            return Optional.of(ConversationLanguage.URDU);
+        }
+
         Set<String> tokens = tokenize(lower);
         boolean hasMarkers = tokens.stream().anyMatch(ROMAN_URDU_MARKERS::contains);
         if (!hasMarkers) {
@@ -135,6 +143,14 @@ public class ConversationLanguageResolver {
 
     private boolean containsUrduScriptLetters(String text) {
         return text.codePoints().anyMatch(cp -> isArabicScriptBlock(cp) && Character.isLetter(cp));
+    }
+
+    private boolean containsDevanagariLetters(String text) {
+        return text.codePoints().anyMatch(cp -> isDevanagariBlock(cp) && Character.isLetter(cp));
+    }
+
+    private boolean isDevanagariBlock(int cp) {
+        return cp >= 0x0900 && cp <= 0x097F;
     }
 
     private boolean isArabicScriptBlock(int cp) {

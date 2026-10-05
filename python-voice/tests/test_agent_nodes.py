@@ -129,6 +129,14 @@ async def test_llm_node_locks_voice_from_first_chunk():
 
 
 @pytest.mark.asyncio
+async def test_llm_node_logs_locked_voice_and_language(caplog):
+    agent = make_agent(chunks=["جی بالکل۔ مدد کرتا ہوں۔"])
+    with caplog.at_level(logging.INFO, logger="voxticket-voice"):
+        await _drain(agent.llm_node(user_ctx("salam"), [], None))
+    assert "TTS voice locked voice_id=voice-ur language=ur" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_llm_node_no_apology_after_partial_deltas():
     # A mid-stream failure can't unsay what's already spoken: no apology.
     class FailAfter:

@@ -272,7 +272,7 @@ class VoxTicketBrain:
         url = self._stream_url
         try:
             async with self._stream_client.stream(
-                    "POST", url, json={"sessionId": session_id, "message": text}
+                "POST", url, json={"sessionId": session_id, "message": text}
             ) as resp:
                 if resp.status_code in (404, 405):
                     logger.info("brain stream endpoint unavailable (HTTP %s); falling back to blocking turn",
@@ -382,6 +382,8 @@ class VoxTicketAgent(Agent):
                     # First real content decides the turn's TTS voice.
                     self._next_voice = (self._voice_ur, "ur") if is_urdu(delta) else (self._voice_en, "en")
                     voice_locked = True
+                    logger.info("llm_node: TTS voice locked voice_id=%s language=%s (first delta %r)",
+                                self._next_voice[0], self._next_voice[1], delta[:60])
                 yielded_any = True
                 yield delta
         except BrainError as exc:
@@ -409,6 +411,7 @@ class VoxTicketAgent(Agent):
         voice_id, language = self._next_voice or (self._voice_en, "en")
         self._next_voice = None
         self._tts.update_options(voice=voice_id, language=language)
+        logger.info("tts_node: synthesizing with voice_id=%s language=%s", voice_id, language)
         try:
             async for frame in Agent.default.tts_node(self, text, model_settings):
                 yield frame
