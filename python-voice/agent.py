@@ -46,6 +46,18 @@ import os
 import re
 from typing import AsyncIterator
 
+# Windows-only: the soxr resampler bundled inside livekit_ffi.dll crashes with
+# "Assertion failed: LSX_FFT_BR_ == NULL" (soxr-sys fft4g_cache.h) when it
+# resamples audio on multiple threads - e.g. 24 kHz Cartesia TTS output <->
+# 48 kHz WebRTC, which happens on every spoken reply. Forcing single-threaded
+# resampling avoids the race.
+#
+# This MUST sit here, immediately after `import os` and before ANY livekit
+# import: livekit_ffi.dll loads (and soxr picks up this variable) the moment
+# `livekit` is first imported, so setting it any later has no effect in that
+# process. setdefault: an explicitly configured value always wins.
+os.environ.setdefault("SOXR_MAX_THREADS", "1")
+
 import httpx
 from dotenv import load_dotenv
 
@@ -59,8 +71,14 @@ load_dotenv()
 
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, llm
+from livekit.agents import stt as stt_api
+from livekit.agents import tts as tts_api
 from livekit.agents.tokenize import SentenceStream, SentenceTokenizer, token_stream
-from livekit.plugins import assemblyai, cartesia, silero
+# All provider plugins are imported at module top level (main thread).
+# livekit-agents requires plugin registration on the main thread, so the
+# imports cannot be lazy inside the factories - only the *selection* of
+# which provider to construct is dynamic (STT_PROVIDER / TTS_PROVIDER).
+from livekit.plugins import assemblyai, azure, cartesia, elevenlabs, silero
 
 logger = logging.getLogger("voxticket-voice")
 
@@ -73,19 +91,50 @@ class ConfigError(Exception):
     """Raised at startup when the environment is misconfigured."""
 
 
+# Every model is selectable and replaceable, mirroring the Java
+# TierChatClientRegistry posture: a selected provider whose keys are missing
+# fails startup loudly (naming the key) instead of limping on.
+STT_PROVIDERS = ("assemblyai", "elevenlabs")
+TTS_PROVIDERS = ("cartesia", "elevenlabs", "azure")
+
+
 @dataclasses.dataclass(frozen=True)
 class Config:
     livekit_url: str
     livekit_api_key: str
     livekit_api_secret: str
-    assemblyai_api_key: str
-    cartesia_api_key: str
-    cartesia_voice_en: str
-    cartesia_voice_ur: str
+    # Provider selection (STT_PROVIDER / TTS_PROVIDER env).
+    stt_provider: str = "assemblyai"
+    tts_provider: str = "cartesia"
+    # AssemblyAI STT (required when STT_PROVIDER=assemblyai).
+    assemblyai_api_key: str = ""
+    assemblyai_keyterms: tuple = ()
+    # ElevenLabs STT via Scribe v2 Realtime (required: ELEVENLABS_API_KEY when
+    # STT_PROVIDER=elevenlabs). Primary language hint + secondary languages
+    # keep English primary while still hearing Urdu.
+    elevenlabs_api_key: str = ""
+    elevenlabs_stt_model: str = "scribe_v2_realtime"
+    elevenlabs_stt_language: str = "en"
+    elevenlabs_stt_secondary_languages: tuple = ("ur",)
+    # Cartesia TTS (required: key + both voices when TTS_PROVIDER=cartesia).
+    cartesia_api_key: str = ""
+    cartesia_voice_en: str = ""
+    cartesia_voice_ur: str = ""
     # sonic-3.6+: Urdu (ur) is only supported from 3.6 on - sonic-3 cannot
     # synthesize Urdu at all (zero audio frames). Drop-in compatible.
     cartesia_model: str = "sonic-3.6"
-    assemblyai_keyterms: tuple = ()
+    # ElevenLabs TTS (required: key + both voices when TTS_PROVIDER=elevenlabs).
+    # eleven_v3 explicitly supports Urdu; flash models are faster but their
+    # Urdu support is unverified - hence v3 is the default.
+    elevenlabs_tts_model: str = "eleven_v3"
+    elevenlabs_voice_en: str = ""
+    elevenlabs_voice_ur: str = ""
+    # Azure TTS (required: key + region when TTS_PROVIDER=azure; voices have
+    # well-known defaults because Azure voice names are stable identifiers).
+    azure_speech_key: str = ""
+    azure_speech_region: str = ""
+    azure_voice_en: str = "en-US-AvaMultilingualNeural"
+    azure_voice_ur: str = "ur-PK-AsadNeural"
     voxticket_turn_url: str = "http://localhost:8080/api/v1/voice/turn"
     voxticket_turn_stream_url: str = "http://localhost:8080/api/v1/voice/turn/stream"
     brain_timeout_s: float = 25.0
@@ -93,26 +142,15 @@ class Config:
     log_level: str = "INFO"
 
 
-_REQUIRED = (
-    "LIVEKIT_URL",
-    "LIVEKIT_API_KEY",
-    "LIVEKIT_API_SECRET",
-    "ASSEMBLYAI_API_KEY",
-    "CARTESIA_API_KEY",
-    "CARTESIA_VOICE_EN",
-    "CARTESIA_VOICE_UR",
-)
-
-
 def load_config(env: dict | None = None) -> Config:
-    """Read env (.env is already loaded at import time) and fail fast."""
+    """Read env (.env is already loaded at import time) and fail fast.
+
+    Only the selected providers' keys are required: STT_PROVIDER=elevenlabs
+    must not demand an AssemblyAI key, and vice versa. A selected provider
+    with a missing key raises ConfigError naming the key - the same
+    fail-closed posture as the Java provider registry.
+    """
     env = env if env is not None else os.environ
-    missing = [k for k in _REQUIRED if not (env.get(k) or "").strip()]
-    if missing:
-        raise ConfigError(
-            "Missing required environment variables: " + ", ".join(missing)
-            + ". See worker/.env.example."
-        )
 
     def opt(key: str, default: str) -> str:
         return (env.get(key) or "").strip() or default
@@ -120,6 +158,42 @@ def load_config(env: dict | None = None) -> Config:
     def opt_list(key: str, default: str) -> tuple:
         raw = (env.get(key) or "").strip() or default
         return tuple(t.strip() for t in raw.split(",") if t.strip())
+
+    def opt_float(key: str, default: float) -> float:
+        raw = opt(key, str(default))
+        try:
+            return float(raw)
+        except ValueError:
+            raise ConfigError(f"{key} must be a number, got {raw!r}")
+
+    def require_keys(provider_label: str, *keys: str) -> None:
+        missing = [k for k in keys if not (env.get(k) or "").strip()]
+        if missing:
+            raise ConfigError(
+                "Missing required environment variables for "
+                + provider_label + ": " + ", ".join(missing)
+                + ". See worker/.env.example."
+            )
+
+    stt_provider = opt("STT_PROVIDER", "assemblyai").lower()
+    if stt_provider not in STT_PROVIDERS:
+        raise ConfigError(f"STT_PROVIDER must be one of {list(STT_PROVIDERS)}, got {stt_provider!r}")
+    tts_provider = opt("TTS_PROVIDER", "cartesia").lower()
+    if tts_provider not in TTS_PROVIDERS:
+        raise ConfigError(f"TTS_PROVIDER must be one of {list(TTS_PROVIDERS)}, got {tts_provider!r}")
+
+    # LiveKit is always required; provider keys only for the selected providers.
+    require_keys("LiveKit", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
+    if stt_provider == "assemblyai":
+        require_keys("STT_PROVIDER=assemblyai", "ASSEMBLYAI_API_KEY")
+    elif stt_provider == "elevenlabs":
+        require_keys("STT_PROVIDER=elevenlabs", "ELEVENLABS_API_KEY")
+    if tts_provider == "cartesia":
+        require_keys("TTS_PROVIDER=cartesia", "CARTESIA_API_KEY", "CARTESIA_VOICE_EN", "CARTESIA_VOICE_UR")
+    elif tts_provider == "elevenlabs":
+        require_keys("TTS_PROVIDER=elevenlabs", "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_EN", "ELEVENLABS_VOICE_UR")
+    elif tts_provider == "azure":
+        require_keys("TTS_PROVIDER=azure", "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION")
 
     # Domain keyterms bias the STT decoder toward VoxTicket vocabulary
     # (brand name, OTP spelling, support verbs). Max 2048 chars total.
@@ -129,15 +203,28 @@ def load_config(env: dict | None = None) -> Config:
         livekit_url=env["LIVEKIT_URL"].strip(),
         livekit_api_key=env["LIVEKIT_API_KEY"].strip(),
         livekit_api_secret=env["LIVEKIT_API_SECRET"].strip(),
-        assemblyai_api_key=env["ASSEMBLYAI_API_KEY"].strip(),
-        cartesia_api_key=env["CARTESIA_API_KEY"].strip(),
-        cartesia_voice_en=env["CARTESIA_VOICE_EN"].strip(),
-        cartesia_voice_ur=env["CARTESIA_VOICE_UR"].strip(),
-        cartesia_model=opt("CARTESIA_MODEL", "sonic-3.6"),
+        stt_provider=stt_provider,
+        tts_provider=tts_provider,
+        assemblyai_api_key=opt("ASSEMBLYAI_API_KEY", ""),
         assemblyai_keyterms=opt_list("ASSEMBLYAI_KEYTERMS", default_keyterms),
+        elevenlabs_api_key=opt("ELEVENLABS_API_KEY", ""),
+        elevenlabs_stt_model=opt("ELEVENLABS_STT_MODEL", "scribe_v2_realtime"),
+        elevenlabs_stt_language=opt("ELEVENLABS_STT_LANGUAGE", "en"),
+        elevenlabs_stt_secondary_languages=opt_list("ELEVENLABS_STT_SECONDARY_LANGUAGES", "ur"),
+        elevenlabs_tts_model=opt("ELEVENLABS_TTS_MODEL", "eleven_v3"),
+        elevenlabs_voice_en=opt("ELEVENLABS_VOICE_EN", ""),
+        elevenlabs_voice_ur=opt("ELEVENLABS_VOICE_UR", ""),
+        cartesia_api_key=opt("CARTESIA_API_KEY", ""),
+        cartesia_voice_en=opt("CARTESIA_VOICE_EN", ""),
+        cartesia_voice_ur=opt("CARTESIA_VOICE_UR", ""),
+        cartesia_model=opt("CARTESIA_MODEL", "sonic-3.6"),
+        azure_speech_key=opt("AZURE_SPEECH_KEY", ""),
+        azure_speech_region=opt("AZURE_SPEECH_REGION", ""),
+        azure_voice_en=opt("AZURE_VOICE_EN", "en-US-AvaMultilingualNeural"),
+        azure_voice_ur=opt("AZURE_VOICE_UR", "ur-PK-AsadNeural"),
         voxticket_turn_url=opt("VOXTICKET_TURN_URL", "http://localhost:8080/api/v1/voice/turn"),
         voxticket_turn_stream_url=opt("VOXTICKET_TURN_STREAM_URL", "http://localhost:8080/api/v1/voice/turn/stream"),
-        brain_timeout_s=float(opt("BRAIN_TIMEOUT_S", "25")),
+        brain_timeout_s=opt_float("BRAIN_TIMEOUT_S", 25.0),
         greeting=opt("GREETING", "Welcome to VoxTicket! How can I help you today?"),
         log_level=opt("LOG_LEVEL", "INFO"),
     )
@@ -147,15 +234,20 @@ def load_config(env: dict | None = None) -> Config:
 # Language: which TTS voice for this reply?
 # --------------------------------------------------------------------------
 
-_URDU_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+_URDU_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u097F]")
 
 
 def is_urdu(text: str) -> bool:
-    """True when the reply contains Urdu-script characters.
+    """True when the reply contains Urdu-script (or Devanagari) characters.
 
     The Java brain already mirrors the reply language; the reply's script is
     the cheapest reliable signal for picking the TTS voice, and it needs no
     extra round-trip or protocol change.
+
+    Devanagari is included because AssemblyAI detects spoken Urdu/Hindi
+    (Hindustani) as ``"hi"`` and transcribes it in Devanagari script, while
+    this app serves it with the Urdu voice. Without this, a Devanagari reply
+    would wrongly lock the English voice.
     """
     return bool(_URDU_RE.search(text or ""))
 
@@ -272,7 +364,7 @@ class VoxTicketBrain:
         url = self._stream_url
         try:
             async with self._stream_client.stream(
-                "POST", url, json={"sessionId": session_id, "message": text}
+                    "POST", url, json={"sessionId": session_id, "message": text}
             ) as resp:
                 if resp.status_code in (404, 405):
                     logger.info("brain stream endpoint unavailable (HTTP %s); falling back to blocking turn",
@@ -310,7 +402,104 @@ class VoxTicketBrain:
 
 
 # --------------------------------------------------------------------------
-# Agent: Java brain as the "LLM", Cartesia voice picked per reply
+# Providers: STT/TTS factories + per-reply voice switching
+# --------------------------------------------------------------------------
+
+class VoiceControl:
+    """Per-reply TTS voice switching, provider-specific under the hood.
+
+    Each plugin spells its update_options differently (Cartesia: voice=,
+    ElevenLabs: voice_id=, Azure: voice=), so the agent talks to this thin
+    adapter instead of plugin-specific kwargs. Adding a provider is one
+    factory branch plus its voice kwarg name.
+    """
+
+    def __init__(self, tts: tts_api.TTS, voice_kwarg: str):
+        self._tts = tts
+        self._voice_kwarg = voice_kwarg
+
+    def set_voice(self, voice_id: str, language: str) -> None:
+        self._tts.update_options(**{self._voice_kwarg: voice_id}, language=language)
+
+
+@dataclasses.dataclass(frozen=True)
+class TtsSetup:
+    """Everything the agent needs from the selected TTS provider."""
+    tts: tts_api.TTS
+    voices: VoiceControl
+    voice_en: str
+    voice_ur: str
+
+
+def build_stt(cfg: Config) -> stt_api.STT:
+    """Construct the configured STT provider.
+
+    The plugin modules are imported at module top level (livekit-agents
+    requires plugin registration on the main thread); this factory only
+    decides *which* provider to construct. An unknown provider name is a
+    ConfigError, not an ImportError.
+    """
+    if cfg.stt_provider == "assemblyai":
+        return assemblyai.STT(
+            api_key=cfg.assemblyai_api_key,
+            language_codes=["en", "ur"],  # steer auto-detection to our two languages
+            # Bias the decoder toward VoxTicket vocabulary (brand name, OTP,
+            # support verbs). Helps most where the model is weakest (Urdu).
+            keyterms_prompt=list(cfg.assemblyai_keyterms),
+        )
+    if cfg.stt_provider == "elevenlabs":
+        return elevenlabs.STT(
+            model=cfg.elevenlabs_stt_model,
+            api_key=cfg.elevenlabs_api_key,
+            # Primary language hint plus secondary languages: keeps English
+            # primary while still hearing Urdu. include_language_detection
+            # reports the language actually heard on each transcript.
+            language_code=cfg.elevenlabs_stt_language,
+            secondary_languages=list(cfg.elevenlabs_stt_secondary_languages),
+            include_language_detection=True,
+        )
+    raise ConfigError(f"unknown STT provider {cfg.stt_provider!r} (expected one of {list(STT_PROVIDERS)})")
+
+
+def build_tts(cfg: Config, tokenizer: SentenceTokenizer) -> TtsSetup:
+    """Construct the configured TTS provider plus its voice-switch adapter.
+
+    The Urdu-aware sentence tokenizer is passed where the plugin accepts one
+    (Cartesia: tokenizer=, ElevenLabs: word_tokenizer=). Azure's plugin has
+    no tokenizer hook, so it synthesizes whole segments - correct audio,
+    just less streaming granularity on long Urdu replies.
+    """
+    if cfg.tts_provider == "cartesia":
+        tts = cartesia.TTS(
+            api_key=cfg.cartesia_api_key,
+            model=cfg.cartesia_model,
+            language="en",  # per-reply override via VoiceControl
+            voice=cfg.cartesia_voice_en,
+            tokenizer=tokenizer,
+        )
+        return TtsSetup(tts, VoiceControl(tts, "voice"), cfg.cartesia_voice_en, cfg.cartesia_voice_ur)
+    if cfg.tts_provider == "elevenlabs":
+        tts = elevenlabs.TTS(
+            api_key=cfg.elevenlabs_api_key,
+            model=cfg.elevenlabs_tts_model,
+            voice_id=cfg.elevenlabs_voice_en,
+            language="en",  # per-reply override via VoiceControl
+            word_tokenizer=tokenizer,
+        )
+        return TtsSetup(tts, VoiceControl(tts, "voice_id"), cfg.elevenlabs_voice_en, cfg.elevenlabs_voice_ur)
+    if cfg.tts_provider == "azure":
+        tts = azure.TTS(
+            speech_key=cfg.azure_speech_key,
+            speech_region=cfg.azure_speech_region,
+            voice=cfg.azure_voice_en,
+            language="en",  # per-reply override via VoiceControl
+        )
+        return TtsSetup(tts, VoiceControl(tts, "voice"), cfg.azure_voice_en, cfg.azure_voice_ur)
+    raise ConfigError(f"unknown TTS provider {cfg.tts_provider!r} (expected one of {list(TTS_PROVIDERS)})")
+
+
+# --------------------------------------------------------------------------
+# Agent: Java brain as the "LLM", TTS voice picked per reply
 # --------------------------------------------------------------------------
 
 class _PlaceholderLLM(llm.LLM):
@@ -328,12 +517,14 @@ class _PlaceholderLLM(llm.LLM):
 
 class VoxTicketAgent(Agent):
     def __init__(self, *, brain: VoxTicketBrain, session_id: str,
-                 tts: cartesia.TTS, voice_en: str, voice_ur: str, greeting: str):
+                 tts: tts_api.TTS, voices: VoiceControl,
+                 voice_en: str, voice_ur: str, greeting: str):
         # instructions are unused (no LLM provider) but the base class takes them.
         super().__init__(instructions="You are the voice interface for VoxTicket customer support.")
         self._brain = brain
         self._session_id = session_id
         self._tts = tts
+        self._voices = voices
         self._voice_en = voice_en
         self._voice_ur = voice_ur
         self._greeting = greeting
@@ -402,15 +593,15 @@ class VoxTicketAgent(Agent):
     async def tts_node(self, text, model_settings):
         """Apply the voice stashed by llm_node, then run the default node.
 
-        If the Urdu voice fails to synthesize (e.g. CARTESIA_VOICE_UR is not
-        a voice that supports Urdu, Cartesia returns zero audio frames),
-        fall back to the English voice once instead of leaving the caller
-        in silence. The warning names the culprit so the misconfiguration
-        still gets fixed.
+        If the non-English voice fails to synthesize (e.g. CARTESIA_VOICE_UR
+        is not a voice that supports Urdu, Cartesia returns zero audio
+        frames), fall back to the English voice once instead of leaving the
+        caller in silence. The warning names the culprit so the
+        misconfiguration still gets fixed.
         """
         voice_id, language = self._next_voice or (self._voice_en, "en")
         self._next_voice = None
-        self._tts.update_options(voice=voice_id, language=language)
+        self._voices.set_voice(voice_id, language)
         logger.info("tts_node: synthesizing with voice_id=%s language=%s", voice_id, language)
         try:
             async for frame in Agent.default.tts_node(self, text, model_settings):
@@ -419,10 +610,10 @@ class VoxTicketAgent(Agent):
             if language != "ur":
                 raise
             logger.warning(
-                "Urdu TTS voice %r failed (%s); falling back to English voice",
+                "Non-English TTS voice %r failed (%s); falling back to English voice",
                 voice_id, exc,
             )
-            self._tts.update_options(voice=self._voice_en, language="en")
+            self._voices.set_voice(self._voice_en, "en")
             async for frame in Agent.default.tts_node(self, text, model_settings):
                 yield frame
 
@@ -438,37 +629,29 @@ server = AgentServer()
 async def entrypoint(ctx: agents.JobContext):
     cfg = load_config()
     logging.basicConfig(level=cfg.log_level.upper())
+    logger.info("providers: stt=%s tts=%s", cfg.stt_provider, cfg.tts_provider)
 
     brain = VoxTicketBrain(cfg.voxticket_turn_url, cfg.brain_timeout_s,
                            stream_url=cfg.voxticket_turn_stream_url)
-    tts = cartesia.TTS(
-        api_key=cfg.cartesia_api_key,
-        model=cfg.cartesia_model,
-        language="en",  # per-reply override in tts_node
-        voice=cfg.cartesia_voice_en,
-        # Urdu-aware sentence chunking: the stock tokenizer doesn't split on
-        # ۔/؟, which would delay all Urdu audio until the full reply arrives.
-        tokenizer=UrduAwareSentenceTokenizer(),
-    )
+    # Urdu-aware sentence chunking: the stock tokenizers don't split on
+    # ۔/؟, which would delay all Urdu audio until the full reply arrives.
+    # Passed to providers that accept a tokenizer hook (Cartesia,
+    # ElevenLabs); Azure synthesizes whole segments instead.
+    tts_setup = build_tts(cfg, UrduAwareSentenceTokenizer())
     agent = VoxTicketAgent(
         brain=brain,
         session_id=ctx.room.name,  # room name == VoxTicket conversation session
-        tts=tts,
-        voice_en=cfg.cartesia_voice_en,
-        voice_ur=cfg.cartesia_voice_ur,
+        tts=tts_setup.tts,
+        voices=tts_setup.voices,
+        voice_en=tts_setup.voice_en,
+        voice_ur=tts_setup.voice_ur,
         greeting=cfg.greeting,
     )
 
     session = AgentSession(
-        stt=assemblyai.STT(
-            api_key=cfg.assemblyai_api_key,
-            language_codes=["en", "ur"],  # steer auto-detection to our two languages
-            # Bias the decoder toward VoxTicket vocabulary (brand name, OTP,
-            # support verbs). Helps most where the model is weakest (Urdu).
-            keyterms_prompt=list(cfg.assemblyai_keyterms),
-        ),
+        stt=build_stt(cfg),
         vad=silero.VAD.load(),
-        tts=tts,
+        tts=tts_setup.tts,
         # Placeholder LLM: non-None is REQUIRED, otherwise the pipeline
         # silently skips reply generation ("skip response if no llm is set").
         # The real brain is VoxTicketAgent.llm_node -> Java backend.

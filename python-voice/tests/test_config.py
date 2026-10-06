@@ -38,6 +38,32 @@ def test_each_missing_required_var_is_named():
         assert missing in str(exc_info.value), f"{missing} not named in error"
 
 
+def test_soxr_single_threaded_by_default_on_import():
+    # Windows: livekit_ffi.dll's soxr resampler crashes with
+    # "Assertion failed: LSX_FFT_BR_ == NULL" on multi-threaded resampling.
+    # Importing agent must ensure the workaround env var exists (an explicit
+    # user value is respected via setdefault).
+    import os
+    import agent  # noqa: F401  (imported for its side effect)
+    assert "SOXR_MAX_THREADS" in os.environ
+
+
+def test_garbage_brain_timeout_raises_config_error_not_value_error():
+    from agent import ConfigError, load_config
+    env = {
+        "LIVEKIT_URL": "wss://x", "LIVEKIT_API_KEY": "k", "LIVEKIT_API_SECRET": "s",
+        "ASSEMBLYAI_API_KEY": "a", "CARTESIA_API_KEY": "c",
+        "CARTESIA_VOICE_EN": "ve", "CARTESIA_VOICE_UR": "vu",
+        "BRAIN_TIMEOUT_S": "not-a-number",
+    }
+    try:
+        load_config(env)
+    except ConfigError as exc:
+        assert "BRAIN_TIMEOUT_S" in str(exc)
+    else:
+        raise AssertionError("expected ConfigError")
+
+
 def test_blank_value_counts_as_missing():
     env = dict(FULL_ENV, CARTESIA_API_KEY="   ")
     with pytest.raises(ConfigError) as exc_info:

@@ -39,11 +39,22 @@ class FakeTTS:
         self.options.append((voice, language))
 
 
+class FakeVoices:
+    """Test double for agent.VoiceControl: records set_voice calls."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, str]] = []
+
+    def set_voice(self, voice_id: str, language: str) -> None:
+        self.calls.append((voice_id, language))
+
+
 def make_agent(reply="ok", error=None, chunks=None) -> VoxTicketAgent:
     return VoxTicketAgent(
         brain=FakeBrain(reply, error, chunks),
         session_id="room-7",
         tts=FakeTTS(),
+        voices=FakeVoices(),
         voice_en="voice-en",
         voice_ur="voice-ur",
         greeting="hi",
@@ -129,6 +140,17 @@ async def test_llm_node_locks_voice_from_first_chunk():
 
 
 @pytest.mark.asyncio
+async def test_llm_node_locks_urdu_voice_for_devanagari_reply(caplog):
+    # AssemblyAI detects spoken Urdu/Hindi as "hi" and transcribes in
+    # Devanagari; that must still lock the Urdu voice, not English.
+    agent = make_agent(chunks=["क्या आप बता सकते हैं?"])
+    with caplog.at_level(logging.INFO, logger="voxticket-voice"):
+        await _drain(agent.llm_node(user_ctx("salam"), [], None))
+    assert agent._next_voice == ("voice-ur", "ur")
+    assert "TTS voice locked voice_id=voice-ur language=ur" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_llm_node_logs_locked_voice_and_language(caplog):
     agent = make_agent(chunks=["جی بالکل۔ مدد کرتا ہوں۔"])
     with caplog.at_level(logging.INFO, logger="voxticket-voice"):
@@ -183,8 +205,8 @@ async def test_tts_node_falls_back_to_english_when_urdu_voice_fails(monkeypatch,
 
     assert frames == ["frame"]
     assert attempts["n"] == 2
-    # first the Urdu voice, then the English fallback
-    assert agent._tts.options == [("voice-ur", "ur"), ("voice-en", "en")]
+    # first the Urdu voice, then the English fallback (via VoiceControl)
+    assert agent._voices.calls == [("voice-ur", "ur"), ("voice-en", "en")]
     assert "falling back to English voice" in caplog.text
 
 
@@ -204,4 +226,4 @@ async def test_tts_node_does_not_fallback_for_english_voice(monkeypatch):
     agent._next_voice = ("voice-en", "en")
     with pytest.raises(APIError):
         [f async for f in agent.tts_node("hello", None)]
-    assert agent._tts.options == [("voice-en", "en")]
+    assert agent._voices.calls == [("voice-en", "en")]
