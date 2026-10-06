@@ -1,8 +1,0 @@
-{
-  "selectedSimpleMargin" : 0.01135858377758675,
-  "complexMarginKeptAt" : 0.02,
-  "complexMarginNote" : "complexMargin only renames TIER_2 reasons (SEMANTIC_COMPLEX vs SEMANTIC_AMBIGUOUS); not identifiable from binary tier labels, kept at 0.02",
-  "selectionObjective" : "maximize balanced accuracy; tie-breaks: lower under-routing, higher macro-F1, lower TIER_2 selection rate",
-  "calibratedOn" : "VALIDATION",
-  "candidatesConsidered" : 43
-}
