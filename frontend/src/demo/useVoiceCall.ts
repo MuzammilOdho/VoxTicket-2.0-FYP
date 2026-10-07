@@ -8,9 +8,15 @@
  *   - speaking: 'you' | 'agent' | null via ActiveSpeakersChanged
  *   - elapsedSec: live call timer
  *
- *  Flow: GET /api/v1/voice/token?room=.. -> connect -> publish mic ->
+ *  Flow: GET /api/v1/voice/token?room=..[&identity=..] -> connect -> publish mic ->
  *  the Python voice agent (joined to the same LiveKit server) handles the
  *  call; agent audio plays through a hidden <audio> element.
+ *
+ *  Identity: the demo passes the backend-assigned customer's E.164 phone as
+ *  the LiveKit participant identity. The worker reads it back from the room
+ *  and forwards it as customerPhone on every voice turn, so voice and chat
+ *  resolve the same customer. Without it the call still works, but the
+ *  turns are anonymous (the pre-identity-sync behavior).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Participant, Room } from 'livekit-client';
@@ -68,7 +74,7 @@ export function useVoiceCall() {
     });
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (phone?: string) => {
     setState('mic');
     setDetail(null);
     try {
@@ -80,7 +86,13 @@ export function useVoiceCall() {
       // livekit-client stays out of the initial bundle — loaded on first call.
       const { Room: RoomCtor, RoomEvent, Track } = await import('livekit-client');
       const roomName = `demo-${Date.now().toString(36)}`;
-      const tres = await fetch(`/api/v1/voice/token?room=${encodeURIComponent(roomName)}`);
+      // Identity = the backend-assigned customer's phone: minted into the
+      // LiveKit JWT by our own /voice/token endpoint, read back by the
+      // worker and forwarded as customerPhone on every voice turn.
+      const tokenUrl =
+        `/api/v1/voice/token?room=${encodeURIComponent(roomName)}` +
+        (phone?.trim() ? `&identity=${encodeURIComponent(phone.trim())}` : '');
+      const tres = await fetch(tokenUrl);
       if (!tres.ok) {
         throw new Error(`Token request failed (${tres.status}). Is the backend running with the dev profile?`);
       }

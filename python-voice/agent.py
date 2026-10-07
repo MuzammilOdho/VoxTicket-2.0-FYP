@@ -352,6 +352,15 @@ class BrainError(Exception):
     """The VoxTicket Java brain could not produce a reply."""
 
 
+# HTTP 429 ("session busy") from the Java brain means the previous
+# (barge-in-aborted) turn is still unwinding and holds the session lock;
+# the new turn retries rather than speaking an apology to the caller.
+# Total worst-case added latency: 2 retries x 0.5s = 1s, on top of the
+# Java-side 2s lock-wait budget.
+_BRAIN_429_MAX_ATTEMPTS = 3  # total POST attempts, including the first
+_BRAIN_429_RETRY_DELAY_S = 0.5
+
+
 class VoxTicketBrain:
     """Thin async client for the VoxTicket Java brain.
 
@@ -375,13 +384,19 @@ class VoxTicketBrain:
             timeout=httpx.Timeout(60.0, connect=10.0))
 
     async def turn(self, session_id: str, text: str,
-                   *, traceparent: str | None = None) -> str:
+                   *, traceparent: str | None = None,
+                   customer_phone: str | None = None) -> str:
         """Blocking turn. traceparent is a best-effort W3C correlation header;
-        a missing/invalid value never fails the call (headers=None)."""
+        a missing/invalid value never fails the call (headers=None).
+        customer_phone is the caller's backend-minted identity (E.164), read
+        back from the LiveKit room; omitted when unknown (anonymous turn)."""
         headers = {"traceparent": traceparent} if traceparent else None
+        payload = {"sessionId": session_id, "message": text}
+        if customer_phone:
+            payload["customerPhone"] = customer_phone
         try:
             resp = await self._client.post(
-                self._turn_url, json={"sessionId": session_id, "message": text},
+                self._turn_url, json=payload,
                 headers=headers,
             )
         except httpx.HTTPError as exc:
@@ -398,52 +413,75 @@ class VoxTicketBrain:
         return reply
 
     async def turn_stream(self, session_id: str, text: str,
-                          *, traceparent: str | None = None) -> AsyncIterator[str]:
+                          *, traceparent: str | None = None,
+                          customer_phone: str | None = None) -> AsyncIterator[str]:
         """Yield reply deltas from the SSE stream endpoint.
 
         Falls back to the blocking endpoint (yielded as one chunk) when the
-        Java side predates the stream endpoint (404/405). Raises BrainError
-        on failure; cancelling the consumer (barge-in) closes the stream,
-        which lets the Java side abort the turn and release its session lock.
+        Java side predates the stream endpoint (404/405). Retries up to
+        _BRAIN_429_MAX_ATTEMPTS times on HTTP 429 (session busy: the previous
+        barge-in-aborted turn is still unwinding on the Java side). Raises
+        BrainError on other failures; cancelling the consumer (barge-in)
+        closes the stream, which lets the Java side abort the turn and
+        release its session lock.
 
         traceparent is forwarded on both the stream and the fallback call so
-        the Java side can correlate the whole turn.
+        the Java side can correlate the whole turn. customer_phone (the
+        caller's backend-minted E.164 identity) is forwarded the same way;
+        omitted when unknown.
         """
         url = self._stream_url
         headers = {"traceparent": traceparent} if traceparent else None
-        try:
-            async with self._stream_client.stream(
-                    "POST", url, json={"sessionId": session_id, "message": text},
-                    headers=headers,
-            ) as resp:
-                if resp.status_code in (404, 405):
-                    logger.info("brain stream endpoint unavailable (HTTP %s); falling back to blocking turn",
-                                resp.status_code)
-                    yield await self.turn(session_id, text, traceparent=traceparent)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                payload = {"sessionId": session_id, "message": text}
+                if customer_phone:
+                    payload["customerPhone"] = customer_phone
+                async with self._stream_client.stream(
+                        "POST", url, json=payload,
+                        headers=headers,
+                ) as resp:
+                    if resp.status_code in (404, 405):
+                        logger.info("brain stream endpoint unavailable (HTTP %s); falling back to blocking turn",
+                                    resp.status_code)
+                        yield await self.turn(session_id, text, traceparent=traceparent,
+                                                customer_phone=customer_phone)
+                        return
+                    if resp.status_code == 429 and attempt < _BRAIN_429_MAX_ATTEMPTS:
+                        # The previous turn still holds the Java session lock.
+                        # Retry the turn instead of failing: the abort is
+                        # landing and the lock is about to release.
+                        await resp.aread()  # release the connection
+                        logger.info("brain session busy (HTTP 429); retrying turn in %.1fs (attempt %d of %d)",
+                                    _BRAIN_429_RETRY_DELAY_S, attempt + 1, _BRAIN_429_MAX_ATTEMPTS)
+                        await asyncio.sleep(_BRAIN_429_RETRY_DELAY_S)
+                        continue
+                    if resp.status_code != 200:
+                        body = await resp.aread()
+                        raise BrainError(f"brain stream returned HTTP {resp.status_code}: {body[:200]!r}")
+                    async for line in resp.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[len("data:"):].strip()
+                        if not payload:
+                            continue
+                        try:
+                            event = json.loads(payload)
+                        except ValueError:
+                            continue
+                        if not isinstance(event, dict):
+                            continue
+                        if event.get("done"):
+                            break
+                        delta = event.get("delta")
+                        if delta:
+                            yield delta
                     return
-                if resp.status_code != 200:
-                    body = await resp.aread()
-                    raise BrainError(f"brain stream returned HTTP {resp.status_code}: {body[:200]!r}")
-                async for line in resp.aiter_lines():
-                    line = line.strip()
-                    if not line.startswith("data:"):
-                        continue
-                    payload = line[len("data:"):].strip()
-                    if not payload:
-                        continue
-                    try:
-                        event = json.loads(payload)
-                    except ValueError:
-                        continue
-                    if not isinstance(event, dict):
-                        continue
-                    if event.get("done"):
-                        break
-                    delta = event.get("delta")
-                    if delta:
-                        yield delta
-        except httpx.HTTPError as exc:
-            raise BrainError(f"could not stream from VoxTicket brain at {url}: {exc}") from exc
+            except httpx.HTTPError as exc:
+                raise BrainError(f"could not stream from VoxTicket brain at {url}: {exc}") from exc
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -960,6 +998,7 @@ class VoxTicketAgent(Agent):
         self._tts_provider = tts_provider
         self._tts_model = tts_model
         self._turn_seq = 0  # worker-local turn numbers (Java's turnNumber is separate)
+        self._caller_phone_cache: str | None = None  # resolved lazily from the LiveKit room (see below)
         self._barge_in_count = 0
         self._pending_turn: TurnTelemetry | None = None  # stashed for tts_node
 
@@ -967,6 +1006,30 @@ class VoxTicketAgent(Agent):
     def barge_in_count(self) -> int:
         """Turns cancelled by caller barge-in during this call."""
         return self._barge_in_count
+
+    def _caller_phone(self) -> str | None:
+        """The caller's identity for the Java brain: the E.164 phone the demo
+        frontend passed as `identity` to /api/v1/voice/token, minted into the
+        LiveKit JWT by our own backend and read back here from the room's
+        remote participants. The caller never types it.
+
+        Resolved lazily and cached: the caller may join after the worker.
+        Returns None when no E.164 identity is present (anonymous turn, e.g.
+        a non-demo caller) - the Java side treats a missing customerPhone
+        exactly like today's anonymous voice turns."""
+        if self._caller_phone_cache is not None:
+            return self._caller_phone_cache
+        try:
+            participants = self.session.room_io.room.remote_participants
+        except Exception:
+            return None
+        for participant in participants.values():
+            identity = (participant.identity or "").strip()
+            if re.fullmatch(r"\+\d{7,15}", identity):
+                self._caller_phone_cache = identity
+                logger.info("resolved caller phone from LiveKit room (identity=%s)", identity)
+                return identity
+        return None
 
     def _record_turn_timing(self, timing: TurnTelemetry) -> None:
         """Append the turn record to the buffer. Best-effort: telemetry must
@@ -1052,7 +1115,8 @@ class VoxTicketAgent(Agent):
         try:
             try:
                 async for delta in self._brain.turn_stream(
-                        self._session_id, user_text, traceparent=traceparent):
+                        self._session_id, user_text, traceparent=traceparent,
+                        customer_phone=self._caller_phone()):
                     if timing.t_brain_first_delta is None and delta and delta.strip():
                         # Java brain TTFT: first text out of the SSE stream.
                         timing.t_brain_first_delta = time.perf_counter()

@@ -310,7 +310,7 @@ function Thread({ customer, messages, busy, onSend, onReset, voice, voiceCollaps
         )}
         {voice.state === 'error' && (
           <div className="mx-auto w-full max-w-md">
-            <ErrorBox message={voice.detail ?? 'Could not start the voice call'} onRetry={voice.start} />
+            <ErrorBox message={voice.detail ?? 'Could not start the voice call'} onRetry={() => voice.start(customer.phone)} />
             <div className="mt-3 text-center">
               <button onClick={voice.dismissError} className="text-[13px] text-ash transition-colors hover:text-white">
                 Dismiss
@@ -343,7 +343,7 @@ function Thread({ customer, messages, busy, onSend, onReset, voice, voiceCollaps
               if (voice.active) voice.hangup();
               else {
                 setVoiceCollapsed(false);
-                voice.start();
+                voice.start(customer.phone);
               }
             }}
             title={micLabel}

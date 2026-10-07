@@ -27,8 +27,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 /**
  * The voice brain endpoint. The LiveKit worker POSTs one STT transcript per
  * caller turn; this builds the identical {@link UserTurn} the chat controller
- * builds - but on {@link Channel#PHONE} and with no caller-asserted phone -
- * and runs it through the shared {@link ConversationRuntime#processTurn}.
+ * builds - but on {@link Channel#PHONE} and with the caller identity the
+ * worker read back from the LiveKit room (minted by our own token endpoint,
+ * never typed by the caller) - and runs it through the shared
+ * {@link ConversationRuntime#processTurn}.
  *
  * <p>Intentionally thin, like ChatController: no business logic lives here.
  */
@@ -50,7 +52,7 @@ public class VoiceTurnController {
     @PostMapping("/turn")
     public ChatResponse turn(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
         UserTurn turn = new UserTurn(
-                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), turnMetadata(httpRequest, request.sessionId()));
+                request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId()));
         return ChatResponse.from(conversationRuntime.processTurn(turn));
     }
 
@@ -74,7 +76,7 @@ public class VoiceTurnController {
     public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
         SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
         UserTurn turn = new UserTurn(
-                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), turnMetadata(httpRequest, request.sessionId()));
+                request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId()));
         try {
             conversationRuntime.processTurnStream(turn, delta -> {
                 try {
