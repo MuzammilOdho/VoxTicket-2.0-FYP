@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useConversations, type ConversationFilters } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { FilterBar, SelectInput, TextInput } from '../components/Filters';
 import { DataTable } from '../components/Table';
@@ -40,7 +40,7 @@ export function Conversations() {
         <TextInput label="Search" placeholder="session / customer" value={draft.q} onChange={(e) => setDraft({ ...draft, q: e.target.value })} />
         <TextInput label="From" type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
         <TextInput label="To" type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-        <button onClick={apply} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
+        <button onClick={apply} className="rounded-none bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
           Apply
         </button>
       </FilterBar>
@@ -56,14 +56,14 @@ export function Conversations() {
                   key: 'sessionId',
                   header: 'Session',
                   render: (r) => (
-                    <Link to={`/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                    <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline">
                       {r.sessionId}
                     </Link>
                   ),
                 },
                 { key: 'channel', header: 'Channel', render: (r) => <StatusBadge value={r.channel} /> },
                 { key: 'status', header: 'Status', render: (r) => <StatusBadge value={r.status} /> },
-                { key: 'lastTurnOutcome', header: 'Last outcome', render: (r) => r.lastTurnOutcome ? <StatusBadge value={r.lastTurnOutcome} /> : <span className="text-slate-400">—</span> },
+                { key: 'lastTurnOutcome', header: 'Last outcome', render: (r) => r.lastTurnOutcome ? <StatusBadge value={r.lastTurnOutcome} /> : <span className="text-ink-mute">—</span> },
                 { key: 'turnCount', header: 'Turns' },
                 { key: 'escalated', header: 'Escalated', render: (r) => <BoolBadge value={r.escalated} /> },
                 { key: 'startedAt', header: 'Started', render: (r) => <span className="whitespace-nowrap">{fmtTime(r.startedAt)}</span> },

@@ -10,7 +10,7 @@ export interface Column<T> {
 export function getCell<T>(row: T, key: string): ReactNode {
   if (typeof row === 'object' && row !== null && key in row) {
     const v = (row as Record<string, unknown>)[key];
-    if (v === null || v === undefined) return <span className="text-slate-400">n/a</span>;
+    if (v === null || v === undefined) return <span className="text-ink-mute">n/a</span>;
     if (typeof v === 'boolean') return v ? 'yes' : 'no';
     return String(v);
   }
@@ -38,22 +38,22 @@ export function DataTable<T>({
 }) {
   return (
     <div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
+      <div className="overflow-x-auto border border-line bg-raised">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-line">
               {columns.map((c) => (
-                <th key={c.key} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <th key={c.key} className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-mute">
                   {c.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {rows.map((row, i) => (
-              <tr key={rowKey(row, i)} className="hover:bg-slate-50">
+              <tr key={rowKey(row, i)} className="border-b border-line-soft last:border-0 hover:bg-raised-2">
                 {columns.map((c) => (
-                  <td key={c.key} className={`px-3 py-2 align-top text-slate-700 ${c.className ?? ''}`}>
+                  <td key={c.key} className={`px-3 py-2 align-top text-ink-dim ${c.className ?? ''}`}>
                     {c.render ? c.render(row) : getCell(row, c.key)}
                   </td>
                 ))}
@@ -63,30 +63,30 @@ export function DataTable<T>({
         </table>
       </div>
       {onPage !== undefined && totalPages !== undefined && (
-        <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
-          <span>
+        <div className="mt-3 flex items-center justify-between text-sm text-ink-mute">
+          <span className="font-mono text-xs">
             {totalElements !== undefined && size !== undefined && (
               <>
-                Showing {Math.min((page ?? 0) * size + 1, totalElements)}-
-                {Math.min(((page ?? 0) + 1) * size, totalElements)} of {totalElements.toLocaleString()}
+                {Math.min((page ?? 0) * size + 1, totalElements)}-
+                {Math.min(((page ?? 0) + 1) * size, totalElements)} / {totalElements.toLocaleString()}
               </>
             )}
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
               disabled={(page ?? 0) <= 0}
               onClick={() => onPage((page ?? 0) - 1)}
-              className="rounded-lg border border-slate-300 px-3 py-1 disabled:opacity-40"
+              className="border border-line px-3 py-1 text-ink-dim hover:border-ink-mute hover:text-ink disabled:opacity-40"
             >
               Prev
             </button>
-            <span className="px-2 py-1">
+            <span className="px-2 py-1 font-mono text-xs">
               {(page ?? 0) + 1} / {Math.max(1, totalPages)}
             </span>
             <button
               disabled={(page ?? 0) + 1 >= totalPages}
               onClick={() => onPage((page ?? 0) + 1)}
-              className="rounded-lg border border-slate-300 px-3 py-1 disabled:opacity-40"
+              className="border border-line px-3 py-1 text-ink-dim hover:border-ink-mute hover:text-ink disabled:opacity-40"
             >
               Next
             </button>

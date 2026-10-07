@@ -19,26 +19,26 @@ export function Login() {
     setBusy(false);
     if (ok) {
       setAuth(base64);
-      navigate('/', { replace: true });
+      navigate('/admin', { replace: true });
     } else {
       setError('Login failed - check credentials and that the backend is reachable.');
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100">
-      <form onSubmit={submit} className="w-80 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-1 text-lg font-bold text-slate-900">VoxTicket Admin</div>
-        <p className="mb-4 text-xs text-slate-500">Sign in with an admin account (HTTP Basic).</p>
+    <div className="flex min-h-screen items-center justify-center bg-canvas">
+      <form onSubmit={submit} className="w-80 rounded-none border border-line bg-raised p-6 shadow-none">
+        <div className="mb-1 text-lg font-bold text-ink">VoxTicket Admin</div>
+        <p className="mb-4 text-xs text-ink-mute">Sign in with an admin account (HTTP Basic).</p>
         <div className="space-y-3">
           <TextInput label="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
           <TextInput label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </div>
-        {error && <div className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{error}</div>}
+        {error && <div className="mt-3 border border-bad/40 bg-bad/5 p-2 text-xs text-bad">{error}</div>}
         <button
           type="submit"
           disabled={busy || !username || !password}
-          className="mt-4 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="mt-4 w-full bg-signal px-4 py-2 text-sm font-medium text-[#101010] hover:bg-[#ff6f38] disabled:opacity-50"
         >
           {busy ? 'Signing in...' : 'Sign in'}
         </button>

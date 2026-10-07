@@ -30,8 +30,8 @@ export class ApiError extends Error {
 function goLogin(): void {
   clearAuth();
   // HashRouter: keep the app shell, just switch the route.
-  if (!window.location.hash.startsWith('#/login')) {
-    window.location.hash = '#/login';
+  if (!window.location.hash.startsWith('#/admin/login')) {
+    window.location.hash = '#/admin/login';
   }
 }
 

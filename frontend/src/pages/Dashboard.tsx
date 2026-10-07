@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSummary } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { KpiCard, fmtInt, fmtPct, fmtUsd } from '../components/KpiCard';
 import { Latency } from '../components/Latency';
@@ -40,7 +40,7 @@ export function Dashboard() {
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
-                <h2 className="mb-2 text-sm font-semibold text-slate-700">Tool success / failure</h2>
+                <h2 className="mb-2 text-sm font-semibold text-ink-dim">Tool success / failure</h2>
                 {s.tools.length === 0 ? (
                   <EmptyState title="No tool calls recorded" />
                 ) : (
@@ -57,10 +57,10 @@ export function Dashboard() {
                 )}
               </div>
               <div>
-                <h2 className="mb-2 text-sm font-semibold text-slate-700">
-                  RAG <span className="font-normal text-slate-400">· {fmtInt(s.rag.searches)} searches · hit rate {fmtPct(s.rag.cacheHitRate)} · mean <Latency ms={s.rag.meanMs} /></span>
+                <h2 className="mb-2 text-sm font-semibold text-ink-dim">
+                  RAG <span className="font-normal text-ink-mute">· {fmtInt(s.rag.searches)} searches · hit rate {fmtPct(s.rag.cacheHitRate)} · mean <Latency ms={s.rag.meanMs} /></span>
                 </h2>
-                <h2 className="mb-2 mt-4 text-sm font-semibold text-slate-700">Recent errors</h2>
+                <h2 className="mb-2 mt-4 text-sm font-semibold text-ink-dim">Recent errors</h2>
                 {s.recentErrors.length === 0 ? (
                   <EmptyState title="No recent errors" hint="Failed/aborted turns will appear here." />
                 ) : (
@@ -71,14 +71,14 @@ export function Dashboard() {
                         key: 'sessionId',
                         header: 'Session',
                         render: (r) => (
-                          <Link to={`/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                          <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline">
                             {r.sessionId.slice(0, 18)}…
                           </Link>
                         ),
                       },
                       { key: 'turnNumber', header: 'Turn' },
                       { key: 'outcome', header: 'Outcome', render: (r) => <StatusBadge value={r.outcome} /> },
-                      { key: 'errorCode', header: 'Error', render: (r) => r.errorCode ?? <span className="text-slate-400">—</span> },
+                      { key: 'errorCode', header: 'Error', render: (r) => r.errorCode ?? <span className="text-ink-mute">—</span> },
                     ]}
                     rows={s.recentErrors}
                     rowKey={(r) => r.traceId}

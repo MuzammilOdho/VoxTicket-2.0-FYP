@@ -112,9 +112,11 @@ public class AdminApiController {
     // ---- Turn decision trace ----
 
     @GetMapping("/turns/{traceId}")
-    public ResponseEntity<TurnTraceDto> turnTrace(@PathVariable String traceId) {
+    public ResponseEntity<TurnTraceDto> turnTrace(
+            @PathVariable String traceId,
+            @RequestParam(required = false) Integer turnNumber) {
         try {
-            return ResponseEntity.ok(turnTraceService.getByTraceId(traceId));
+            return ResponseEntity.ok(turnTraceService.getByTraceId(traceId, turnNumber));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         }

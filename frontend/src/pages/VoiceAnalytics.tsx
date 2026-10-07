@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useVoiceCalls } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { FilterBar, SelectInput } from '../components/Filters';
 import { DataTable } from '../components/Table';
@@ -35,7 +35,7 @@ export function VoiceAnalytics() {
                   key: 'room',
                   header: 'Room / Session',
                   render: (r) => (
-                    <Link to={`/voice/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                    <Link to={`/admin/voice/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline">
                       {r.room}
                     </Link>
                   ),
@@ -43,8 +43,8 @@ export function VoiceAnalytics() {
                 { key: 'outcome', header: 'Outcome', render: (r) => <StatusBadge value={r.outcome} /> },
                 { key: 'turnCount', header: 'Turns', render: (r) => fmtInt(r.turnCount) },
                 { key: 'bargeInCount', header: 'Barge-ins', render: (r) => fmtInt(r.bargeInCount) },
-                { key: 'sttProvider', header: 'STT', render: (r) => r.sttProvider ?? <span className="text-slate-400">—</span> },
-                { key: 'ttsProvider', header: 'TTS', render: (r) => r.ttsProvider ?? <span className="text-slate-400">—</span> },
+                { key: 'sttProvider', header: 'STT', render: (r) => r.sttProvider ?? <span className="text-ink-mute">—</span> },
+                { key: 'ttsProvider', header: 'TTS', render: (r) => r.ttsProvider ?? <span className="text-ink-mute">—</span> },
                 { key: 'startedAt', header: 'Started', render: (r) => <span className="whitespace-nowrap">{fmtTime(r.startedAt)}</span> },
                 { key: 'endedAt', header: 'Ended', render: (r) => <span className="whitespace-nowrap">{fmtTime(r.endedAt)}</span> },
               ]}

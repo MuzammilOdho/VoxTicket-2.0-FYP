@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuditEvents, type AuditFilters } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { FilterBar, SelectInput, TextInput } from '../components/Filters';
 import { DataTable } from '../components/Table';
@@ -39,7 +39,7 @@ export function AuditLog() {
         />
         <TextInput label="From" type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
         <TextInput label="To" type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-        <button onClick={apply} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
+        <button onClick={apply} className="rounded-none bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
           Apply
         </button>
       </FilterBar>
@@ -55,15 +55,15 @@ export function AuditLog() {
                   key: 'sessionId',
                   header: 'Session',
                   render: (r) => (
-                    <Link to={`/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-indigo-600 hover:underline">
+                    <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline">
                       {r.sessionId.slice(0, 20)}…
                     </Link>
                   ),
                 },
-                { key: 'turnNumber', header: 'Turn', render: (r) => r.turnNumber ?? <span className="text-slate-400">—</span> },
+                { key: 'turnNumber', header: 'Turn', render: (r) => r.turnNumber ?? <span className="text-ink-mute">—</span> },
                 { key: 'type', header: 'Type', render: (r) => <StatusBadge value={r.type} /> },
                 { key: 'detail', header: 'Detail', render: (r) => <span className="max-w-md break-words font-mono text-xs">{r.detail ?? '—'}</span>, className: 'max-w-md' },
-                { key: 'traceId', header: 'Trace', render: (r) => <span className="font-mono text-xs text-slate-400">{r.traceId ? r.traceId.slice(0, 12) + '…' : '—'}</span> },
+                { key: 'traceId', header: 'Trace', render: (r) => <span className="font-mono text-xs text-ink-mute">{r.traceId ? r.traceId.slice(0, 12) + '…' : '—'}</span> },
               ]}
               rows={p.content}
               rowKey={(_, i) => `${p.page}-${i}`}

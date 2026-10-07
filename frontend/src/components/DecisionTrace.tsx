@@ -27,21 +27,21 @@ function Node({
           ? 'bg-rose-500'
           : 'bg-slate-300';
   return (
-    <div className="min-w-[10.5rem] flex-1 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="min-w-[10.5rem] flex-1 rounded-none border border-line bg-raised shadow-none">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 p-3 text-left">
         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
         <span className="min-w-0">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</span>
-          <span className="block truncate text-sm font-medium text-slate-800">{headline ?? '—'}</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-mute">{title}</span>
+          <span className="block truncate text-sm font-medium text-ink">{headline ?? '—'}</span>
           {ms !== undefined && (
-            <span className="block text-[11px] text-slate-400">
+            <span className="block text-[11px] text-ink-mute">
               <Latency ms={ms} />
             </span>
           )}
         </span>
-        <span className="ml-auto text-xs text-slate-400">{open ? '▾' : '▸'}</span>
+        <span className="ml-auto text-xs text-ink-mute">{open ? '▾' : '▸'}</span>
       </button>
-      {open && children && <div className="border-t border-slate-100 p-3 text-xs text-slate-600">{children}</div>}
+      {open && children && <div className="border-t border-slate-100 p-3 text-xs text-ink-dim">{children}</div>}
     </div>
   );
 }
@@ -53,13 +53,13 @@ function Arrow() {
 function Field({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-2 py-0.5">
-      <span className="text-slate-400">{k}</span>
-      <span className="text-right font-medium text-slate-700">{v}</span>
+      <span className="text-ink-mute">{k}</span>
+      <span className="text-right font-medium text-ink-dim">{v}</span>
     </div>
   );
 }
 
-const na = <span className="text-slate-400">n/a</span>;
+const na = <span className="text-ink-mute">n/a</span>;
 
 export function DecisionTrace({ trace, voice }: { trace: TurnTrace; voice?: VoiceTurnMetric | null }) {
   const t = trace;
@@ -139,7 +139,7 @@ export function DecisionTrace({ trace, voice }: { trace: TurnTrace; voice?: Voic
       </div>
 
       {voice && (
-        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
+        <div className="mt-3 rounded-none border border-sky-200 bg-sky-50 p-3">
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
             Voice pipeline
             {voice.bargeIn && <StatusBadge value="BARGE_IN" />}

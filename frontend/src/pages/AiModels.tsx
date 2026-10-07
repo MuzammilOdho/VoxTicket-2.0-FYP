@@ -1,5 +1,5 @@
 import { useAiModels, useAiCost } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { KpiCard, fmtInt, fmtUsd } from '../components/KpiCard';
 import { BarChartCard, recordToNameValue } from '../components/Charts';
@@ -28,7 +28,7 @@ export function AiModels() {
         )}
       </QueryState>
 
-      <h2 className="mb-2 mt-6 text-sm font-semibold text-slate-700">Cost by model</h2>
+      <h2 className="mb-2 mt-6 text-sm font-semibold text-ink-dim">Cost by model</h2>
       <QueryState query={cost} emptyTitle="No cost data">
         {(c) =>
           c.perModel.length === 0 ? (

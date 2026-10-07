@@ -1,5 +1,5 @@
 import { useAiRouting } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { QueryState } from '../components/States';
 import { KpiCard } from '../components/KpiCard';
 import { BarChartCard, DonutChartCard, recordToNameValue } from '../components/Charts';

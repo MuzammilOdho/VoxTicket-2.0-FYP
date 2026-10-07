@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { useOperations } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { FilterBar, TextInput } from '../components/Filters';
 import { DataTable } from '../components/Table';
@@ -31,9 +31,9 @@ export function Operations() {
         {TABS.map((t) => (
           <NavLink
             key={t.kind}
-            to={`/operations/${t.kind}`}
+            to={`/admin/operations/${t.kind}`}
             className={({ isActive }) =>
-              `rounded-lg px-3 py-1.5 text-sm ${isActive ? 'bg-indigo-600 font-medium text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`
+              `rounded-none px-3 py-1.5 text-sm ${isActive ? 'bg-signal font-medium text-white' : 'bg-raised text-ink-dim border border-line hover:bg-raised'}`
             }
           >
             {t.label}
@@ -44,7 +44,7 @@ export function Operations() {
         <TextInput label="Search" placeholder="id / number / customer" value={q} onChange={(e) => setQD(e.target.value)} />
         <button
           onClick={() => { setPage(0); setAppliedQ(q || undefined); }}
-          className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-none bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
         >
           Apply
         </button>

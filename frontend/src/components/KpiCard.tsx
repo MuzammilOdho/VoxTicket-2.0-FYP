@@ -2,25 +2,26 @@ export function KpiCard({
   title,
   value,
   sub,
-  accent = 'indigo',
+  accent = 'signal',
 }: {
   title: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
-  accent?: 'indigo' | 'green' | 'amber' | 'red' | 'sky';
+  accent?: 'signal' | 'green' | 'amber' | 'red' | 'sky';
 }) {
-  const ring: Record<string, string> = {
-    indigo: 'border-t-indigo-500',
-    green: 'border-t-emerald-500',
-    amber: 'border-t-amber-500',
-    red: 'border-t-rose-500',
-    sky: 'border-t-sky-500',
+  const bar: Record<string, string> = {
+    signal: 'bg-signal',
+    green: 'bg-ok',
+    amber: 'bg-warn',
+    red: 'bg-bad',
+    sky: 'bg-info',
   };
   return (
-    <div className={`rounded-xl border border-slate-200 border-t-4 bg-white p-4 shadow-sm ${ring[accent]}`}>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-900">{value}</div>
-      {sub !== undefined && <div className="mt-1 text-xs text-slate-500">{sub}</div>}
+    <div className="border border-line bg-raised p-4">
+      <div className={`mb-2 h-0.5 w-8 ${bar[accent]}`} />
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">{title}</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight text-ink">{value}</div>
+      {sub !== undefined && <div className="mt-1 text-xs text-ink-mute">{sub}</div>}
     </div>
   );
 }

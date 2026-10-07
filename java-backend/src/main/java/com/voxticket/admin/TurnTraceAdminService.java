@@ -36,8 +36,23 @@ public class TurnTraceAdminService {
     }
 
     public TurnTraceDto getByTraceId(String traceId) {
-        TurnTraceRecordEntity t = repository.findByTraceId(traceId)
-                .orElseThrow(() -> new IllegalArgumentException("No turn trace found for traceId " + traceId));
+        return getByTraceId(traceId, null);
+    }
+
+    /**
+     * Voice calls share one traceId across all turns, so the turn number
+     * disambiguates; chat turns have unique traceIds and the number is ignored.
+     */
+    public TurnTraceDto getByTraceId(String traceId, Integer turnNumber) {
+        TurnTraceRecordEntity t;
+        if (turnNumber != null) {
+            t = repository.findByTraceIdAndTurnNumber(traceId, turnNumber)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "No turn trace found for traceId " + traceId + " turn " + turnNumber));
+        } else {
+            t = repository.findByTraceId(traceId)
+                    .orElseThrow(() -> new IllegalArgumentException("No turn trace found for traceId " + traceId));
+        }
         return toDto(t);
     }
 

@@ -1,5 +1,5 @@
 import { useEvaluation } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { KpiCard, fmtPct } from '../components/KpiCard';
 import { Latency } from '../components/Latency';
@@ -26,8 +26,8 @@ export function Evaluation() {
                 title="Routing decisions by reason"
                 data={e.routing.map((r) => ({ name: r.reason, value: r.count }))}
               />
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-2 text-sm font-semibold text-slate-700">Latency by tier</div>
+              <div className="rounded-none border border-line bg-raised p-4 shadow-none">
+                <div className="mb-2 text-sm font-semibold text-ink-dim">Latency by tier</div>
                 {e.latencyByTier.length === 0 ? (
                   <EmptyState title="No tier latency data" />
                 ) : (

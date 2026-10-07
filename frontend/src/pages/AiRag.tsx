@@ -1,5 +1,5 @@
 import { useAiRag } from '../api/hooks';
-import { PageHeader } from '../components/Layout';
+import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { QueryState } from '../components/States';
 import { KpiCard, fmtInt, fmtPct } from '../components/KpiCard';
 import { Latency } from '../components/Latency';
@@ -20,7 +20,7 @@ export function AiRag() {
               <KpiCard title="Similarity p95" value={r.similarityP95 !== null ? r.similarityP95.toFixed(3) : 'n/a'} />
               <KpiCard title="Retrieval quality" value={r.similarityP50 !== null && r.similarityP50 >= 0.35 ? 'healthy' : 'check'} accent={r.similarityP50 !== null && r.similarityP50 >= 0.35 ? 'green' : 'amber'} sub="p50 vs 0.35 threshold" />
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
+            <div className="rounded-none border border-line bg-raised p-4 text-sm text-ink-mute shadow-none">
               Similarity percentiles describe the cosine-similarity distribution of retrieved knowledge chunks.
               Low p50 values suggest the knowledge base or the similarity threshold needs attention.
             </div>

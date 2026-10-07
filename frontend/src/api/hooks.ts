@@ -73,10 +73,11 @@ export function useConversationDetail(sessionId: string) {
   });
 }
 
-export function useTurnTrace(traceId: string | null | undefined, enabled: boolean) {
+export function useTurnTrace(traceId: string | null | undefined, enabled: boolean, turnNumber?: number) {
   return useQuery({
-    queryKey: ['turn', traceId],
-    queryFn: () => api.get<TurnTrace>(`${ADMIN}/turns/${encodeURIComponent(traceId as string)}`),
+    queryKey: ['turn', traceId, turnNumber ?? null],
+    queryFn: () => api.get<TurnTrace>(
+      `${ADMIN}/turns/${encodeURIComponent(traceId as string)}${turnNumber != null ? `?turnNumber=${turnNumber}` : ''}`),
     enabled: enabled && !!traceId,
     staleTime: 60_000,
   });
