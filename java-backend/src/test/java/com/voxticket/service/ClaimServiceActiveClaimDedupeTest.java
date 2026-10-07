@@ -49,7 +49,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
  * test needs the setup rows committed so racer threads (each with their own
  * transaction via the service proxy) can see them.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 class ClaimServiceActiveClaimDedupeTest {

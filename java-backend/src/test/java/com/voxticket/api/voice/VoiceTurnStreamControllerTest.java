@@ -17,6 +17,7 @@ import java.util.function.Consumer;
 import com.voxticket.conversation.AssistantTurn;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationRuntime;
+import com.voxticket.conversation.TurnAbortedException;
 import com.voxticket.conversation.UserTurn;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

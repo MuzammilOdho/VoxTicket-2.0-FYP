@@ -17,7 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /** Proves model configuration is genuinely externalized: overriding these properties changes what the app uses without touching any Java code. */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "voxticket.ai.tier1-model=test/tier1-override",

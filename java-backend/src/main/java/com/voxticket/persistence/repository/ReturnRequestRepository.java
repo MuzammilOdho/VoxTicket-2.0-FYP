@@ -1,16 +1,28 @@
 package com.voxticket.persistence.repository;
 
 import com.voxticket.persistence.entity.ReturnRequest;
+import com.voxticket.persistence.entity.enums.ReturnStatus;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ReturnRequestRepository extends JpaRepository<ReturnRequest, UUID> {
+    /**
+     * Admin read path (Phase 12/P4): optional status + return-number
+     * substring filter. Read-only; never used by business logic.
+     */
+    @Query("select r from ReturnRequest r where (:status is null or r.status = :status) "
+            + "and (:q is null or r.returnNumber ilike concat('%', cast(:q as string), '%'))")
+    Page<ReturnRequest> searchAdmin(
+            @Param("status") ReturnStatus status, @Param("q") String q, Pageable pageable);
+
     Optional<ReturnRequest> findByReturnNumber(String returnNumber);
     List<ReturnRequest> findByOrderId(UUID orderId);
 

@@ -17,13 +17,13 @@ class FakeBrain:
         self.chunks = chunks
         self.calls: list[tuple[str, str]] = []
 
-    async def turn(self, session_id: str, text: str) -> str:
+    async def turn(self, session_id: str, text: str, **kwargs) -> str:
         self.calls.append((session_id, text))
         if self.error is not None:
             raise self.error
         return self.reply
 
-    async def turn_stream(self, session_id: str, text: str):
+    async def turn_stream(self, session_id: str, text: str, **kwargs):
         self.calls.append((session_id, text))
         if self.error is not None:
             raise self.error
@@ -165,7 +165,7 @@ async def test_llm_node_no_apology_after_partial_deltas():
         def __init__(self):
             self.calls = []
 
-        async def turn_stream(self, session_id, text):
+        async def turn_stream(self, session_id, text, **kwargs):
             self.calls.append((session_id, text))
             yield "partial "
             raise BrainError("stream died")

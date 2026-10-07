@@ -1,71 +1,78 @@
 package com.voxticket.audit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.MessageRole;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
-import com.voxticket.persistence.repository.ConversationEventRecordRepository;
-import com.voxticket.persistence.repository.ConversationMessageRecordRepository;
-import com.voxticket.persistence.repository.ConversationSessionRecordRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
 
 /**
- * Proves audit writes are best-effort - a broken repository must never break
- * the caller. The audit transaction is programmatic (REQUIRES_NEW) and the
- * try/catch covers the whole transaction including commit, so a persistence
- * failure rolls back only the audit transaction and is swallowed instead of
- * surfacing as an UnexpectedRollbackException or marking the caller's
- * business transaction rollback-only.
+ * P1: proves the audit path is best-effort and non-blocking. A bus that
+ * throws - or a full queue - must never break the caller. Publish failures
+ * are swallowed by the service; overflow is dropped and counted by the bus.
  */
 class ConversationAuditServiceFailureIsolationTest {
 
-    private PlatformTransactionManager txManager;
-    private TransactionStatus txStatus;
-
-    private ConversationAuditService serviceWithFailingSessionRepository() {
-        ConversationSessionRecordRepository sessionRepository = mock(ConversationSessionRecordRepository.class);
-        when(sessionRepository.findBySessionId(any())).thenThrow(new RuntimeException("db down"));
-        txManager = mock(PlatformTransactionManager.class);
-        txStatus = mock(TransactionStatus.class);
-        when(txManager.getTransaction(any(TransactionDefinition.class))).thenReturn(txStatus);
-        return new ConversationAuditService(sessionRepository, mock(ConversationMessageRecordRepository.class),
-                mock(ConversationEventRecordRepository.class), txManager);
+    private static ConversationAuditService serviceWithThrowingBus() {
+        AuditEventBus bus = mock(AuditEventBus.class);
+        doThrow(new RuntimeException("bus exploded")).when(bus).publish(any(AuditEvent.class));
+        return new ConversationAuditService(bus);
     }
 
     @Test
-    void aRepositoryExceptionDuringSessionTouchNeverPropagates() {
-        var service = serviceWithFailingSessionRepository();
+    void aPublishExceptionDuringSessionTouchNeverPropagates() {
+        var service = serviceWithThrowingBus();
 
         assertThatCode(() -> service.recordSessionTouch(ConversationSession.newSession("s1", Channel.CHAT)))
                 .doesNotThrowAnyException();
-        // The audit transaction alone was rolled back - the caller's transaction is untouched.
-        verify(txManager).rollback(txStatus);
     }
 
     @Test
-    void aRepositoryExceptionDuringMessageRecordingNeverPropagates() {
-        var service = serviceWithFailingSessionRepository();
+    void aPublishExceptionDuringMessageRecordingNeverPropagates() {
+        var service = serviceWithThrowingBus();
 
         assertThatCode(() -> service.recordMessage(ConversationSession.newSession("s1", Channel.CHAT), 1, MessageRole.USER, "hi"))
                 .doesNotThrowAnyException();
-        verify(txManager).rollback(txStatus);
     }
 
     @Test
-    void aRepositoryExceptionDuringEventRecordingNeverPropagates() {
-        var service = serviceWithFailingSessionRepository();
+    void aPublishExceptionDuringEventRecordingNeverPropagates() {
+        var service = serviceWithThrowingBus();
 
         assertThatCode(() -> service.recordEvent(ConversationSession.newSession("s1", Channel.CHAT), 1, ConversationEventType.TOOL_CALLED, "tool=test"))
                 .doesNotThrowAnyException();
-        verify(txManager).rollback(txStatus);
+    }
+
+    @Test
+    void aPublishExceptionDuringTurnCompletionNeverPropagates() {
+        var service = serviceWithThrowingBus();
+
+        assertThatCode(() -> service.recordTurnCompletion(ConversationSession.newSession("s1", Channel.CHAT), 1, "normal", false))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void queueOverflowDropsTelemetryAndNeverThrows() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        AuditEventBus bus = new AuditEventBus(2, registry);
+        var service = new ConversationAuditService(bus);
+
+        var session = ConversationSession.newSession("s2", Channel.CHAT);
+        // Capacity is 2: the third publish overflows - dropped and counted, not thrown.
+        assertThatCode(() -> {
+            service.recordSessionTouch(session);
+            service.recordMessage(session, 1, MessageRole.USER, "one");
+            service.recordMessage(session, 1, MessageRole.ASSISTANT, "two");
+        }).doesNotThrowAnyException();
+
+        assertThat(bus.depth()).isEqualTo(2);
+        assertThat(registry.counter("voxticket.telemetry.dropped", "reason", "overflow").count()).isEqualTo(1.0);
     }
 }

@@ -139,8 +139,17 @@ class ProviderChatModelFactoryTest {
         assertThat(none.getIncludeThoughts()).isFalse();
         assertThat(none.getThinkingLevel()).isNull();
         assertThat(none.getModel()).isEqualTo(GoogleGenAiChatModel.ChatModel.GEMINI_3_6_FLASH.getValue());
-        assertThat(none.getTemperature()).isEqualTo(0.3);
+        // Gemini 3.x deprecates temperature (Google ignores it or rejects the
+        // request with 400 INVALID_ARGUMENT): the factory deliberately does
+        // NOT pass the tier temperature through for 3.x models.
+        assertThat(none.getTemperature()).isNotEqualTo(0.3);
         assertThat(none.getMaxOutputTokens()).isEqualTo(1024);
+
+        // 2.x models still accept temperature, so the tier value passes through.
+        var legacy = (GoogleGenAiChatOptions) factory.chatOptionsFor(
+                AiProvider.GOOGLE, tier(AiProvider.GOOGLE, "gemini-2.0-flash", "none"));
+        assertThat(legacy.getModel()).isEqualTo(GoogleGenAiChatModel.ChatModel.GEMINI_2_0_FLASH.getValue());
+        assertThat(legacy.getTemperature()).isEqualTo(0.3);
 
         var high = (GoogleGenAiChatOptions) factory.chatOptionsFor(
                 AiProvider.GOOGLE, tier(AiProvider.GOOGLE, "gemini-3.6-flash", "high"));

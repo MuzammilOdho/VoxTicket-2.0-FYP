@@ -25,6 +25,19 @@ public class TurnMetrics {
                 .record(duration);
     }
 
+    /**
+     * P0: an explicitly aborted turn (voice client disconnected mid-turn).
+     * Recorded separately from {@code voxticket.turn.duration} because an
+     * aborted turn never completes - it has no meaningful duration sample.
+     */
+    public void recordTurnAborted(String channel) {
+        Counter.builder("voxticket.turn.aborted")
+                .tag("channel", channel)
+                .description("Turns aborted by client disconnect (barge-in / hang-up)")
+                .register(registry)
+                .increment();
+    }
+
     public void recordModelSelection(String tier, String provider, String model, String reason) {
         Counter.builder("voxticket.model.selection")
                 .tag("tier", tier).tag("provider", provider).tag("model", model).tag("reason", reason)

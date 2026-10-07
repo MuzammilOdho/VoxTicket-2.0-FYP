@@ -1,11 +1,14 @@
 package com.voxticket.persistence.repository;
 
 import com.voxticket.persistence.entity.Refund;
+import com.voxticket.persistence.entity.enums.RefundStatus;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -13,6 +16,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RefundRepository extends JpaRepository<Refund, UUID> {
+    /**
+     * Admin read path (Phase 12/P4): optional status + refund-number
+     * substring filter. Read-only; never used by business logic.
+     */
+    @Query("select r from Refund r where (:status is null or r.status = :status) "
+            + "and (:q is null or r.refundNumber ilike concat('%', cast(:q as string), '%'))")
+    Page<Refund> searchAdmin(
+            @Param("status") RefundStatus status, @Param("q") String q, Pageable pageable);
+
     Optional<Refund> findByRefundNumber(String refundNumber);
     List<Refund> findByOrderId(UUID orderId);
     List<Refund> findByPaymentId(UUID paymentId);

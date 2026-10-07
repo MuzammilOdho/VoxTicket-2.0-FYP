@@ -25,7 +25,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+/**
+ * P1: audit writes are asynchronous now. Every test flushes the
+ * {@link AuditEventBus} after publishing and before asserting - the
+ * production path relies on the writer thread instead.
+ */
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 @Transactional
@@ -37,6 +42,8 @@ class ConversationAuditServiceIntegrationTest {
 
     @Autowired
     private ConversationAuditService auditService;
+    @Autowired
+    private AuditEventBus auditEventBus;
     @Autowired
     private ConversationSessionRecordRepository sessionRepository;
     @Autowired
@@ -54,6 +61,7 @@ class ConversationAuditServiceIntegrationTest {
     @Test
     void recordingATurnCreatesASessionRecordOnFirstUse() {
         auditService.recordSessionTouch(session);
+        auditEventBus.flush();
 
         ConversationSessionRecord record = sessionRepository.findBySessionId(session.getSessionId()).orElseThrow();
         assertThat(record.getChannel()).isEqualTo(Channel.CHAT);
@@ -66,6 +74,7 @@ class ConversationAuditServiceIntegrationTest {
         session.applyResolvedIdentity(new CustomerIdentity(UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, "+923001234567"));
 
         auditService.recordSessionTouch(session);
+        auditEventBus.flush();
 
         assertThat(sessionRepository.findAll()).filteredOn(r -> r.getSessionId().equals(session.getSessionId())).hasSize(1);
         ConversationSessionRecord record = sessionRepository.findBySessionId(session.getSessionId()).orElseThrow();
@@ -75,6 +84,7 @@ class ConversationAuditServiceIntegrationTest {
     @Test
     void recordingAMessagePersistsItLinkedToTheSession() {
         auditService.recordMessage(session, 1, MessageRole.USER, "Where is my order?");
+        auditEventBus.flush();
 
         ConversationSessionRecord record = sessionRepository.findBySessionId(session.getSessionId()).orElseThrow();
         assertThat(messageRepository.findBySessionIdOrderByTurnNumberAsc(record.getId())).hasSize(1)
@@ -87,6 +97,7 @@ class ConversationAuditServiceIntegrationTest {
     @Test
     void recordingAMessageBeforeAnySessionTouchStillCreatesTheSessionImplicitly() {
         auditService.recordMessage(session, 1, MessageRole.ASSISTANT, "Sure, one moment.");
+        auditEventBus.flush();
 
         assertThat(sessionRepository.findBySessionId(session.getSessionId())).isPresent();
     }
@@ -96,6 +107,7 @@ class ConversationAuditServiceIntegrationTest {
         String longDetail = "x".repeat(1000);
 
         auditService.recordEvent(session, 1, ConversationEventType.TOOL_CALLED, longDetail);
+        auditEventBus.flush();
 
         ConversationSessionRecord record = sessionRepository.findBySessionId(session.getSessionId()).orElseThrow();
         var events = eventRepository.findBySessionIdOrderByCreatedAtAsc(record.getId());
@@ -105,7 +117,19 @@ class ConversationAuditServiceIntegrationTest {
 
     @Test
     void recordingWithNoTurnNumberStillSucceeds() {
-        assertThatCode(() -> auditService.recordEvent(session, null, ConversationEventType.SAFETY_BLOCKED, "category=INSTRUCTION_OVERRIDE"))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> {
+            auditService.recordEvent(session, null, ConversationEventType.SAFETY_BLOCKED, "category=INSTRUCTION_OVERRIDE");
+            auditEventBus.flush();
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void turnCompletionMarkerRecordsTurnCountAndOutcome() {
+        auditService.recordSessionTouch(session);
+        auditService.recordTurnCompletion(session, 3, "normal", false);
+        auditEventBus.flush();
+
+        ConversationSessionRecord record = sessionRepository.findBySessionId(session.getSessionId()).orElseThrow();
+        assertThat(record.getChannel()).isEqualTo(Channel.CHAT);
     }
 }

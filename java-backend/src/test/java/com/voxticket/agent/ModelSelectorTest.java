@@ -166,14 +166,29 @@ class ModelSelectorTest {
     }
 
     @Test
-    void selectionResultCarriesOnlyTierAndRoutingReason() {
+    void selectionResultCarriesTierReasonDecisionAndStrategy() {
         var result = selector(RoutingStrategy.RULE_ONLY, Optional.empty())
-                .select(session(), "Where is my order?");
+                .selectDetailed(session(), "Where is my order?");
 
         assertThat(result).isInstanceOf(ModelSelectionResult.class);
         assertThat(ModelSelectionResult.class.getRecordComponents())
                 .extracting(c -> c.getName())
-                .containsExactly("tier", "reason");
+                .containsExactly("tier", "reason", "routingDecision", "strategy");
+        assertThat(result.routingDecision()).isNotNull();
+        assertThat(result.routingDecision().tier()).isEqualTo(result.tier());
+        assertThat(result.strategy()).isEqualTo(RoutingStrategy.RULE_ONLY);
+    }
+
+    @Test
+    void selectDelegatesToSelectDetailed() {
+        var selector = selector(RoutingStrategy.RULE_ONLY, Optional.empty());
+
+        var viaSelect = selector.select(session(), "Where is my order?");
+        var viaDetailed = selector.selectDetailed(session(), "Where is my order?");
+
+        assertThat(viaSelect.tier()).isEqualTo(viaDetailed.tier());
+        assertThat(viaSelect.reason()).isEqualTo(viaDetailed.reason());
+        assertThat(viaSelect.routingDecision()).isEqualTo(viaDetailed.routingDecision());
     }
 
     @Test

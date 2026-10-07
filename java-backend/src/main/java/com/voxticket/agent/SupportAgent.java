@@ -1,7 +1,7 @@
 package com.voxticket.agent;
 
 import com.voxticket.audit.ConversationAuditService;
-import com.voxticket.api.voice.TurnAbortedException;
+import com.voxticket.conversation.TurnAbortedException;
 import com.voxticket.conversation.CommunicationProfile;
 import com.voxticket.conversation.ConversationLanguage;
 import com.voxticket.conversation.ConversationLanguageResolver;
@@ -9,6 +9,7 @@ import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.policy.PaymentConsequence;
 import com.voxticket.procedure.ProcedureControlTools;
@@ -18,11 +19,14 @@ import com.voxticket.procedure.ProcedureState;
 import com.voxticket.procedure.ProcedureStatus;
 import com.voxticket.rag.PolicyKnowledgeTools;
 import com.voxticket.rag.RagService;
+import com.voxticket.routing.RoutingDecision;
 import com.voxticket.service.CustomerOrderQueryService;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -180,11 +184,14 @@ public class SupportAgent {
         String providerLabel = "unknown";
         String modelLabel = "unknown";
         try {
-            var selection = modelSelector.select(session, currentUserMessage);
+            long routingStart = System.nanoTime();
+            var selection = modelSelector.selectDetailed(session, currentUserMessage);
+            double routingMs = (System.nanoTime() - routingStart) / 1_000_000.0;
             tierLabel = selection.tier().name();
             var resolution = clientRegistry.resolutionFor(selection.tier());
             providerLabel = resolution.provider().name();
             modelLabel = resolution.model();
+            traceSelection(session, selection, resolution, routingMs, mode);
             turnMetrics.recordModelSelection(tierLabel, providerLabel, modelLabel, selection.reason());
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.MODEL_SELECTED,
                     "tier=" + tierLabel + " provider=" + providerLabel + " model=" + modelLabel + " reason=" + selection.reason());
@@ -195,6 +202,22 @@ public class SupportAgent {
             String systemPrompt = buildSystemPrompt(session);
 
             log.info("event=support_agent_stream_start sessionId={} tier={} provider={} model={} mode={}", session.getSessionId(), tierLabel, providerLabel, modelLabel, mode);
+
+            // P2: TTFT is the first accepted (non-empty) model delta. The
+            // wrapper stamps it once and is otherwise transparent; a blank
+            // model response leaves llmTtftMs null (not applicable, never
+            // fabricated).
+            AtomicBoolean ttftStamped = new AtomicBoolean(false);
+            long ttftStart = System.nanoTime();
+            Consumer<String> tracingSink = delta -> {
+                if (ttftStamped.compareAndSet(false, true)) {
+                    TurnTrace.Builder builder = session.getActiveTraceBuilder();
+                    if (builder != null) {
+                        builder.llmTtftMs((System.nanoTime() - ttftStart) / 1_000_000.0);
+                    }
+                }
+                deltaSink.accept(delta);
+            };
 
             ChatClient chatClient = clientRegistry.clientFor(selection.tier());
             StringBuilder fullText = new StringBuilder();
@@ -212,18 +235,19 @@ public class SupportAgent {
                         : chunk.getResult().getOutput().getText();
                 if (delta != null && !delta.isEmpty()) {
                     fullText.append(delta);
-                    deltaSink.accept(delta);
+                    tracingSink.accept(delta);
                 }
             }
 
             String content = fullText.toString();
             long durationMs = (System.nanoTime() - start) / 1_000_000;
-            recordTokenUsage(lastChunk[0], providerLabel, modelLabel);
+            recordTokenUsage(lastChunk[0], providerLabel, modelLabel, session);
 
             if (content.isBlank()) {
                 log.warn("event=support_agent_blank_response sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
                 turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
                         AgentResponse.Outcome.BLANK_FALLBACK.toLlmMetricLabel());
+                traceLlm(session, durationMs, "BLANK_FALLBACK");
                 String fallback = blankResponseFallback(session);
                 deltaSink.accept(fallback);
                 return new AgentResponse(fallback, AgentResponse.Outcome.BLANK_FALLBACK);
@@ -231,6 +255,7 @@ public class SupportAgent {
 
             turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
                     AgentResponse.Outcome.SUCCESS.toLlmMetricLabel());
+            traceLlm(session, durationMs, null);
             log.info("event=support_agent_stream_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
             return new AgentResponse(content, AgentResponse.Outcome.SUCCESS);
         } catch (TurnAbortedException aborted) {
@@ -241,6 +266,7 @@ public class SupportAgent {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
                     AgentResponse.Outcome.MODEL_ERROR.toLlmMetricLabel());
+            traceLlm(session, durationMs, "MODEL_ERROR");
             log.error("event=support_agent_stream_end sessionId={} outcome=model_error errorType={} durationMs={}",
                     session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
             return new AgentResponse("I'm having trouble processing that right now - please try again in a moment.",
@@ -254,11 +280,14 @@ public class SupportAgent {
         String providerLabel = "unknown";
         String modelLabel = "unknown";
         try {
-            var selection = modelSelector.select(session, currentUserMessage);
+            long routingStart = System.nanoTime();
+            var selection = modelSelector.selectDetailed(session, currentUserMessage);
+            double routingMs = (System.nanoTime() - routingStart) / 1_000_000.0;
             tierLabel = selection.tier().name();
             var resolution = clientRegistry.resolutionFor(selection.tier());
             providerLabel = resolution.provider().name();
             modelLabel = resolution.model();
+            traceSelection(session, selection, resolution, routingMs, mode);
             turnMetrics.recordModelSelection(tierLabel, providerLabel, modelLabel, selection.reason());
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.MODEL_SELECTED,
                     "tier=" + tierLabel + " provider=" + providerLabel + " model=" + modelLabel + " reason=" + selection.reason());
@@ -286,23 +315,26 @@ public class SupportAgent {
 
             String content = chatResponse.getResult().getOutput().getText();
             long durationMs = (System.nanoTime() - start) / 1_000_000;
-            recordTokenUsage(chatResponse, providerLabel, modelLabel);
+            recordTokenUsage(chatResponse, providerLabel, modelLabel, session);
 
             if (content == null || content.isBlank()) {
                 log.warn("event=support_agent_blank_response sessionId={} tier={} model={}", session.getSessionId(), tierLabel, modelLabel);
                 turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
                         AgentResponse.Outcome.BLANK_FALLBACK.toLlmMetricLabel());
+                traceLlm(session, durationMs, "BLANK_FALLBACK");
                 return new AgentResponse(blankResponseFallback(session), AgentResponse.Outcome.BLANK_FALLBACK);
             }
 
             turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
                     AgentResponse.Outcome.SUCCESS.toLlmMetricLabel());
+            traceLlm(session, durationMs, null);
             log.info("event=support_agent_call_end sessionId={} outcome=success durationMs={}", session.getSessionId(), durationMs);
             return new AgentResponse(content, AgentResponse.Outcome.SUCCESS);
         } catch (Exception e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             turnMetrics.recordLlmCall(Duration.ofMillis(durationMs), tierLabel, providerLabel, modelLabel,
                     AgentResponse.Outcome.MODEL_ERROR.toLlmMetricLabel());
+            traceLlm(session, durationMs, "MODEL_ERROR");
             log.error("event=support_agent_call_end sessionId={} outcome=model_error errorType={} durationMs={}",
                     session.getSessionId(), e.getClass().getSimpleName(), durationMs, e);
             return new AgentResponse("I'm having trouble processing that right now - please try again in a moment.",
@@ -341,17 +373,72 @@ public class SupportAgent {
         };
     }
 
-    private void recordTokenUsage(ChatResponse chatResponse, String provider, String model) {
+    /**
+     * P2: records the routing + model selection on the turn's trace builder.
+     * Pure field assignment; a missing builder (no trace in flight) is a
+     * no-op - trace assembly must never break the turn.
+     */
+    private static void traceSelection(ConversationSession session, ModelSelectionResult selection,
+            TierChatClientRegistry.TierResolution resolution, double routingMs, ToolAccessMode mode) {
+        TurnTrace.Builder builder = session.getActiveTraceBuilder();
+        if (builder == null) {
+            return;
+        }
+        builder.routingMs(routingMs);
+        if (selection.strategy() != null) {
+            builder.routingStrategy(selection.strategy().name());
+        }
+        builder.tier(selection.tier().name())
+                .routingReason(selection.reason())
+                .provider(resolution.provider().name())
+                .model(resolution.model())
+                .detail("toolAccessMode", mode.name());
+        RoutingDecision decision = selection.routingDecision();
+        if (decision != null) {
+            // Non-semantic decisions carry NaN margins - leave the field null
+            // rather than recording a meaningless zero (same rule as metrics).
+            if (!Double.isNaN(decision.margin())) {
+                builder.semanticMargin(decision.margin());
+            }
+            if (decision.signals() != null && !decision.signals().isEmpty()) {
+                builder.intentSignals(decision.signals().stream()
+                        .map(Enum::name)
+                        .sorted()
+                        .collect(Collectors.joining(",")));
+            }
+        }
+    }
+
+    /** P2: records the LLM call duration and, on failures, the error classification. */
+    private static void traceLlm(ConversationSession session, long durationMs, String errorCode) {
+        TurnTrace.Builder builder = session.getActiveTraceBuilder();
+        if (builder == null) {
+            return;
+        }
+        builder.llmTotalMs((double) durationMs);
+        if (errorCode != null) {
+            builder.errorCode(errorCode);
+        }
+    }
+
+    private void recordTokenUsage(ChatResponse chatResponse, String provider, String model, ConversationSession session) {
         try {
-            var usage = chatResponse.getMetadata() == null ? null : chatResponse.getMetadata().getUsage();
+            var usage = chatResponse == null || chatResponse.getMetadata() == null ? null : chatResponse.getMetadata().getUsage();
             if (usage == null) {
                 return;
             }
+            TurnTrace.Builder builder = session.getActiveTraceBuilder();
             if (usage.getPromptTokens() != null) {
                 turnMetrics.recordTokenUsage(provider, model, "prompt", usage.getPromptTokens());
+                if (builder != null) {
+                    builder.promptTokens(usage.getPromptTokens());
+                }
             }
             if (usage.getCompletionTokens() != null) {
                 turnMetrics.recordTokenUsage(provider, model, "completion", usage.getCompletionTokens());
+                if (builder != null) {
+                    builder.completionTokens(usage.getCompletionTokens());
+                }
             }
         } catch (Exception e) {
             log.debug("event=token_usage_unavailable provider={} model={} reason={}", provider, model, e.getClass().getSimpleName());

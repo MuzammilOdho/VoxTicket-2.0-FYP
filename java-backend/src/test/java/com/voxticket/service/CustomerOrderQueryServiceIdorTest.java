@@ -53,7 +53,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * test methods and could collide with each other on the phone unique
  * constraint.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 @Transactional

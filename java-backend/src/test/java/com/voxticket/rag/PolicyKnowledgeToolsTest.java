@@ -20,7 +20,9 @@ class PolicyKnowledgeToolsTest {
     @Test
     void delegatesDirectlyToRagService() {
         List<RagService.PolicySnippet> expected = List.of(new RagService.PolicySnippet("refund-timing", "Settlement time: a few business days."));
-        when(ragService.searchPolicy("how long do refunds take")).thenReturn(expected);
+        var detailed = new RagService.RagSearchResult(List.of(), false, 5);
+        when(ragService.searchDetailed("how long do refunds take"))
+                .thenReturn(new RagService.DetailedSearch(detailed, expected));
 
         Object result = tools.searchPolicy("how long do refunds take");
 

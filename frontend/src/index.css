@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* Small app-wide polish: keep scrollbars subtle, numbers tabular. */
+body {
+  font-variant-numeric: tabular-nums;
+}

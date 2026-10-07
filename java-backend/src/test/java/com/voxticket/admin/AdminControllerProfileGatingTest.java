@@ -12,7 +12,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @TestPropertySource(properties = {
         "voxticket.otp.delivery=email",
         "spring.mail.host=localhost",

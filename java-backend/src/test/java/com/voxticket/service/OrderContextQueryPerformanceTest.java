@@ -76,7 +76,7 @@ import org.testcontainers.utility.DockerImageName;
  * <p>Docker-gated like the other persistence integration tests: the sandbox
  * has no Docker daemon, so these run on the user's Docker-capable machine.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 class OrderContextQueryPerformanceTest {

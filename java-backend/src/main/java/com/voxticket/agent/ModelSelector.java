@@ -57,6 +57,15 @@ public class ModelSelector {
     }
 
     public ModelSelectionResult select(ConversationSession session, String userMessage) {
+        return selectDetailed(session, userMessage);
+    }
+
+    /**
+     * P2: the full selection, carrying the {@link RoutingDecision} and the
+     * {@link RoutingStrategy} alongside tier and reason so the turn decision
+     * trace can record the complete routing picture without a second pass.
+     */
+    public ModelSelectionResult selectDetailed(ConversationSession session, String userMessage) {
         RoutingStrategy strategy = routingProperties.strategy();
 
         // Forced strategies consult no signals and do no work at all.
@@ -64,7 +73,7 @@ public class ModelSelector {
             RoutingDecision forced = decisionEngine.decide(
                     strategy, Set.of(), null, routingProperties.semantic());
             record(session, strategy, forced, Set.of());
-            return new ModelSelectionResult(forced.tier(), forced.reason().name());
+            return new ModelSelectionResult(forced.tier(), forced.reason().name(), forced, strategy);
         }
 
         StructuralRoutingFeatures features =
@@ -84,7 +93,7 @@ public class ModelSelector {
         RoutingDecision decision = decisionEngine.decide(
                 strategy, signals, semanticScores, routingProperties.semantic());
         record(session, strategy, decision, signals);
-        return new ModelSelectionResult(decision.tier(), decision.reason().name());
+        return new ModelSelectionResult(decision.tier(), decision.reason().name(), decision, strategy);
     }
 
     private void record(ConversationSession session, RoutingStrategy strategy,

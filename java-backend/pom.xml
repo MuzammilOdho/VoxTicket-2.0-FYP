@@ -86,6 +86,14 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Phase 12 (P4): secures the admin API surface (ADMIN role, httpBasic)
+             and the Python worker telemetry endpoints (shared-secret filter).
+             No business endpoint depends on it. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -96,6 +104,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Phase 12 (P4): MockMvc security post-processors/configurers for the
+             admin security tests. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

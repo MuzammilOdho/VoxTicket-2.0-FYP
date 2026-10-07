@@ -34,7 +34,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * transaction back automatically at the end of each test method - so this
  * also gives us clean, isolated test data with no manual cleanup.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 @Transactional

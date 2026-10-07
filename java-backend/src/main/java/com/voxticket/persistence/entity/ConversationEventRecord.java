@@ -40,6 +40,10 @@ public class ConversationEventRecord extends BaseEntity {
     @Column(name = "detail", length = 500)
     private String detail;
 
+    /** V9: links the event row to its turn trace row (nullable). */
+    @Column(name = "trace_id", length = 32)
+    private String traceId;
+
     @NotNull
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -70,6 +74,10 @@ public class ConversationEventRecord extends BaseEntity {
 
     public String getDetail() {
         return detail;
+    }
+
+    public String getTraceId() {
+        return traceId;
     }
 
     public Instant getCreatedAt() {

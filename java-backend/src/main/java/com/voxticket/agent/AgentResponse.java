@@ -6,7 +6,7 @@ package com.voxticket.agent;
  * failure recovered with a safe fallback is never recorded as a normal
  * turn.
  */
-public record AgentResponse(String text, AgentResponse.Outcome outcome) {
+public record AgentResponse(String text, Outcome outcome) {
 
     public enum Outcome {
         /** The model returned a usable response. */

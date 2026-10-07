@@ -24,6 +24,7 @@ import com.voxticket.persistence.repository.CustomerRepository;
 import com.voxticket.persistence.repository.OrderRepository;
 import com.voxticket.persistence.repository.PaymentRepository;
 import com.voxticket.persistence.repository.SupportTicketRepository;
+import com.voxticket.audit.AuditEventBus;
 import com.voxticket.service.ClaimService;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -46,19 +47,21 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Regression coverage for transaction/audit consistency (Phase 1 issue: success
  * recorded before the DB transaction commits).
  *
- * <p>The audit service commits each event in its own independent transaction,
- * so {@link ProcedureCoordinator#confirmActive} and
- * {@link ProcedureCoordinator#requestHumanSupport} must not run inside an
- * outer transaction: with one, {@code EXECUTION_SUCCEEDED} /
- * {@code PROCEDURE_COMPLETED} / {@code ESCALATED} would be durably recorded
- * before the domain transaction committed, leaving a false success trail if
- * that transaction later rolled back. The coordinator now relies on the
- * domain services' own transactions (committed on return) and only mutates
- * session/audit state afterwards.
+ * <p>P1: the audit service publishes each event to the async
+ * {@link AuditEventBus} instead of committing its own
+ * independent transaction. {@link ProcedureCoordinator#confirmActive} and
+ * {@link ProcedureCoordinator#requestHumanSupport} must still not run inside
+ * an outer transaction: with one, {@code EXECUTION_SUCCEEDED} /
+ * {@code PROCEDURE_COMPLETED} / {@code ESCALATED} would be published before
+ * the domain transaction committed, leaving a false success trail if that
+ * transaction later rolled back. The coordinator still relies on the domain
+ * services' own transactions (committed on return) and only publishes
+ * audit events afterwards - and this test flushes the bus before asserting,
+ * so it observes exactly what the async writer would persist.
  *
  * <p>Requires Docker (Testcontainers).
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 class ProcedureCoordinatorCommitFailureTest {
@@ -79,6 +82,8 @@ class ProcedureCoordinatorCommitFailureTest {
     private ConversationSessionRecordRepository sessionRecordRepository;
     @Autowired
     private ConversationEventRecordRepository eventRecordRepository;
+    @Autowired
+    private AuditEventBus auditEventBus;
 
     /** Simulates the domain transaction failing to commit. */
     @MockitoBean
@@ -162,6 +167,9 @@ class ProcedureCoordinatorCommitFailureTest {
     }
 
     private List<ConversationEventType> eventTypesFor(ConversationSession session) {
+        // P1: audit writes are asynchronous - flush the bus so this observes
+        // exactly what the writer would persist.
+        auditEventBus.flush();
         return sessionRecordRepository.findBySessionId(session.getSessionId())
                 .map(record -> eventRecordRepository.findBySessionIdOrderByCreatedAtAsc(record.getId()))
                 .orElseGet(List::of)

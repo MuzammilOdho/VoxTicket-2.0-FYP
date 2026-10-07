@@ -49,7 +49,7 @@ class SupportAgentModelInputTest {
         when(clientRegistry.clientFor(ModelTier.TIER_1)).thenReturn(chatClient);
         when(clientRegistry.resolutionFor(ModelTier.TIER_1))
                 .thenReturn(new TierChatClientRegistry.TierResolution(AiProvider.GOOGLE, "test-model"));
-        when(modelSelector.select(any(ConversationSession.class), anyString()))
+        when(modelSelector.selectDetailed(any(ConversationSession.class), anyString()))
                 .thenReturn(new ModelSelectionResult(ModelTier.TIER_1, "test"));
 
         ChatResponse chatResponse = mock(ChatResponse.class, RETURNS_DEEP_STUBS);

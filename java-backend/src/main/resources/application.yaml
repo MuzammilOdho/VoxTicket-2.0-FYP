@@ -59,13 +59,33 @@ voxticket:
     returns:
       window-days: 30
 
+  # Phase 12 (P4): admin API credentials. The ADMIN role (httpBasic) guards
+  # /api/v1/admin/**. Set ADMIN_USERNAME / ADMIN_PASSWORD in the environment;
+  # leaving the password at the default "admin" logs a loud startup warning.
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin}
+
   voice:
+    # Shared secret the Python LiveKit worker sends as
+    # X-VoxTicket-Telemetry-Secret on /api/v1/voice/telemetry and
+    # /api/v1/voice/worker-heartbeat. Empty = telemetry endpoints accept
+    # without a secret (dev convenience; logs a WARN at startup).
+    telemetry-secret: ${VOICE_TELEMETRY_SECRET:}
     livekit:
       url: ${LIVEKIT_URL:}
       api-key: ${LIVEKIT_API_KEY:}
       api-secret: ${LIVEKIT_API_SECRET:}
 
   ai:
+    # Phase 12 (P4): estimated AI spend. USD per 1k tokens, keyed by model id
+    # as configured in voxticket.ai.tiers.*.model. Used by
+    # GET /api/v1/admin/ai/cost. Fill with current provider pricing; 0.0
+    # means "unknown - excluded from the estimate".
+    cost:
+      per-1k-tokens:
+        "gemini-3.5-flash-lite": 0.0
+        "openai/gpt-oss-120b": 0.0
     # Each tier independently names exactly one provider and one model.
     # Switching either is a config-only change: no Java changes, no fallback
     # and no cross-provider routing. ModelSelector decides ONLY the tier
@@ -196,3 +216,12 @@ voxticket:
     email-from: no-reply@voxticket.example
     # delivery: not set here on purpose - defaults to "dev" in dev/test profiles.
     # Set to "email" (plus real spring.mail.* config) to switch delivery.
+
+  # P1 (non-blocking audit): ConversationAuditService only enqueues into a
+  # bounded in-memory queue; AuditBatchWriter drains it on a dedicated thread.
+  # Overflow and write failures increment voxticket.telemetry.dropped
+  # (tags: reason=overflow|write_error) and never fail the turn.
+  audit:
+    queue-capacity: 8192
+    batch-size: 200
+    flush-interval-ms: 250

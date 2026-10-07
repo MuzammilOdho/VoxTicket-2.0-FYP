@@ -62,7 +62,7 @@ class SupportAgentErrorMetricsTest {
                 new SanitizedToolExecutionExceptionProcessor(turnMetrics), new ToolCallLimitsProperties(5, 10, ToolCallLimitBehavior.THROW));
 
         var modelSelector = mock(ModelSelector.class);
-        when(modelSelector.select(any(), any())).thenReturn(new ModelSelectionResult(ModelTier.TIER_1, "test"));
+        when(modelSelector.selectDetailed(any(), any())).thenReturn(new ModelSelectionResult(ModelTier.TIER_1, "test"));
 
         var contextBuilder = mock(ContextBuilder.class);
         when(contextBuilder.buildHistory(any())).thenReturn(List.of());

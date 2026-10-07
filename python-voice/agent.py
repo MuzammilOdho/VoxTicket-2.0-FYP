@@ -39,11 +39,16 @@ Secrets are env-only, never files.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
 import os
 import re
+import socket
+import time
+import uuid
+from datetime import datetime, timezone
 from typing import AsyncIterator
 
 # Windows-only: the soxr resampler bundled inside livekit_ffi.dll crashes with
@@ -138,6 +143,15 @@ class Config:
     voxticket_turn_url: str = "http://localhost:8080/api/v1/voice/turn"
     voxticket_turn_stream_url: str = "http://localhost:8080/api/v1/voice/turn/stream"
     brain_timeout_s: float = 25.0
+    # P3 voice telemetry (all optional, fail-open: telemetry must never break
+    # the call). Flush/heartbeat loops run as background asyncio tasks; the
+    # audio pipeline never awaits them.
+    voxticket_telemetry_url: str = "http://localhost:8080/api/v1/voice/telemetry"
+    voxticket_heartbeat_url: str = "http://localhost:8080/api/v1/voice/worker-heartbeat"
+    voice_telemetry_secret: str = ""
+    telemetry_flush_seconds: float = 5.0
+    heartbeat_seconds: float = 30.0
+    worker_id: str = ""  # default: <hostname>-<pid>, resolved in entrypoint
     greeting: str = "Welcome to VoxTicket! How can I help you today?"
     log_level: str = "INFO"
 
@@ -225,6 +239,12 @@ def load_config(env: dict | None = None) -> Config:
         voxticket_turn_url=opt("VOXTICKET_TURN_URL", "http://localhost:8080/api/v1/voice/turn"),
         voxticket_turn_stream_url=opt("VOXTICKET_TURN_STREAM_URL", "http://localhost:8080/api/v1/voice/turn/stream"),
         brain_timeout_s=opt_float("BRAIN_TIMEOUT_S", 25.0),
+        voxticket_telemetry_url=opt("VOXTICKET_TELEMETRY_URL", "http://localhost:8080/api/v1/voice/telemetry"),
+        voxticket_heartbeat_url=opt("VOXTICKET_HEARTBEAT_URL", "http://localhost:8080/api/v1/voice/worker-heartbeat"),
+        voice_telemetry_secret=opt("VOICE_TELEMETRY_SECRET", ""),
+        telemetry_flush_seconds=opt_float("TELEMETRY_FLUSH_SECONDS", 5.0),
+        heartbeat_seconds=opt_float("HEARTBEAT_SECONDS", 30.0),
+        worker_id=opt("WORKER_ID", ""),
         greeting=opt("GREETING", "Welcome to VoxTicket! How can I help you today?"),
         log_level=opt("LOG_LEVEL", "INFO"),
     )
@@ -335,10 +355,15 @@ class VoxTicketBrain:
         self._stream_client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=10.0))
 
-    async def turn(self, session_id: str, text: str) -> str:
+    async def turn(self, session_id: str, text: str,
+                   *, traceparent: str | None = None) -> str:
+        """Blocking turn. traceparent is a best-effort W3C correlation header;
+        a missing/invalid value never fails the call (headers=None)."""
+        headers = {"traceparent": traceparent} if traceparent else None
         try:
             resp = await self._client.post(
-                self._turn_url, json={"sessionId": session_id, "message": text}
+                self._turn_url, json={"sessionId": session_id, "message": text},
+                headers=headers,
             )
         except httpx.HTTPError as exc:
             raise BrainError(f"could not reach VoxTicket brain at {self._turn_url}: {exc}") from exc
@@ -353,23 +378,29 @@ class VoxTicketBrain:
             raise BrainError("brain returned an empty reply text")
         return reply
 
-    async def turn_stream(self, session_id: str, text: str) -> AsyncIterator[str]:
+    async def turn_stream(self, session_id: str, text: str,
+                          *, traceparent: str | None = None) -> AsyncIterator[str]:
         """Yield reply deltas from the SSE stream endpoint.
 
         Falls back to the blocking endpoint (yielded as one chunk) when the
         Java side predates the stream endpoint (404/405). Raises BrainError
         on failure; cancelling the consumer (barge-in) closes the stream,
         which lets the Java side abort the turn and release its session lock.
+
+        traceparent is forwarded on both the stream and the fallback call so
+        the Java side can correlate the whole turn.
         """
         url = self._stream_url
+        headers = {"traceparent": traceparent} if traceparent else None
         try:
             async with self._stream_client.stream(
-                    "POST", url, json={"sessionId": session_id, "message": text}
+                    "POST", url, json={"sessionId": session_id, "message": text},
+                    headers=headers,
             ) as resp:
                 if resp.status_code in (404, 405):
                     logger.info("brain stream endpoint unavailable (HTTP %s); falling back to blocking turn",
                                 resp.status_code)
-                    yield await self.turn(session_id, text)
+                    yield await self.turn(session_id, text, traceparent=traceparent)
                     return
                 if resp.status_code != 200:
                     body = await resp.aread()
@@ -399,6 +430,372 @@ class VoxTicketBrain:
         await self._client.aclose()
         if self._stream_client is not self._client:
             await self._stream_client.aclose()
+
+
+# --------------------------------------------------------------------------
+# P3 voice telemetry: tap points, correlation, background buffer
+# --------------------------------------------------------------------------
+#
+# Design: every tap point is pure timestamp capture (time.perf_counter())
+# with no awaits and no I/O, so the audio pipeline can never be delayed by
+# telemetry. Per-turn timings accumulate in a mutable TurnTelemetry record;
+# a background TelemetryBuffer task POSTs batches to the Java backend every
+# TELEMETRY_FLUSH_SECONDS. Any failure (network, Java down, bad status)
+# drops the batch and logs ONE throttled warning - the call continues.
+#
+# Correlation: entrypoint mints one trace_id (uuid4 hex) per call (= room);
+# each turn gets a 16-hex span id; brain POSTs carry W3C
+# `traceparent: 00-<trace_id>-<span_id>-01`. Header building is best-effort
+# and never fails the call.
+
+_TELEMETRY_MAX_TURNS = 1000   # bounded memory: drop-oldest past this
+_TELEMETRY_MAX_CALLS = 200
+_TELEMETRY_WARN_THROTTLE_S = 60.0  # at most one flush-failure warning/minute
+_TURN_FINALIZE_TIMEOUT_S = 60.0    # flush a turn even if tts_node never finalized it
+
+
+def _build_traceparent(trace_id: str | None, span_id: str) -> str | None:
+    """W3C traceparent value, or None when the ids are missing/malformed.
+
+    Never raises: a bad id must degrade to "no header", never to a failed
+    brain call.
+    """
+    try:
+        if not trace_id or not re.fullmatch(r"[0-9a-f]{32}", trace_id):
+            return None
+        if not re.fullmatch(r"[0-9a-f]{16}", span_id):
+            return None
+        return f"00-{trace_id}-{span_id}-01"
+    except Exception:
+        return None
+
+
+class SttFinalTracker:
+    """Latest STT final-transcript event, fed by the session's
+    "user_input_transcribed" event.
+
+    livekit-agents 1.8.x AgentSession emits
+    UserInputTranscribedEvent(transcript, is_final, language, ...) on every
+    STT hypothesis; llm_node take()s the latest *final* one at turn commit to
+    measure STT latency. take() clears the slot so a skipped/empty turn can't
+    leak a stale timestamp into the next turn.
+    """
+
+    def __init__(self) -> None:
+        self._timestamp: float | None = None  # perf_counter of the final event
+        self._language: str | None = None
+
+    def handle(self, ev) -> None:
+        """EventEmitter callback. emit() invokes handlers inline and
+        synchronously, so this must not await; it also must never raise."""
+        try:
+            if getattr(ev, "is_final", False) and (getattr(ev, "transcript", "") or "").strip():
+                self._timestamp = time.perf_counter()
+                lang = getattr(ev, "language", None)
+                # LanguageCode is a str subclass holding the BCP-47 code.
+                self._language = str(lang) if lang is not None else None
+        except Exception:
+            logger.debug("stt final tracker failed", exc_info=True)
+
+    def take(self) -> tuple[float | None, str | None]:
+        """Return (timestamp, language) of the latest final transcript and
+        clear the slot."""
+        ts, lang = self._timestamp, self._language
+        self._timestamp, self._language = None, None
+        return ts, lang
+
+
+@dataclasses.dataclass
+class TurnTelemetry:
+    """Mutable per-turn timing record.
+
+    Created at llm_node commit; tts_node stamps t_tts_first_audio and
+    finalizes. The buffer serializes via to_dict() at flush time, so a TTS
+    stamp that lands after llm_node finished is still captured. All
+    timestamps are time.perf_counter() (monotonic, worker-local); ms
+    conversions happen in to_dict(). Fields the worker cannot observe stay
+    None (never fabricated).
+    """
+    room: str
+    turn_number: int
+    trace_id: str
+    span_id: str
+    stt_provider: str
+    stt_model: str
+    tts_provider: str
+    tts_model: str
+    stt_language: str | None = None
+    t_stt_final: float = 0.0        # user_text committed in llm_node
+    t_stt_event: float | None = None  # provider final-transcript event
+    t_brain_start: float | None = None
+    t_brain_first_delta: float | None = None  # Java brain TTFT
+    t_tts_first_audio: float | None = None
+    t_turn_end: float = 0.0        # llm_node generator completed
+    barge_in: bool = False
+    aborted: bool = False
+    error: str | None = None
+    finalized: bool = False
+
+    def finalize(self) -> None:
+        self.finalized = True
+
+    @staticmethod
+    def _ms(start: float | None, end: float | None) -> float | None:
+        if start is None or end is None:
+            return None
+        return (end - start) * 1000.0
+
+    def to_dict(self) -> dict:
+        # Latency definitions (documented, worker's vantage point):
+        #   sttLatencyMs:    provider final-transcript event -> turn commit
+        #                    (framework turn-detection/queueing delay)
+        #   brainTtftMs:     brain call start -> first SSE delta (Java TTFT)
+        #   ttsFirstAudioMs: first SSE delta -> first synthesized audio frame
+        #   e2eMs:           STT final (event, else commit) -> llm_node end
+        #                    (excludes TTS audio playout tail)
+        return {
+            "room": self.room,
+            "turnNumber": self.turn_number,
+            "traceId": self.trace_id,
+            "sttLatencyMs": self._ms(self.t_stt_event, self.t_stt_final),
+            "brainTtftMs": self._ms(self.t_brain_start, self.t_brain_first_delta),
+            "ttsFirstAudioMs": self._ms(self.t_brain_first_delta, self.t_tts_first_audio),
+            "e2eMs": self._ms(
+                self.t_stt_event if self.t_stt_event is not None else self.t_stt_final,
+                self.t_turn_end),
+            "aborted": self.aborted,
+            "bargeIn": self.barge_in,
+            "sttLanguage": self.stt_language,
+            "sttProvider": self.stt_provider,
+            "sttModel": self.stt_model,
+            "ttsProvider": self.tts_provider,
+            "ttsModel": self.tts_model,
+            "error": self.error,
+        }
+
+
+_active_rooms = 0  # process-wide count, for the heartbeat payload
+
+
+def _inc_active_rooms() -> None:
+    global _active_rooms
+    _active_rooms += 1
+
+
+def _dec_active_rooms() -> None:
+    global _active_rooms
+    _active_rooms = max(0, _active_rooms - 1)
+
+
+def _active_room_count() -> int:
+    return _active_rooms
+
+
+def _classify_close(ev) -> tuple[str, str | None]:
+    """Map a livekit-agents 1.8.x CloseEvent to (outcome, disconnectReason).
+
+    AgentSession emits "close" once during teardown with
+    CloseEvent(reason: CloseReason, error). Graceful ends (task completed,
+    user hung up) are COMPLETED; anything else (disconnect, shutdown, error)
+    is ABORTED. Best-effort: an unrecognised event still yields a record.
+    """
+    try:
+        reason = getattr(ev, "reason", None)
+        name = getattr(reason, "value", None) or "unknown"
+        if name == "task_completed":
+            return "COMPLETED", "task_completed"
+        if name == "user_initiated":
+            return "COMPLETED", "user_initiated"
+        if name == "participant_disconnected":
+            return "ABORTED", "participant_disconnected"
+        if name == "job_shutdown":
+            return "ABORTED", "job_shutdown"
+        if name == "error":
+            err = getattr(ev, "error", None)
+            detail = type(err).__name__ if err is not None else "unknown"
+            return "ABORTED", f"error:{detail}"
+        if name == "unknown":
+            return "ABORTED", "unknown"
+        return "ABORTED", f"unknown:{name}"
+    except Exception:
+        return "ABORTED", "unknown"
+
+
+class TelemetryBuffer:
+    """Bounded in-memory telemetry buffer with background flush.
+
+    record_turn/record_call only append to in-memory lists (bounded,
+    drop-oldest with a counter): no I/O, safe to call from the audio
+    pipeline. A background task POSTs the accumulated batch every
+    flush_seconds; on ANY failure the batch is dropped and ONE throttled
+    warning is logged - the audio path is never affected. A second
+    background task POSTs the worker heartbeat.
+
+    The flush/heartbeat tasks are independent asyncio tasks: they are
+    started in entrypoint and never awaited on the audio path.
+    """
+
+    def __init__(self, *, worker_id: str, telemetry_url: str, heartbeat_url: str,
+                 secret: str = "", flush_seconds: float = 5.0,
+                 heartbeat_seconds: float = 30.0,
+                 stt_provider: str = "", tts_provider: str = "",
+                 client: httpx.AsyncClient | None = None):
+        self._worker_id = worker_id
+        self._telemetry_url = telemetry_url
+        self._heartbeat_url = heartbeat_url
+        self._secret = secret
+        self._flush_seconds = flush_seconds
+        self._heartbeat_seconds = heartbeat_seconds
+        self._stt_provider = stt_provider
+        self._tts_provider = tts_provider
+        # trust_env=False: this client talks to the (usually local) Java
+        # backend, and telemetry construction must never fail because of a
+        # malformed proxy env var (httpx parses those eagerly at
+        # construction). The brain client keeps default env behavior.
+        self._client = client or httpx.AsyncClient(timeout=10.0, trust_env=False)
+        self._owns_client = client is None
+        self._turns: list[TurnTelemetry] = []
+        self._calls: list[dict] = []
+        self._dropped_turns = 0
+        self._dropped_calls = 0
+        self._last_warn_at = 0.0  # monotonic, for warning throttling
+        self._flush_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task | None = None
+
+    # -- recording: hot path, sync, bounded, must not raise -----------------
+
+    def record_turn(self, timing: TurnTelemetry) -> None:
+        """Append a turn timing record. Drop-oldest past the bound; the
+        dropped counter (not per-turn logs) records the loss."""
+        if len(self._turns) >= _TELEMETRY_MAX_TURNS:
+            self._turns.pop(0)
+            self._dropped_turns += 1
+        self._turns.append(timing)
+
+    def record_call(self, *, room: str, trace_id: str, outcome: str,
+                    barge_in_count: int, disconnect_reason: str | None,
+                    started_at: str, ended_at: str) -> None:
+        """Append a call-end record (ISO-8601 started_at/ended_at)."""
+        if len(self._calls) >= _TELEMETRY_MAX_CALLS:
+            self._calls.pop(0)
+            self._dropped_calls += 1
+        self._calls.append({
+            "room": room,
+            "traceId": trace_id,
+            "outcome": outcome,
+            "bargeInCount": barge_in_count,
+            "disconnectReason": disconnect_reason,
+            "startedAt": started_at,
+            "endedAt": ended_at,
+        })
+
+    @property
+    def pending_turns(self) -> int:
+        return len(self._turns)
+
+    @property
+    def dropped_turns(self) -> int:
+        return self._dropped_turns
+
+    @property
+    def dropped_calls(self) -> int:
+        return self._dropped_calls
+
+    # -- background loops ----------------------------------------------------
+
+    def start(self) -> None:
+        """Spawn the flush + heartbeat tasks on the running loop. Idempotent."""
+        if self._flush_task is not None:
+            return
+        loop = asyncio.get_running_loop()
+        self._flush_task = loop.create_task(self._flush_loop(),
+                                            name="voxticket-telemetry-flush")
+        self._heartbeat_task = loop.create_task(self._heartbeat_loop(),
+                                                name="voxticket-telemetry-heartbeat")
+
+    def stop(self) -> None:
+        """Cancel the background tasks. Sync-safe; never awaited on audio."""
+        for task in (self._flush_task, self._heartbeat_task):
+            if task is not None:
+                task.cancel()
+        self._flush_task = self._heartbeat_task = None
+
+    async def aclose(self) -> None:
+        self.stop()
+        if self._owns_client:
+            await self._client.aclose()
+
+    def _secret_headers(self) -> dict:
+        return {"X-VoxTicket-Telemetry-Secret": self._secret}
+
+    def _warn_throttled(self, msg: str, *args) -> None:
+        now = time.monotonic()
+        if now - self._last_warn_at >= _TELEMETRY_WARN_THROTTLE_S:
+            self._last_warn_at = now
+            logger.warning(msg, *args)
+
+    async def _flush_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._flush_seconds)
+            await self._flush_once()
+
+    async def _heartbeat_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._heartbeat_seconds)
+            await self._heartbeat_once()
+
+    async def _heartbeat_once(self) -> None:
+        try:
+            await self._client.post(
+                self._heartbeat_url,
+                json={"workerId": self._worker_id,
+                      "sttProvider": self._stt_provider,
+                      "ttsProvider": self._tts_provider,
+                      "activeRooms": _active_room_count()},
+                headers=self._secret_headers(),
+            )
+        except Exception as exc:
+            self._warn_throttled("telemetry heartbeat failed (dropping): %s", exc)
+
+    def _take_flushable(self) -> tuple[list[TurnTelemetry], list[dict]]:
+        """Split buffered turns into flush-ready vs still-pending.
+
+        A turn is flush-ready once tts_node finalized it; a turn whose TTS
+        never ran (barge-in before any yield) is finalized at llm_node end.
+        As a backstop, turns older than _TURN_FINALIZE_TIMEOUT_S are flushed
+        anyway so a stuck record can't pin memory past the bound.
+        """
+        now = time.perf_counter()
+        ready, pending = [], []
+        for t in self._turns:
+            if t.finalized or (now - t.t_turn_end) > _TURN_FINALIZE_TIMEOUT_S:
+                ready.append(t)
+            else:
+                pending.append(t)
+        self._turns = pending
+        calls, self._calls = self._calls, []
+        return ready, calls
+
+    async def _flush_once(self) -> None:
+        turns, calls = self._take_flushable()
+        if not turns and not calls:
+            return
+        payload = {
+            "workerId": self._worker_id,
+            "turns": [t.to_dict() for t in turns],
+            "calls": calls,
+        }
+        try:
+            resp = await self._client.post(
+                self._telemetry_url, json=payload, headers=self._secret_headers())
+            if resp.status_code >= 400:
+                self._warn_throttled(
+                    "telemetry flush rejected (HTTP %s); batch dropped", resp.status_code)
+        except Exception as exc:
+            # Drop the batch: telemetry must never back-pressure the worker.
+            # No retries - a retry loop on the audio pipeline's behalf could
+            # delay real work; the next flush carries newer data instead.
+            self._warn_throttled("telemetry flush failed; batch dropped: %s", exc)
 
 
 # --------------------------------------------------------------------------
@@ -518,7 +915,12 @@ class _PlaceholderLLM(llm.LLM):
 class VoxTicketAgent(Agent):
     def __init__(self, *, brain: VoxTicketBrain, session_id: str,
                  tts: tts_api.TTS, voices: VoiceControl,
-                 voice_en: str, voice_ur: str, greeting: str):
+                 voice_en: str, voice_ur: str, greeting: str,
+                 trace_id: str | None = None,
+                 telemetry: TelemetryBuffer | None = None,
+                 stt_final: SttFinalTracker | None = None,
+                 stt_provider: str = "", stt_model: str = "",
+                 tts_provider: str = "", tts_model: str = ""):
         # instructions are unused (no LLM provider) but the base class takes them.
         super().__init__(instructions="You are the voice interface for VoxTicket customer support.")
         self._brain = brain
@@ -529,6 +931,32 @@ class VoxTicketAgent(Agent):
         self._voice_ur = voice_ur
         self._greeting = greeting
         self._next_voice: tuple[str, str] | None = None  # (voice_id, language) stashed by llm_node
+        # P3 telemetry (all optional: the agent works identically with none).
+        # trace_id is per call (= room), minted in entrypoint.
+        self._trace_id = trace_id or uuid.uuid4().hex
+        self._telemetry = telemetry
+        self._stt_final = stt_final
+        self._stt_provider = stt_provider
+        self._stt_model = stt_model
+        self._tts_provider = tts_provider
+        self._tts_model = tts_model
+        self._turn_seq = 0  # worker-local turn numbers (Java's turnNumber is separate)
+        self._barge_in_count = 0
+        self._pending_turn: TurnTelemetry | None = None  # stashed for tts_node
+
+    @property
+    def barge_in_count(self) -> int:
+        """Turns cancelled by caller barge-in during this call."""
+        return self._barge_in_count
+
+    def _record_turn_timing(self, timing: TurnTelemetry) -> None:
+        """Append the turn record to the buffer. Best-effort: telemetry must
+        never raise into the pipeline."""
+        try:
+            if self._telemetry is not None:
+                self._telemetry.record_turn(timing)
+        except Exception:
+            logger.debug("telemetry record_turn failed", exc_info=True)
 
     async def on_enter(self) -> None:
         # Greet directly: this must NOT go through llm_node, or the Java
@@ -553,6 +981,12 @@ class VoxTicketAgent(Agent):
         Cancellation (barge-in) aborts the in-flight HTTP stream on this
         side; the Java side notices the disconnect on its next emit, drops
         the partial reply, and releases its per-session lock.
+
+        Telemetry (P3): every timestamp below is pure time.perf_counter()
+        capture - no awaits, no I/O - so measurement can never delay audio.
+        The turn timing is recorded (append-only, bounded buffer) in the
+        finally block, including on cancellation, so partial/aborted turns
+        are visible in voice analytics.
         """
         user_text = self._user_text(chat_ctx).strip()
         if not user_text:
@@ -561,34 +995,88 @@ class VoxTicketAgent(Agent):
                 "(no Java brain call made)"
             )
             return
+        # --- telemetry tap points ---
+        # t_stt_final: the moment the committed user text becomes available
+        # here. The chat_ctx handed to llm_node already contains the final STT
+        # transcript; this is the earliest point the worker can act on it.
+        # stt_latency_ms (computed at flush): t_stt_final minus the STT
+        # provider's final-transcript event time = framework
+        # turn-detection/queueing delay. Null when no final event was seen.
+        t_stt_final = time.perf_counter()
+        stt_event_ts, stt_language = self._stt_final.take() if self._stt_final else (None, None)
+        self._turn_seq += 1
+        span_id = uuid.uuid4().hex[:16]
+        traceparent = _build_traceparent(self._trace_id, span_id)
+        timing = TurnTelemetry(
+            room=self._session_id,
+            turn_number=self._turn_seq,
+            trace_id=self._trace_id,
+            span_id=span_id,
+            stt_provider=self._stt_provider,
+            stt_model=self._stt_model,
+            tts_provider=self._tts_provider,
+            tts_model=self._tts_model,
+            stt_language=stt_language,
+            t_stt_final=t_stt_final,
+            t_stt_event=stt_event_ts,
+        )
+        # Stashed for tts_node, which stamps the first audio frame and
+        # finalizes the record. Cleared there, or here when no TTS will run.
+        self._pending_turn = timing
         logger.info(
             "llm_node: turn committed, streaming Java brain (session=%s, %d chars)",
             self._session_id, len(user_text),
         )
         voice_locked = False
         yielded_any = False
+        timing.t_brain_start = time.perf_counter()
         try:
-            async for delta in self._brain.turn_stream(self._session_id, user_text):
-                if not voice_locked and delta.strip():
-                    # First real content decides the turn's TTS voice.
-                    self._next_voice = (self._voice_ur, "ur") if is_urdu(delta) else (self._voice_en, "en")
-                    voice_locked = True
-                    logger.info("llm_node: TTS voice locked voice_id=%s language=%s (first delta %r)",
-                                self._next_voice[0], self._next_voice[1], delta[:60])
-                yielded_any = True
-                yield delta
-        except BrainError as exc:
-            logger.error("Java brain turn failed: %s", exc)
+            try:
+                async for delta in self._brain.turn_stream(
+                        self._session_id, user_text, traceparent=traceparent):
+                    if timing.t_brain_first_delta is None and delta and delta.strip():
+                        # Java brain TTFT: first text out of the SSE stream.
+                        timing.t_brain_first_delta = time.perf_counter()
+                    if not voice_locked and delta.strip():
+                        # First real content decides the turn's TTS voice.
+                        self._next_voice = (self._voice_ur, "ur") if is_urdu(delta) else (self._voice_en, "en")
+                        voice_locked = True
+                        logger.info("llm_node: TTS voice locked voice_id=%s language=%s (first delta %r)",
+                                    self._next_voice[0], self._next_voice[1], delta[:60])
+                    yielded_any = True
+                    yield delta
+            except BrainError as exc:
+                timing.aborted = True
+                timing.error = f"{type(exc).__name__}: {str(exc)[:120]}"
+                logger.error("Java brain turn failed: %s", exc)
+                if not yielded_any:
+                    # Nothing spoken yet: the apology can still take the turn.
+                    # After speech started, partial audio can't be unsaid.
+                    yield (
+                        "Sorry, I'm having trouble reaching the service right now. "
+                        "Please try again in a moment."
+                    )
+        except asyncio.CancelledError:
+            # Barge-in (or session teardown): LiveKit cancels this generator.
+            # The partial turn is recorded below; re-raise so the pipeline
+            # tears the turn down exactly as before.
+            timing.barge_in = True
+            timing.aborted = True
+            self._barge_in_count += 1
+            logger.info("llm_node: turn cancelled (barge-in), partial turn recorded")
+            raise
+        finally:
+            timing.t_turn_end = time.perf_counter()
+            if not voice_locked:
+                self._next_voice = (self._voice_en, "en")
             if not yielded_any:
-                # Nothing spoken yet: the apology can still take the turn.
-                # After speech started, partial audio can't be unsaid.
-                yield (
-                    "Sorry, I'm having trouble reaching the service right now. "
-                    "Please try again in a moment."
-                )
-        if not voice_locked:
-            self._next_voice = (self._voice_en, "en")
-        logger.info("llm_node: brain stream ended (yielded_any=%s)", yielded_any)
+                # No text was ever produced: tts_node will not run for this
+                # turn, so there is nothing left to stamp - finalize now.
+                # (When chunks were yielded, tts_node finalizes instead.)
+                self._pending_turn = None
+                timing.finalize()
+            self._record_turn_timing(timing)
+            logger.info("llm_node: brain stream ended (yielded_any=%s)", yielded_any)
 
     async def tts_node(self, text, model_settings):
         """Apply the voice stashed by llm_node, then run the default node.
@@ -598,24 +1086,69 @@ class VoxTicketAgent(Agent):
         frames), fall back to the English voice once instead of leaving the
         caller in silence. The warning names the culprit so the
         misconfiguration still gets fixed.
+
+        Telemetry (P3): stamps the first synthesized audio frame on the turn
+        timing stashed by llm_node and finalizes the record when synthesis
+        for this turn completes. Pass-through only - no awaits added.
         """
         voice_id, language = self._next_voice or (self._voice_en, "en")
         self._next_voice = None
+        timing = self._pending_turn
+        self._pending_turn = None
         self._voices.set_voice(voice_id, language)
         logger.info("tts_node: synthesizing with voice_id=%s language=%s", voice_id, language)
         try:
-            async for frame in Agent.default.tts_node(self, text, model_settings):
-                yield frame
-        except Exception as exc:
-            if language != "ur":
-                raise
-            logger.warning(
-                "Non-English TTS voice %r failed (%s); falling back to English voice",
-                voice_id, exc,
-            )
-            self._voices.set_voice(self._voice_en, "en")
-            async for frame in Agent.default.tts_node(self, text, model_settings):
-                yield frame
+            try:
+                async for frame in self._timed_frames(
+                        Agent.default.tts_node(self, text, model_settings), timing):
+                    yield frame
+            except Exception as exc:
+                if language != "ur":
+                    raise
+                logger.warning(
+                    "Non-English TTS voice %r failed (%s); falling back to English voice",
+                    voice_id, exc,
+                )
+                self._voices.set_voice(self._voice_en, "en")
+                async for frame in self._timed_frames(
+                        Agent.default.tts_node(self, text, model_settings), timing):
+                    yield frame
+        finally:
+            if timing is not None:
+                timing.finalize()
+
+    @staticmethod
+    async def _timed_frames(frames: AsyncIterator, timing: TurnTelemetry | None) -> AsyncIterator:
+        """Yield audio frames through, stamping the first one on the turn.
+
+        First-audio latency is measured from the first brain text delta to
+        the first synthesized audio frame (TTS pipeline latency; the speaker
+        playout tail is out of the worker's view).
+        """
+        async for frame in frames:
+            if timing is not None and timing.t_tts_first_audio is None:
+                timing.t_tts_first_audio = time.perf_counter()
+            yield frame
+
+
+def _stt_model_name(cfg: Config) -> str:
+    """STT model identifier for telemetry facts."""
+    if cfg.stt_provider == "assemblyai":
+        # livekit-plugins-assemblyai default (verified against 1.8.x).
+        return "universal-3-6-pro"
+    if cfg.stt_provider == "elevenlabs":
+        return cfg.elevenlabs_stt_model
+    return cfg.stt_provider
+
+
+def _tts_model_name(cfg: Config) -> str:
+    """TTS model identifier for telemetry facts."""
+    if cfg.tts_provider == "cartesia":
+        return cfg.cartesia_model
+    if cfg.tts_provider == "elevenlabs":
+        return cfg.elevenlabs_tts_model
+    # livekit-plugins-azure has no model id; voice names are the stable id.
+    return "azure-neural"
 
 
 # --------------------------------------------------------------------------
@@ -630,6 +1163,37 @@ async def entrypoint(ctx: agents.JobContext):
     cfg = load_config()
     logging.basicConfig(level=cfg.log_level.upper())
     logger.info("providers: stt=%s tts=%s", cfg.stt_provider, cfg.tts_provider)
+
+    # P3 voice telemetry. One trace_id per call (= room); the background
+    # buffer flushes batches to Java. All best-effort: telemetry setup must
+    # never fail the call, and the flush/heartbeat tasks are never awaited
+    # on the audio pipeline.
+    trace_id = uuid.uuid4().hex
+    worker_id = cfg.worker_id or f"{socket.gethostname()}-{os.getpid()}"
+    # Telemetry is best-effort: if even buffer construction fails, the call
+    # continues with telemetry=None (the agent treats that as "disabled").
+    telemetry: TelemetryBuffer | None
+    try:
+        telemetry = TelemetryBuffer(
+            worker_id=worker_id,
+            telemetry_url=cfg.voxticket_telemetry_url,
+            heartbeat_url=cfg.voxticket_heartbeat_url,
+            secret=cfg.voice_telemetry_secret,
+            flush_seconds=cfg.telemetry_flush_seconds,
+            heartbeat_seconds=cfg.heartbeat_seconds,
+            stt_provider=cfg.stt_provider,
+            tts_provider=cfg.tts_provider,
+        )
+        telemetry.start()
+    except Exception:
+        logger.warning("voice telemetry unavailable; call continues without it",
+                       exc_info=True)
+        telemetry = None
+    _inc_active_rooms()
+    room_name = ctx.room.name
+    call_started_at = datetime.now(timezone.utc).isoformat()
+
+    stt_final = SttFinalTracker()
 
     brain = VoxTicketBrain(cfg.voxticket_turn_url, cfg.brain_timeout_s,
                            stream_url=cfg.voxticket_turn_stream_url)
@@ -646,6 +1210,13 @@ async def entrypoint(ctx: agents.JobContext):
         voice_en=tts_setup.voice_en,
         voice_ur=tts_setup.voice_ur,
         greeting=cfg.greeting,
+        trace_id=trace_id,
+        telemetry=telemetry,
+        stt_final=stt_final,
+        stt_provider=cfg.stt_provider,
+        stt_model=_stt_model_name(cfg),
+        tts_provider=cfg.tts_provider,
+        tts_model=_tts_model_name(cfg),
     )
 
     session = AgentSession(
@@ -660,6 +1231,42 @@ async def entrypoint(ctx: agents.JobContext):
         # off: speculative calls would execute real, stateful Java turns twice.
         turn_handling={"preemptive_generation": {"enabled": False}},
     )
+
+    # STT final-transcript events feed the per-turn STT latency measurement.
+    # (Sync handler: EventEmitter.emit() invokes callbacks inline, so this
+    # must never await.)
+    session.on("user_input_transcribed", stt_final.handle)
+
+    def _on_session_close(ev) -> None:
+        # Sync by necessity (see above). Records the call-end event and stops
+        # the telemetry tasks; never raises into the session teardown.
+        try:
+            if telemetry is not None:
+                outcome, reason = _classify_close(ev)
+                telemetry.record_call(
+                    room=room_name,
+                    trace_id=trace_id,
+                    outcome=outcome,
+                    barge_in_count=agent.barge_in_count,
+                    disconnect_reason=reason,
+                    started_at=call_started_at,
+                    ended_at=datetime.now(timezone.utc).isoformat(),
+                )
+                logger.info("voice call ended room=%s outcome=%s reason=%s barge_ins=%d",
+                            room_name, outcome, reason, agent.barge_in_count)
+        except Exception:
+            logger.warning("telemetry: failed to record call end", exc_info=True)
+        finally:
+            _dec_active_rooms()
+            if telemetry is not None:
+                telemetry.stop()
+
+    # livekit-agents 1.8.x: AgentSession emits "close" exactly once during
+    # session teardown (see AgentSession._close: after activity teardown,
+    # before room IO closes) with CloseEvent(reason: CloseReason, error).
+    # This is the framework's own session-end signal - no polling of room
+    # state and no rtc.Room event subscription needed.
+    session.on("close", _on_session_close)
 
     logger.info(
         "Placeholder LLM active; replies come from VoxTicketAgent.llm_node -> Java brain"

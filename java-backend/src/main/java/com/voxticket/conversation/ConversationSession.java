@@ -2,6 +2,7 @@ package com.voxticket.conversation;
 
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityAssurance;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.procedure.DeferredProcedureIntent;
 import com.voxticket.procedure.ProcedureState;
 import java.time.Instant;
@@ -13,6 +14,23 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * In-memory conversation state driving the live conversation.
+ *
+ * <p>P0 (session lifecycle). Lifecycle is <em>derived at read time</em> from
+ * the audit record - never written as state:
+ * <ul>
+ *   <li>ACTIVE: {@code lastActivityAt} within
+ *       {@code voxticket.admin.active-session-window-minutes} (default 15).</li>
+ *   <li>ABORTED: the last recorded turn outcome is {@code "aborted"}
+ *       (voice client disconnected mid-turn).</li>
+ *   <li>COMPLETED: a terminal turn outcome was recorded and the session is
+ *       idle beyond the active window.</li>
+ * </ul>
+ * The async audit writer upserts {@code turn_count} /
+ * {@code last_turn_outcome} onto {@code conversation_sessions} at every
+ * turn completion; admin queries apply the definitions above.
+ */
 public class ConversationSession {
 
     private static final int MAX_RECENT_ACTIONS = 10;
@@ -38,6 +56,17 @@ public class ConversationSession {
     private UUID pendingVerificationChallengeId;
     private ConversationFocus focus;
     private boolean toolInvokedThisTurn;
+    /**
+     * P2 (turn decision trace). In-memory accumulator for the current turn's
+     * AI decision trace, set by {@code ConversationRuntime} at turn start and
+     * cleared when the turn ends. Stage components (agent, RAG, tools,
+     * coordinator) read it to record their observations; assembly is pure
+     * field assignment and persistence goes through the async audit bus, so
+     * it never blocks the turn. All production mutations happen inside
+     * {@code SessionStore.withSession}'s per-session lock, so set-then-clear
+     * within one turn is thread-safe. Never persisted as session state.
+     */
+    private volatile TurnTrace.Builder activeTraceBuilder;
 
 
     private ConversationSession(String sessionId, Channel channel) {
@@ -227,6 +256,16 @@ public class ConversationSession {
     }
 
 
+
+    /** P2: the current turn's trace accumulator, or null when no turn is in flight. */
+    public TurnTrace.Builder getActiveTraceBuilder() {
+        return activeTraceBuilder;
+    }
+
+    /** P2: installed by ConversationRuntime at turn start, cleared at turn end. */
+    public void setActiveTraceBuilder(TurnTrace.Builder builder) {
+        this.activeTraceBuilder = builder;
+    }
 
     /** Diagnostic only (proposal #3): lets ConversationRuntime detect a response that claims a system failure with no tool ever attempted. */
     public void resetToolInvokedFlag() {

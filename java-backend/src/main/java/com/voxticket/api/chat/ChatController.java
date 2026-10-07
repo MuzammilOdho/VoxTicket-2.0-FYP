@@ -3,6 +3,9 @@ package com.voxticket.api.chat;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationRuntime;
 import com.voxticket.conversation.UserTurn;
+import com.voxticket.observability.TraceIds;
+import com.voxticket.observability.TraceIdFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import java.util.Map;
@@ -40,13 +43,26 @@ public class ChatController {
     }
 
     @PostMapping
-    public ChatResponse chat(@Valid @RequestBody ChatRequest request) {
+    public ChatResponse chat(@Valid @RequestBody ChatRequest request, HttpServletRequest httpRequest) {
         String sessionId = (request.sessionId() == null || request.sessionId().isBlank())
                 ? "chat-" + UUID.randomUUID()
                 : request.sessionId();
 
-        UserTurn turn = new UserTurn(sessionId, Channel.CHAT, request.message(), request.customerPhone(), Instant.now(), Map.of());
+        UserTurn turn = new UserTurn(sessionId, Channel.CHAT, request.message(), request.customerPhone(), Instant.now(), traceMetadata(httpRequest));
         var assistantTurn = conversationRuntime.processTurn(turn);
         return ChatResponse.from(assistantTurn);
+    }
+
+    /**
+     * P0 (correlation). Propagates the request trace ID (resolved by
+     * {@link TraceIdFilter} from the {@code traceparent} header) into the
+     * turn's provider metadata. A missing attribute (e.g. unit tests without
+     * the filter) degrades to a fresh ID - never null, never breaking the
+     * turn.
+     */
+    private static Map<String, String> traceMetadata(HttpServletRequest httpRequest) {
+        Object attribute = httpRequest == null ? null : httpRequest.getAttribute(TraceIdFilter.REQUEST_ATTRIBUTE_TRACE_ID);
+        String traceId = (attribute instanceof String s && !s.isBlank()) ? s : TraceIds.newTraceId();
+        return Map.of(TraceIds.METADATA_TRACE_ID, traceId);
     }
 }

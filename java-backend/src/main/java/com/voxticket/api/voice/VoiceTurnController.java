@@ -3,7 +3,11 @@ package com.voxticket.api.voice;
 import com.voxticket.api.chat.ChatResponse;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationRuntime;
+import com.voxticket.conversation.TurnAbortedException;
 import com.voxticket.conversation.UserTurn;
+import com.voxticket.observability.TraceIds;
+import com.voxticket.observability.TraceIdFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.Duration;
@@ -40,9 +44,9 @@ public class VoiceTurnController {
     }
 
     @PostMapping("/turn")
-    public ChatResponse turn(@Valid @RequestBody VoiceTurnRequest request) {
+    public ChatResponse turn(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
         UserTurn turn = new UserTurn(
-                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), Map.of());
+                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), traceMetadata(httpRequest));
         return ChatResponse.from(conversationRuntime.processTurn(turn));
     }
 
@@ -58,10 +62,10 @@ public class VoiceTurnController {
      * releases the per-session lock immediately.
      */
     @PostMapping("/turn/stream")
-    public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request) {
+    public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
         SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
         UserTurn turn = new UserTurn(
-                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), Map.of());
+                request.sessionId(), Channel.PHONE, request.message(), null, Instant.now(), traceMetadata(httpRequest));
         try {
             conversationRuntime.processTurnStream(turn, delta -> {
                 try {
@@ -85,5 +89,18 @@ public class VoiceTurnController {
             emitter.completeWithError(e);
         }
         return emitter;
+    }
+
+    /**
+     * P0 (correlation). Propagates the request trace ID (resolved by
+     * {@link TraceIdFilter} from the {@code traceparent} header) into the
+     * turn's provider metadata so the runtime, audit rows, and logs all share
+     * it. A missing attribute (e.g. unit tests without the filter) degrades
+     * to a fresh ID - never null, never breaking the turn.
+     */
+    private static Map<String, String> traceMetadata(HttpServletRequest httpRequest) {
+        Object attribute = httpRequest == null ? null : httpRequest.getAttribute(TraceIdFilter.REQUEST_ATTRIBUTE_TRACE_ID);
+        String traceId = (attribute instanceof String s && !s.isBlank()) ? s : TraceIds.newTraceId();
+        return Map.of(TraceIds.METADATA_TRACE_ID, traceId);
     }
 }

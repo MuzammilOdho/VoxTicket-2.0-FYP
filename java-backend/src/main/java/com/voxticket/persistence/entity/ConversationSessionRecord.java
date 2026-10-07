@@ -45,6 +45,14 @@ public class ConversationSessionRecord extends BaseEntity {
     @Column(name = "last_activity_at", nullable = false)
     private Instant lastActivityAt;
 
+    /** V9: lifecycle support for the admin session-status derivation. */
+    @Column(name = "turn_count", nullable = false)
+    private int turnCount = 0;
+
+    /** V9: outcome label of the most recent turn ("aborted", "normal", ...). */
+    @Column(name = "last_turn_outcome", length = 40)
+    private String lastTurnOutcome;
+
     protected ConversationSessionRecord() {
         // JPA
     }
@@ -90,5 +98,13 @@ public class ConversationSessionRecord extends BaseEntity {
 
     public Instant getLastActivityAt() {
         return lastActivityAt;
+    }
+
+    public int getTurnCount() {
+        return turnCount;
+    }
+
+    public String getLastTurnOutcome() {
+        return lastTurnOutcome;
     }
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.Channel;
+import com.voxticket.audit.AuditEventBus;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.MessageRole;
 import com.voxticket.observability.TurnMetrics;
@@ -27,7 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * accumulate across the whole shared Spring context for this test run, so
  * exact-equality checks would be brittle against test execution order.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 class AdminDashboardServiceTest {
@@ -42,6 +43,8 @@ class AdminDashboardServiceTest {
     private TurnMetrics turnMetrics;
     @Autowired
     private ConversationAuditService auditService;
+    @Autowired
+    private AuditEventBus auditEventBus;
 
     private ConversationSession session;
 
@@ -49,6 +52,8 @@ class AdminDashboardServiceTest {
     void setUp() {
         session = ConversationSession.newSession("admin-test-" + UUID.randomUUID(), Channel.CHAT);
         auditService.recordSessionTouch(session);
+        // P1: audit writes are asynchronous - flush before asserting on persisted state.
+        auditEventBus.flush();
     }
 
     @Test
@@ -98,6 +103,7 @@ class AdminDashboardServiceTest {
         auditService.recordMessage(session, 1, MessageRole.USER, "Where is my order?");
         auditService.recordEvent(session, 1, ConversationEventType.MODEL_SELECTED, "tier=TIER_1 model=openai/gpt-oss-20b reason=default");
         auditService.recordMessage(session, 1, MessageRole.ASSISTANT, "Let me check that for you.");
+        auditEventBus.flush();
 
         var view = dashboardService.getInspectorView(session.getSessionId());
 
@@ -110,6 +116,7 @@ class AdminDashboardServiceTest {
     @Test
     void inspectorViewNeverExposesOtpValues() {
         auditService.recordEvent(session, 1, ConversationEventType.OTP_ISSUED, "type=CANCELLATION");
+        auditEventBus.flush();
 
         var view = dashboardService.getInspectorView(session.getSessionId());
 

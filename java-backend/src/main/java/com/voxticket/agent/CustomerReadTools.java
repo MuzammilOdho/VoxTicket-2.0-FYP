@@ -6,6 +6,7 @@ import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.InsufficientAssuranceException;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.safety.ToolError;
 import com.voxticket.service.CustomerOrderQueryService;
@@ -73,6 +74,7 @@ public class CustomerReadTools {
             String resultCode = (result instanceof ToolError toolError) ? toolError.code() : "OK";
             log.info("event=tool_call tool={} reference={} durationMs={} result={}", toolName, safeReference(reference), durationMs, resultCode);
             turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, resultCode);
+            traceToolCall(toolName, resultCode, durationMs);
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
                     "tool=" + toolName + " result=" + resultCode + " durationMs=" + durationMs);
             return result;
@@ -80,6 +82,7 @@ public class CustomerReadTools {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=NOT_FOUND_FOR_ACCOUNT", toolName, safeReference(reference), durationMs);
             turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, "NOT_FOUND_FOR_ACCOUNT");
+            traceToolCall(toolName, "NOT_FOUND_FOR_ACCOUNT", durationMs);
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
                     "tool=" + toolName + " result=NOT_FOUND_FOR_ACCOUNT durationMs=" + durationMs);
             return new ToolError(
@@ -90,11 +93,20 @@ public class CustomerReadTools {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=IDENTITY_NOT_VERIFIED", toolName, safeReference(reference), durationMs);
             turnMetrics.recordToolCall(Duration.ofMillis(durationMs), toolName, "IDENTITY_NOT_VERIFIED");
+            traceToolCall(toolName, "IDENTITY_NOT_VERIFIED", durationMs);
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
                     "tool=" + toolName + " result=IDENTITY_NOT_VERIFIED durationMs=" + durationMs);
             return new ToolError(
                     "IDENTITY_NOT_VERIFIED",
                     "The customer's phone number could not be matched to an account, so their own order data cannot be looked up yet.");
+        }
+    }
+
+    /** P2: records the tool invocation on the turn's trace builder (name/result/duration only). */
+    private void traceToolCall(String toolName, String resultCode, long durationMs) {
+        TurnTrace.Builder builder = session.getActiveTraceBuilder();
+        if (builder != null) {
+            builder.addToolCall(toolName, resultCode, (double) durationMs);
         }
     }
 

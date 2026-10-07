@@ -67,7 +67,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * {@code ConversationRuntime} only serializes turns within one session on one
  * instance - it cannot protect against this scenario.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 class ConcurrentMutationTest {

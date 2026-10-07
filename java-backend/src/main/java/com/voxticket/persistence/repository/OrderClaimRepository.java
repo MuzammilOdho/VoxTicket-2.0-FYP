@@ -7,12 +7,23 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface OrderClaimRepository extends JpaRepository<OrderClaim, UUID> {
+    /**
+     * Admin read path (Phase 12/P4): optional status + claim-number
+     * substring filter. Read-only; never used by business logic.
+     */
+    @Query("select c from OrderClaim c where (:status is null or c.status = :status) "
+            + "and (:q is null or c.claimNumber ilike concat('%', cast(:q as string), '%'))")
+    Page<OrderClaim> searchAdmin(
+            @Param("status") ClaimStatus status, @Param("q") String q, Pageable pageable);
+
     Optional<OrderClaim> findByClaimNumber(String claimNumber);
     List<OrderClaim> findByOrderId(UUID orderId);
 

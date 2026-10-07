@@ -3,6 +3,7 @@ package com.voxticket.rag;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import java.time.Duration;
 import java.util.List;
@@ -39,13 +40,35 @@ public class PolicyKnowledgeTools {
     public Object searchPolicy(@ToolParam(description = "A natural-language question about company policy") String query) {
         session.markToolInvoked();
         long start = System.nanoTime();
-        List<RagService.PolicySnippet> results = ragService.searchPolicy(query);
+        // P2: one search yields both the model-facing snippets and the
+        // trace-safe detailed result - no second round-trip, no text leakage
+        // into the trace.
+        RagService.DetailedSearch detailed = ragService.searchDetailed(query);
+        List<RagService.PolicySnippet> results = detailed.snippets();
         long durationMs = (System.nanoTime() - start) / 1_000_000;
         log.info("event=tool_call tool=searchPolicy durationMs={} result=OK resultCount={}", durationMs, results.size());
         turnMetrics.recordToolCall(Duration.ofMillis(durationMs), "searchPolicy", "OK");
+        traceRagSearch(detailed.result(), durationMs);
         String categories = results.stream().map(RagService.PolicySnippet::category).distinct().reduce((a, b) -> a + "," + b).orElse("none");
         auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.RAG_SEARCH,
                 "resultCount=" + results.size() + " categories=" + categories + " durationMs=" + durationMs);
         return results;
+    }
+
+    /**
+     * P2: records the RAG search on the turn's trace builder. Only document
+     * id/category/similarity are recorded - never document text.
+     */
+    private void traceRagSearch(RagService.RagSearchResult result, long toolDurationMs) {
+        TurnTrace.Builder builder = session.getActiveTraceBuilder();
+        if (builder == null) {
+            return;
+        }
+        builder.ragMs((double) result.durationMs());
+        builder.ragCacheHit(result.cacheHit());
+        for (RagService.DocHit hit : result.hits()) {
+            builder.addRagDoc(hit.docId(), hit.category(), hit.similarity());
+        }
+        builder.addToolCall("searchPolicy", "OK", (double) toolDurationMs);
     }
 }

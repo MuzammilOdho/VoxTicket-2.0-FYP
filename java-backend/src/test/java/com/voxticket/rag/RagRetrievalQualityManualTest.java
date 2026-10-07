@@ -23,7 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *   3. mvn test -Dgroups=manual -DexcludedGroups=
  */
 @Tag("manual")
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("dev")
 @SpringBootTest
 class RagRetrievalQualityManualTest {

@@ -19,7 +19,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * to boot at all - switched to email delivery here with a placeholder host,
  * since bean construction alone never actually connects to it.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @TestPropertySource(properties = {
         "voxticket.otp.delivery=email",
         "spring.mail.host=localhost",

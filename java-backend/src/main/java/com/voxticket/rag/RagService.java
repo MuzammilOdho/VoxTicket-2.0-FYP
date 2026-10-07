@@ -39,7 +39,7 @@ public class RagService {
     private static final int SEARCH_CACHE_MAX_ENTRIES = 200;
     private final ConcurrentHashMap<String, CachedSearch> searchCache = new ConcurrentHashMap<>();
 
-    private record CachedSearch(List<PolicySnippet> snippets, long expiresAtMillis) {
+    private record CachedSearch(List<DocHit> hits, List<PolicySnippet> snippets, long expiresAtMillis) {
     }
 
     public RagService(VectorStore vectorStore, RagProperties properties, TurnMetrics turnMetrics) {
@@ -49,12 +49,40 @@ public class RagService {
     }
 
     public List<PolicySnippet> searchPolicy(String query) {
+        return searchDetailed(query).snippets();
+    }
+
+    /**
+     * P2: detailed search for the turn decision trace. Carries per-document
+     * identity and similarity but never document text.
+     */
+    public RagSearchResult searchPolicyDetailed(String query) {
+        return searchDetailed(query).result();
+    }
+
+    /**
+     * Combined search used by {@link PolicyKnowledgeTools}: one vector-store
+     * round-trip yielding both the model-facing snippets and the trace-safe
+     * detailed result. Package-private - the text must never reach the trace.
+     */
+    record DetailedSearch(RagSearchResult result, List<PolicySnippet> snippets) {
+    }
+
+    DetailedSearch searchDetailed(String query) {
+        SearchOutcome outcome = searchInternal(query);
+        return new DetailedSearch(new RagSearchResult(outcome.hits(), outcome.cacheHit(), outcome.durationMs()), outcome.snippets());
+    }
+
+    private record SearchOutcome(List<DocHit> hits, List<PolicySnippet> snippets, boolean cacheHit, long durationMs) {
+    }
+
+    private SearchOutcome searchInternal(String query) {
         String cacheKey = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
         CachedSearch hit = searchCache.get(cacheKey);
         if (hit != null && hit.expiresAtMillis() > System.currentTimeMillis()) {
             turnMetrics.recordRagSearch(Duration.ZERO, hit.snippets().size());
             log.debug("event=rag_search_cached retrievedCount={} queryLength={}", hit.snippets().size(), query == null ? 0 : query.length());
-            return hit.snippets();
+            return new SearchOutcome(hit.hits(), hit.snippets(), true, 0);
         }
 
         long start = System.nanoTime();
@@ -65,6 +93,14 @@ public class RagService {
                 SearchRequest.builder().query(retrievalQuery).topK(properties.topK()).similarityThreshold(properties.similarityThreshold()).build());
         long durationMs = (System.nanoTime() - start) / 1_000_000;
 
+        List<DocHit> hits = results.stream()
+                .map(doc -> new DocHit(
+                        doc.getId() == null ? "unknown" : doc.getId(),
+                        String.valueOf(doc.getMetadata().getOrDefault("category", "policy")),
+                        // The pgvector store always sets a score; 0.0 is the
+                        // honest fallback when it does not - never fabricate.
+                        doc.getScore() == null ? 0.0 : doc.getScore()))
+                .toList();
         List<PolicySnippet> snippets = results.stream()
                 .map(doc -> new PolicySnippet(String.valueOf(doc.getMetadata().getOrDefault("category", "policy")), doc.getText()))
                 .toList();
@@ -75,9 +111,17 @@ public class RagService {
         turnMetrics.recordRagSearch(Duration.ofMillis(durationMs), snippets.size());
 
         if (searchCache.size() < SEARCH_CACHE_MAX_ENTRIES) {
-            searchCache.put(cacheKey, new CachedSearch(snippets, System.currentTimeMillis() + SEARCH_CACHE_TTL.toMillis()));
+            searchCache.put(cacheKey, new CachedSearch(hits, snippets, System.currentTimeMillis() + SEARCH_CACHE_TTL.toMillis()));
         }
-        return snippets;
+        return new SearchOutcome(hits, snippets, false, durationMs);
+    }
+
+    /** P2: one retrieved document - identity + relevance only, never content. */
+    public record DocHit(String docId, String category, double similarity) {
+    }
+
+    /** P2: detailed RAG result for the turn decision trace. */
+    public record RagSearchResult(List<DocHit> hits, boolean cacheHit, long durationMs) {
     }
 
     public record PolicySnippet(String category, String text) {

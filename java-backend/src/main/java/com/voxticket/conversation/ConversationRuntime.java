@@ -6,7 +6,9 @@ import com.voxticket.agent.ToolAccessMode;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.IdentityService;
+import com.voxticket.observability.TraceIds;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.procedure.ConfirmationDecision;
 import com.voxticket.procedure.ExplicitConfirmationParser;
@@ -14,6 +16,7 @@ import com.voxticket.procedure.ProcedureCoordinator;
 import com.voxticket.procedure.ProcedureOutcome;
 import com.voxticket.procedure.ProcedureState;
 import com.voxticket.procedure.ProcedureStatus;
+import com.voxticket.safety.GroqMlPromptGuard;
 import com.voxticket.safety.InputNormalizer;
 import com.voxticket.safety.NormalizationResult;
 import com.voxticket.safety.PromptGuard;
@@ -22,6 +25,7 @@ import com.voxticket.safety.SafeLogging;
 import com.voxticket.verification.SensitiveTurn;
 import com.voxticket.verification.SensitiveTurnParser;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +35,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -98,7 +103,7 @@ public class ConversationRuntime {
      * logic, but LLM-backed branches emit token deltas to {@code deltaSink}
      * as they generate, and deterministic branches emit their full text as
      * one delta. {@code deltaSink} must throw
-     * {@link com.voxticket.api.voice.TurnAbortedException} (unchecked) when
+     * {@link TurnAbortedException} (unchecked) when
      * the client disconnected; it unwinds through the per-session lock,
      * skipping assistant-message recording for the aborted turn.
      */
@@ -119,6 +124,48 @@ public class ConversationRuntime {
     private AssistantTurn processTurnInternal(UserTurn turn, Consumer<String> deltaSink) {
         long startNanos = System.nanoTime();
         return sessionStore.withSession(turn.sessionId(), turn.channel(), session -> {
+            // P0 (correlation): the trace ID arrives via UserTurn provider
+            // metadata (populated by the controllers from the traceparent
+            // header). A missing/blank value degrades to a fresh ID and never
+            // affects execution. MDC carries trace + session on every log line
+            // below; it is cleared in the finally.
+            String traceId = resolveTraceId(turn);
+            MDC.put(TraceIds.MDC_TRACE_ID, traceId);
+            MDC.put(TraceIds.MDC_SESSION_ID, session.getSessionId());
+            try {
+                return processTurnForSession(turn, deltaSink, session, startNanos, traceId);
+            } finally {
+                MDC.clear();
+            }
+        });
+    }
+
+    /**
+     * The turn body, extracted so {@link #processTurnInternal} can own MDC
+     * lifecycle around it.
+     *
+     * <p>Catches {@link TurnAbortedException} to classify the turn explicitly
+     * (turn-completion audit marker with outcome {@code "aborted"} plus the
+     * {@code voxticket.turn.aborted} metric) before rethrowing - the partial
+     * reply is still dropped and the per-session lock still releases via the
+     * session store's finally.
+     */
+    private AssistantTurn processTurnForSession(UserTurn turn, Consumer<String> deltaSink,
+            ConversationSession session, long startNanos, String traceId) {
+        // Latest turn number, for abort classification: set right after every
+        // session.recordUserMessage(...) below.
+        int[] currentTurn = new int[]{-1};
+        // P2 (turn decision trace): one builder per turn, installed on the
+        // session so stage components (agent, RAG, tools, coordinator) can
+        // record their observations. recordUserMessage is called exactly once
+        // per turn below, so getTurnCount()+1 is the number it will assign.
+        // Assembly is pure field assignment; the single publish at turn end
+        // goes through the async audit bus. Cleared in the finally so the
+        // builder never leaks across turns.
+        TurnTrace.Builder traceBuilder = TurnTrace.builder(
+                session.getSessionId(), session.getTurnCount() + 1, session.getChannel().name(), traceId, Instant.now());
+        session.setActiveTraceBuilder(traceBuilder);
+        try {
             if (StringUtils.hasText(turn.callerPhone())) {
                 CustomerIdentity resolved = identityService.resolveByPhone(turn.callerPhone());
                 session.applyResolvedIdentity(resolved);
@@ -128,10 +175,13 @@ public class ConversationRuntime {
             log.info("event=turn_start sessionId={} channel={} turnNumber={} identityAssurance={}",
                     session.getSessionId(), session.getChannel(), session.getTurnCount() + 1, session.getCustomerIdentity().assuranceLevel());
 
+            long normalizeStart = System.nanoTime();
             NormalizationResult normalization = inputNormalizer.normalize(turn.text());
+            traceBuilder.normalizeMs(nanosToMs(System.nanoTime() - normalizeStart));
             if (!normalization.accepted()) {
                 log.info("event=input_rejected sessionId={} reason=INPUT_TOO_LONG length={}", session.getSessionId(), normalization.rejectedLength());
                 int turnNumber = session.recordUserMessage("[message rejected - too long: " + normalization.rejectedLength() + " characters]");
+                markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, "[message rejected - too long: " + normalization.rejectedLength() + " characters]");
                 session.recordAssistantMessage(TOO_LONG_MESSAGE);
                 auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, TOO_LONG_MESSAGE);
@@ -161,11 +211,15 @@ public class ConversationRuntime {
                 guardInput = preParsedSensitive.redactedText();
             }
 
+            long guardStart = System.nanoTime();
             PromptGuardVerdict verdict = promptGuard.evaluate(guardInput);
+            traceBuilder.guardMs(nanosToMs(System.nanoTime() - guardStart));
+            recordGuardVerdict(traceBuilder, verdict);
             if (verdict.suspicious()) {
                 log.warn("event=input_blocked sessionId={} category={} inputLength={} inputHash={}",
                         session.getSessionId(), verdict.category(), normalizedText.length(), SafeLogging.hash(normalizedText));
                 turnNumber = session.recordUserMessage(REDACTED_FLAGGED_PLACEHOLDER);
+                markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, REDACTED_FLAGGED_PLACEHOLDER);
                 auditService.recordEvent(session, turnNumber, ConversationEventType.SAFETY_BLOCKED, "category=" + verdict.category());
                 session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
@@ -185,6 +239,7 @@ public class ConversationRuntime {
                         sensitive.resendRequested(), sensitive.hasResidual());
                 String historyText = sensitive.redactedText();
                 turnNumber = session.recordUserMessage(historyText);
+                markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, historyText);
 
                 if (sensitive.multipleCandidates()) {
@@ -246,6 +301,7 @@ public class ConversationRuntime {
                 }
             } else if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_CONFIRMATION) {
                 turnNumber = session.recordUserMessage(normalizedText);
+                markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
                 ConfirmationDecision decision = confirmationParser.classify(normalizedText);
                 AgentResponse unclearResponse = null;
@@ -279,6 +335,7 @@ public class ConversationRuntime {
                         : "confirmation_" + decision.name().toLowerCase();
             } else {
                 turnNumber = session.recordUserMessage(normalizedText);
+                markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, normalizedText);
                 // Pass 2D-B: a queued deferred intent still needs guarding
                 // even with no live procedure (e.g. after abandonment) - the
@@ -299,7 +356,98 @@ public class ConversationRuntime {
             boolean requiresConfirmation = activeStatus == ProcedureStatus.AWAITING_CONFIRMATION;
             completeTurn(session, turnNumber, startNanos, outcomeLabel);
             return new AssistantTurn(responseText, requiresVerification, requiresConfirmation, stateView(session, turnNumber), turnMetadata);
-        });
+        } catch (TurnAbortedException aborted) {
+            // P0 (abort classification): the voice client disconnected
+            // mid-turn (barge-in / hang-up). Previously the abort was only
+            // inferable from a missing assistant message; now it is recorded
+            // explicitly. The partial reply stays dropped (never recorded)
+            // and the exception keeps propagating so the SSE controller can
+            // complete the emitter quietly.
+            int abortedTurn = currentTurn[0];
+            // P2: the aborted turn still gets its decision trace, marked
+            // aborted - whatever stages ran before the disconnect are kept.
+            finishTrace(session, traceBuilder, "aborted", true);
+            auditService.recordTurnCompletion(session, abortedTurn, "aborted", true);
+            turnMetrics.recordTurnAborted(session.getChannel().name());
+            log.warn("event=turn_aborted sessionId={} turnNumber={} channel={} traceId={}",
+                    session.getSessionId(), abortedTurn, session.getChannel(), traceId);
+            throw aborted;
+        } finally {
+            session.setActiveTraceBuilder(null);
+        }
+    }
+
+    /**
+     * P2: records the prompt-guard verdict on the turn's trace builder. The
+     * implementation label is derived honestly from the wired bean: the ML
+     * guard flags with category {@code "ML_CLASSIFIER"}; any other suspicious
+     * category on the ML bean means the heuristic fallback produced the
+     * verdict. An allowed verdict carries no fallback evidence, so fallback
+     * stays false rather than guessed.
+     */
+    private void recordGuardVerdict(TurnTrace.Builder builder, PromptGuardVerdict verdict) {
+        builder.guardSuspicious(verdict.suspicious());
+        if (verdict.category() != null) {
+            builder.guardCategory(verdict.category());
+        }
+        if (promptGuard instanceof GroqMlPromptGuard) {
+            builder.guardImplementation("ml");
+            builder.guardFallback(verdict.suspicious() && !"ML_CLASSIFIER".equals(verdict.category()));
+        } else {
+            builder.guardImplementation("heuristic");
+            builder.guardFallback(false);
+        }
+    }
+
+    /**
+     * P2: finalizes and publishes the turn's decision trace. Called exactly
+     * once per turn: from {@link #completeTurn} on completion, and from the
+     * abort catch for aborted turns. Publishing goes through the async audit
+     * bus - it never blocks the turn, and a bus failure is contained here so
+     * it can never break the response.
+     */
+    private void finishTrace(ConversationSession session, TurnTrace.Builder builder, String outcome, boolean aborted) {
+        if (builder == null) {
+            return;
+        }
+        try {
+            builder.endedAt(Instant.now()).outcome(outcome).aborted(aborted);
+            // Language is resolved at turn end, when the session history
+            // already contains this turn's user message.
+            try {
+                builder.language(languageResolver.resolve(session).name());
+            } catch (Exception ignored) {
+                // Language resolution must never break trace publishing.
+            }
+            builder.intent(resolveIntent(session, builder));
+            if (!builder.tools().isEmpty()) {
+                builder.toolMs(builder.tools().stream().mapToDouble(TurnTrace.ToolCall::durationMs).sum());
+            }
+            auditService.recordTurnTrace(builder.build());
+        } catch (Exception e) {
+            log.warn("event=turn_trace_publish_failed sessionId={} errorType={}",
+                    session.getSessionId(), e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * P2: best-effort intent label. There is no explicit intent classifier in
+     * the codebase; the closest honest signals are the live procedure (a
+     * customer mutation intent) and the tools the turn actually invoked.
+     */
+    private static String resolveIntent(ConversationSession session, TurnTrace.Builder builder) {
+        Optional<ProcedureState> active = session.getActiveProcedure();
+        if (active.isPresent()) {
+            return active.get().getType().name();
+        }
+        if (!builder.tools().isEmpty()) {
+            return "tool:" + builder.tools().get(0).name();
+        }
+        return "general_query";
+    }
+
+    private static double nanosToMs(long nanos) {
+        return nanos / 1_000_000.0;
     }
 
 
@@ -503,6 +651,40 @@ public class ConversationRuntime {
         log.info("event=turn_end sessionId={} turnNumber={} messageCount={} outcome={} durationMs={}",
                 session.getSessionId(), turnNumber, session.getRecentMessages().size(), outcome, durationNanos / 1_000_000);
         turnMetrics.recordTurn(Duration.ofNanos(durationNanos), session.getChannel().name(), outcome);
+        // P1: the session-lifecycle marker (turn count + last outcome) is
+        // enqueued for the async audit writer - never written inline.
+        auditService.recordTurnCompletion(session, turnNumber, outcome, false);
+        // P2: publish the turn's decision trace (async, non-blocking).
+        finishTrace(session, session.getActiveTraceBuilder(), outcome, false);
+    }
+
+    /**
+     * P0 (correlation). Resolves the trace ID from the turn's provider
+     * metadata (populated by the controllers from the {@code traceparent}
+     * header). A missing or blank value degrades to a freshly generated ID -
+     * missing correlation data never affects request execution. Never throws.
+     */
+    private static String resolveTraceId(UserTurn turn) {
+        try {
+            Map<String, String> metadata = turn.providerMetadata();
+            String candidate = metadata == null ? null : metadata.get(TraceIds.METADATA_TRACE_ID);
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate;
+            }
+        } catch (Exception ignored) {
+            // fall through to generation
+        }
+        return TraceIds.newTraceId();
+    }
+
+    /** Records the latest turn number for abort classification and MDC. Never throws. */
+    private static void markTurn(int[] currentTurn, int turnNumber) {
+        currentTurn[0] = turnNumber;
+        try {
+            MDC.put(TraceIds.MDC_TURN, String.valueOf(turnNumber));
+        } catch (Exception ignored) {
+            // MDC must never break the turn.
+        }
     }
 
     private ConversationStateView stateView(ConversationSession session, int turnNumber) {

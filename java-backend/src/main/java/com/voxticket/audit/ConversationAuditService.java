@@ -2,34 +2,32 @@ package com.voxticket.audit;
 
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.MessageRole;
-import com.voxticket.persistence.entity.ConversationEventRecord;
-import com.voxticket.persistence.entity.ConversationMessageRecord;
-import com.voxticket.persistence.entity.ConversationSessionRecord;
+import com.voxticket.observability.TraceIds;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
-import com.voxticket.persistence.repository.ConversationEventRecordRepository;
-import com.voxticket.persistence.repository.ConversationMessageRecordRepository;
-import com.voxticket.persistence.repository.ConversationSessionRecordRepository;
+import java.time.Instant;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Phase 8 (Conversation Audit). The single injection point for durable
- * audit trail - separate from the in-memory ConversationSession that
- * drives the live conversation, and separate from TurnMetrics (aggregate
- * Micrometer counters). Every public method here is internally exception-
- * safe: a failed audit write must never break the actual conversation,
- * matching the same principle already applied to token-usage extraction
- * elsewhere in this codebase.
+ * Phase 8 (Conversation Audit), P1 refactor. The single injection point for
+ * the durable audit trail - separate from the in-memory ConversationSession
+ * that drives the live conversation, and separate from TurnMetrics
+ * (aggregate Micrometer counters).
  *
- * <p>Writes are synchronous by design: callers (and the admin dashboard)
- * may read audit data back immediately after recording it, and the test
- * suite pins this read-after-write contract. The per-write cost is a few
- * milliseconds next to seconds of model time, so this stays on the turn's
- * critical path deliberately - reliability over latency.
+ * <p>P1: writes are asynchronous and NEVER on the conversation critical
+ * path. Every public method assembles an immutable {@link AuditEvent} and
+ * hands it to {@link AuditEventBus#publish(AuditEvent)} - a bounded
+ * in-memory enqueue with no I/O, no transactions, and no blocking. The
+ * {@link AuditBatchWriter} persists batches on its own thread. If the queue
+ * is full or the database is down, telemetry is dropped (and counted) while
+ * the conversation completes normally.
+ *
+ * <p>Every public method is internally exception-safe: a failed publish must
+ * never break the actual conversation.
  *
  * <p>NEVER pass into detail: OTP values, secrets, chain-of-thought, hidden/
  * provider reasoning, or the raw system prompt. Every call site in this
@@ -42,76 +40,92 @@ public class ConversationAuditService {
     private static final Logger log = LoggerFactory.getLogger(ConversationAuditService.class);
     private static final int MAX_DETAIL_LENGTH = 500;
 
-    private final ConversationSessionRecordRepository sessionRepository;
-    private final ConversationMessageRecordRepository messageRepository;
-    private final ConversationEventRecordRepository eventRepository;
-    private final TransactionTemplate auditTransaction;
+    private final AuditEventBus eventBus;
 
-    public ConversationAuditService(
-            ConversationSessionRecordRepository sessionRepository,
-            ConversationMessageRecordRepository messageRepository,
-            ConversationEventRecordRepository eventRepository,
-            PlatformTransactionManager transactionManager) {
-        this.sessionRepository = sessionRepository;
-        this.messageRepository = messageRepository;
-        this.eventRepository = eventRepository;
-        this.auditTransaction = new TransactionTemplate(transactionManager);
-        // Independent transaction: an audit-write failure rolls back only the
-        // audit transaction itself and can never mark the caller's business
-        // transaction rollback-only.
-        this.auditTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    public ConversationAuditService(AuditEventBus eventBus) {
+        this.eventBus = eventBus;
     }
 
     /**
-     * Best-effort and non-throwing: a failed audit write must never break the
-     * actual conversation. The try/catch covers the whole programmatic
-     * transaction (repository calls AND commit), so a persistence exception -
-     * or a commit-time failure - is logged and swallowed instead of surfacing
-     * as an UnexpectedRollbackException or poisoning the caller's transaction.
+     * Best-effort and non-throwing: enqueues a session-lifecycle marker.
+     * {@code lastTurnOutcome} is null for plain touches; turn-completion
+     * markers (see {@link #recordTurnCompletion}) carry the outcome so the
+     * admin can derive ACTIVE/COMPLETED/ABORTED at read time.
      */
     public void recordSessionTouch(ConversationSession session) {
-        try {
-            auditTransaction.executeWithoutResult(status -> {
-                ConversationSessionRecord record = findOrCreateSession(session);
-                record.touch(session.getCustomerIdentity().customerId(), session.getCustomerIdentity().assuranceLevel(), session.isEscalated());
-                sessionRepository.save(record);
-            });
-        } catch (Exception e) {
-            log.warn("event=audit_write_failed table=conversation_sessions sessionId={} errorType={}",
-                    session.getSessionId(), e.getClass().getSimpleName());
-        }
+        publish(() -> new AuditEvent.SessionTouch(
+                session.getSessionId(),
+                session.getChannel(),
+                session.getCustomerIdentity().customerId(),
+                session.getCustomerIdentity().assuranceLevel().name(),
+                session.isEscalated(),
+                session.getTurnCount(),
+                null,
+                currentTraceId(),
+                Instant.now()));
     }
 
-    /** Independent transaction - see {@link #recordSessionTouch(ConversationSession)}. */
+    /**
+     * P0 (session lifecycle). Turn-completion marker: carries the turn count
+     * and the terminal outcome label ({@code "aborted"} for aborted turns).
+     * The writer upserts these onto {@code conversation_sessions}; the admin
+     * derives ACTIVE (recent activity), ABORTED (last outcome "aborted") or
+     * COMPLETED (otherwise) at read time - no extra writes.
+     */
+    public void recordTurnCompletion(ConversationSession session, int turnNumber, String outcome, boolean aborted) {
+        publish(() -> new AuditEvent.SessionTouch(
+                session.getSessionId(),
+                session.getChannel(),
+                session.getCustomerIdentity().customerId(),
+                session.getCustomerIdentity().assuranceLevel().name(),
+                session.isEscalated(),
+                Math.max(session.getTurnCount(), turnNumber),
+                aborted ? "aborted" : outcome,
+                currentTraceId(),
+                Instant.now()));
+    }
+
+    /** Enqueues one per-turn AI decision trace for async persistence. */
+    public void recordTurnTrace(TurnTrace trace) {
+        publish(() -> new AuditEvent.TurnTraceRecord(trace));
+    }
+
+    /** Enqueues one conversation message (full text; the TEXT column is not truncated). */
     public void recordMessage(ConversationSession session, int turnNumber, MessageRole role, String text) {
-        try {
-            auditTransaction.executeWithoutResult(status -> {
-                ConversationSessionRecord record = findOrCreateSession(session);
-                messageRepository.save(new ConversationMessageRecord(record, turnNumber, role, text));
-            });
-        } catch (Exception e) {
-            log.warn("event=audit_write_failed table=conversation_messages sessionId={} errorType={}",
-                    session.getSessionId(), e.getClass().getSimpleName());
-        }
+        publish(() -> new AuditEvent.MessageRecord(
+                session.getSessionId(), turnNumber, role.name(), text, currentTraceId(), Instant.now()));
     }
 
-    /** Independent transaction - see {@link #recordSessionTouch(ConversationSession)}. */
+    /** Enqueues one typed audit event; detail is truncated to 500 chars (existing contract). */
     public void recordEvent(ConversationSession session, Integer turnNumber, ConversationEventType type, String detail) {
+        publish(() -> new AuditEvent.EventRecord(
+                session.getSessionId(), turnNumber, type.name(), truncate(detail), currentTraceId(), Instant.now()));
+    }
+
+    private void publish(Supplier<AuditEvent> eventSupplier) {
         try {
-            auditTransaction.executeWithoutResult(status -> {
-                ConversationSessionRecord record = findOrCreateSession(session);
-                eventRepository.save(new ConversationEventRecord(record, turnNumber, type, truncate(detail)));
-            });
+            eventBus.publish(eventSupplier.get());
         } catch (Exception e) {
-            log.warn("event=audit_write_failed table=conversation_events eventType={} sessionId={} errorType={}",
-                    type, session.getSessionId(), e.getClass().getSimpleName());
+            // The audit path must never break the conversation, whatever happens.
+            log.warn("event=audit_publish_failed errorType={}", e.getClass().getSimpleName());
         }
     }
 
-    private ConversationSessionRecord findOrCreateSession(ConversationSession session) {
-        return sessionRepository.findBySessionId(session.getSessionId())
-                .orElseGet(() -> sessionRepository.save(new ConversationSessionRecord(
-                        session.getSessionId(), session.getChannel(), session.getCustomerIdentity().assuranceLevel())));
+    /**
+     * Best-effort trace ID for the current request: the filter/runtime put it
+     * in MDC; when absent (background threads, unit tests) generate one so
+     * the row is still correlatable. Never throws.
+     */
+    private static String currentTraceId() {
+        try {
+            String traceId = MDC.get(TraceIds.MDC_TRACE_ID);
+            if (traceId != null && !traceId.isBlank()) {
+                return traceId;
+            }
+        } catch (Exception ignored) {
+            // fall through to generation
+        }
+        return TraceIds.newTraceId();
     }
 
     private String truncate(String detail) {

@@ -13,6 +13,7 @@ import com.voxticket.identity.OwnedOrderResolver;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
 import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.Customer;
 import com.voxticket.persistence.entity.Order;
 import com.voxticket.persistence.entity.OrderItem;
@@ -543,6 +544,15 @@ public class ProcedureCoordinator {
      */
     private ProcedureOutcome recordOutcome(ConversationSession session, ProcedureType type, ProcedureOutcome outcome, String orderReference, long startNanos) {
         turnMetrics.recordProcedureOutcome(type.name(), outcome.code(), outcome.success());
+        // P2: feed the turn decision trace. Terminal paths clear the active
+        // procedure before recording, so the status is the live one when the
+        // procedure is still active - otherwise it stays null (never guessed).
+        TurnTrace.Builder traceBuilder = session.getActiveTraceBuilder();
+        if (traceBuilder != null) {
+            traceBuilder.procedureType(type.name());
+            traceBuilder.procedureOutcomeCode(outcome.code());
+            session.getActiveProcedure().ifPresent(p -> traceBuilder.procedureStatus(p.getStatus().name()));
+        }
         ConversationEventType eventType = classifyProcedureEvent(outcome);
         long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
         StringBuilder detail = new StringBuilder("type=").append(type).append(" code=").append(outcome.code());

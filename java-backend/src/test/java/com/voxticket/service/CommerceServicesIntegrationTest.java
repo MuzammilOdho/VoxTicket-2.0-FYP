@@ -57,7 +57,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * next test method's "unique" data. Wrapping each test in one transaction
  * that Spring rolls back afterward fixes both.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 @ActiveProfiles("test")
 @SpringBootTest
 @Transactional
