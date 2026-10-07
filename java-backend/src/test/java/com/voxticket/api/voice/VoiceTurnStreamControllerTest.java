@@ -3,6 +3,7 @@ package com.voxticket.api.voice;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
@@ -17,6 +18,8 @@ import java.util.function.Consumer;
 import com.voxticket.conversation.AssistantTurn;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationRuntime;
+import com.voxticket.conversation.SessionBusyException;
+import com.voxticket.conversation.SessionStore;
 import com.voxticket.conversation.TurnAbortedException;
 import com.voxticket.conversation.UserTurn;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,12 +40,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class VoiceTurnStreamControllerTest {
 
     private ConversationRuntime runtime;
+    private SessionStore sessionStore;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         runtime = mock(ConversationRuntime.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new VoiceTurnController(runtime)).build();
+        sessionStore = mock(SessionStore.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(new VoiceTurnController(runtime, sessionStore)).build();
     }
 
     @Test
@@ -99,5 +104,19 @@ class VoiceTurnStreamControllerTest {
         String body = started.getResponse().getContentAsString();
         assertThat(body).contains("\"delta\":\"partial\"");
         assertThat(body).doesNotContain("\"done\":true");
+    }
+
+    @Test
+    void sessionBusySurfacesAs429ForTheVoiceWorkerToRetry() throws Exception {
+        // A barge-in turn arriving while the aborted previous turn still
+        // holds the session lock must produce a retryable 429, not a
+        // swallowed stream error.
+        doThrow(new SessionBusyException("sess-3", 2000))
+                .when(runtime).processTurnStream(any(UserTurn.class), any());
+
+        mockMvc.perform(post("/api/v1/voice/turn/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\":\"sess-3\",\"message\":\"hi\"}"))
+                .andExpect(status().isTooManyRequests());
     }
 }

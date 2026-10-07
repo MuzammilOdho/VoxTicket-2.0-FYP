@@ -154,6 +154,19 @@ class Config:
     worker_id: str = ""  # default: <hostname>-<pid>, resolved in entrypoint
     greeting: str = "Welcome to VoxTicket! How can I help you today?"
     log_level: str = "INFO"
+    # Seconds after the agent starts speaking during which caller audio is
+    # ignored for interruption (AEC warmup: prevents the agent's own voice
+    # from false-triggering barge-in before echo cancellation settles).
+    # Lower = more responsive barge-in; higher = fewer false interruptions
+    # on echoey setups. LiveKit default is 3.0.
+    aec_warmup_duration_s: float = 3.0
+    # If VAD hears speech but no STT final transcript arrives within this
+    # many seconds, the worker speaks the transcription-reprompt (below)
+    # instead of leaving the caller in silence. 0 disables.
+    transcription_timeout_s: float = 8.0
+    transcription_reprompt: str = (
+        "Sorry, I didn't catch that. Could you please say it again?"
+    )
 
 
 def load_config(env: dict | None = None) -> Config:
@@ -247,6 +260,12 @@ def load_config(env: dict | None = None) -> Config:
         worker_id=opt("WORKER_ID", ""),
         greeting=opt("GREETING", "Welcome to VoxTicket! How can I help you today?"),
         log_level=opt("LOG_LEVEL", "INFO"),
+        aec_warmup_duration_s=opt_float("AEC_WARMUP_DURATION_S", 3.0),
+        transcription_timeout_s=opt_float("TRANSCRIPTION_TIMEOUT_S", 8.0),
+        transcription_reprompt=opt(
+            "TRANSCRIPTION_REPROMPT",
+            "Sorry, I didn't catch that. Could you please say it again?",
+        ),
     )
 
 
@@ -1076,6 +1095,12 @@ class VoxTicketAgent(Agent):
                 self._pending_turn = None
                 timing.finalize()
             self._record_turn_timing(timing)
+            # Drain any late STT final events that arrived during this turn:
+            # they belong to the just-finished turn, and without this a
+            # duplicate/correction final would leak its stale timestamp into
+            # the NEXT turn's sttLatencyMs.
+            if self._stt_final is not None:
+                self._stt_final.take()
             logger.info("llm_node: brain stream ended (yielded_any=%s)", yielded_any)
 
     async def tts_node(self, text, model_settings):
@@ -1221,7 +1246,12 @@ async def entrypoint(ctx: agents.JobContext):
 
     session = AgentSession(
         stt=build_stt(cfg),
-        vad=silero.VAD.load(),
+        # activation_threshold 0.4 aligns with AssemblyAI's internal VAD
+        # default (0.4): the two VADs agree on speech onset, so turn
+        # detection and STT endpointing don't fight each other. Lower =
+        # more sensitive; adaptive interruption now guards against the
+        # extra false triggers this admits.
+        vad=silero.VAD.load(activation_threshold=0.4),
         tts=tts_setup.tts,
         # Placeholder LLM: non-None is REQUIRED, otherwise the pipeline
         # silently skips reply generation ("skip response if no llm is set").
@@ -1229,13 +1259,41 @@ async def entrypoint(ctx: agents.JobContext):
         llm=_PlaceholderLLM(),
         # Default audio turn detector stays on. Preemptive generation MUST stay
         # off: speculative calls would execute real, stateful Java turns twice.
-        turn_handling={"preemptive_generation": {"enabled": False}},
+        # Interruption mode is pinned to adaptive (not the production default
+        # of VAD-only): the ML detector distinguishes real interruptions from
+        # backchannels ("okay") and noise, and falls back to VAD gracefully
+        # if the inference service is unreachable.
+        turn_handling={
+            "preemptive_generation": {"enabled": False},
+            "interruption": {"mode": "adaptive"},
+        },
+        # AEC warmup: caller audio ignored this long after the agent starts
+        # speaking (echo cancellation settling). Tunable via env; lower is
+        # more responsive, higher is safer on echoey audio.
+        aec_warmup_duration=cfg.aec_warmup_duration_s,
+        # If VAD hears the caller but STT never produces a transcript, speak
+        # a reprompt instead of leaving dead air. The handler is below.
+        transcription_timeout=cfg.transcription_timeout_s or None,
     )
 
     # STT final-transcript events feed the per-turn STT latency measurement.
     # (Sync handler: EventEmitter.emit() invokes callbacks inline, so this
     # must never await.)
     session.on("user_input_transcribed", stt_final.handle)
+
+    def _on_transcription_timeout(ev) -> None:
+        # Sync by necessity (EventEmitter.emit invokes handlers inline).
+        # VAD heard speech but STT produced nothing: the caller gets a
+        # spoken reprompt, not silence. session.say() is synchronous and
+        # keeps this out of the Java conversation (no phantom turn); it is
+        # interruptible, so a caller who is still talking can cut it off.
+        try:
+            logger.warning("STT transcription timeout; speaking reprompt")
+            session.say(cfg.transcription_reprompt, add_to_chat_ctx=False)
+        except Exception:
+            logger.warning("transcription reprompt failed", exc_info=True)
+
+    session.on("user_transcription_timeout", _on_transcription_timeout)
 
     def _on_session_close(ev) -> None:
         # Sync by necessity (see above). Records the call-end event and stops

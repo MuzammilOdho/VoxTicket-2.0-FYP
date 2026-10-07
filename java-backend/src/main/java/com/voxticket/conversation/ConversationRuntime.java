@@ -54,6 +54,14 @@ public class ConversationRuntime {
     private static final List<String> FABRICATION_SIGNAL_PHRASES = List.of(
             "having trouble", "technical issue", "technical problem", "system issue", "system problem", "couldn't start", "couldn't process");
 
+    /**
+     * Provider-metadata key carrying this turn's voice barge-in generation
+     * (see {@link SessionStore#nextVoiceGeneration}). Present only on voice
+     * turns; absent (or unparseable) means "no generation tracking" and the
+     * turn behaves exactly as before - chat turns are unaffected.
+     */
+    public static final String METADATA_VOICE_GENERATION = "voiceGeneration";
+
     private final SessionStore sessionStore;
     private final IdentityService identityService;
     private final SupportAgent supportAgent;
@@ -155,6 +163,15 @@ public class ConversationRuntime {
         // Latest turn number, for abort classification: set right after every
         // session.recordUserMessage(...) below.
         int[] currentTurn = new int[]{-1};
+        // Voice barge-in generation: 0 means "no tracking" (chat turns and
+        // old voice callers). A newer generation arriving mid-turn means the
+        // caller barged in; this turn aborts cooperatively at the next check
+        // point instead of running to completion behind the new turn.
+        long voiceGeneration = resolveVoiceGeneration(turn);
+        // The delta sink is the highest-frequency check point (every LLM
+        // token): a superseded turn aborts within one token, releasing the
+        // session lock for the barge-in turn.
+        Consumer<String> checkedSink = generationCheckedSink(session.getSessionId(), voiceGeneration, deltaSink);
         // P2 (turn decision trace): one builder per turn, installed on the
         // session so stage components (agent, RAG, tools, coordinator) can
         // record their observations. recordUserMessage is called exactly once
@@ -166,6 +183,10 @@ public class ConversationRuntime {
                 session.getSessionId(), session.getTurnCount() + 1, session.getChannel().name(), traceId, Instant.now());
         session.setActiveTraceBuilder(traceBuilder);
         try {
+            // A newer voice turn may have started while this one waited for
+            // the session lock: abort immediately rather than processing a
+            // stale turn.
+            checkNotSuperseded(session.getSessionId(), voiceGeneration);
             if (StringUtils.hasText(turn.callerPhone())) {
                 CustomerIdentity resolved = identityService.resolveByPhone(turn.callerPhone());
                 session.applyResolvedIdentity(resolved);
@@ -186,7 +207,7 @@ public class ConversationRuntime {
                 session.recordAssistantMessage(TOO_LONG_MESSAGE);
                 auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, TOO_LONG_MESSAGE);
                 completeTurn(session, turnNumber, startNanos, "input_too_long");
-                emit(deltaSink, TOO_LONG_MESSAGE);
+                emit(checkedSink, TOO_LONG_MESSAGE);
                 return new AssistantTurn(TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
             }
 
@@ -225,7 +246,7 @@ public class ConversationRuntime {
                 session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
                 auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, SAFE_DEFLECTION_MESSAGE);
                 completeTurn(session, turnNumber, startNanos, "blocked");
-                emit(deltaSink, SAFE_DEFLECTION_MESSAGE);
+                emit(checkedSink, SAFE_DEFLECTION_MESSAGE);
                 return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
             }
 
@@ -250,12 +271,12 @@ public class ConversationRuntime {
                     // customer-facing, so only allowlisted safe fields cross it.
                     turnMetadata = safeDirectTurnMetadata(ambiguous);
                     outcomeLabel = "verification_ambiguous";
-                    emit(deltaSink, responseText);
+                    emit(checkedSink, responseText);
                 } else if (sensitive.hasOtpCandidate()) {
                     // Pass 2C: the direct path never reaches the LLM. Presentation is
                     // rendered deterministically from the stable outcome code and
                     // safe metadata in the customer's language.
-                    ProcedureOutcome outcome = submitVerificationWithSafeFallback(session, sensitive.otpCandidate());
+                    ProcedureOutcome outcome = submitVerificationWithSafeFallback(session, sensitive.otpCandidate(), voiceGeneration);
                     responseText = renderDirect(session, outcome);
                     // Pass 2C security cleanup: internal DEV metadata (devOtp,
                     // hashes, salts, internal IDs) stays inside the
@@ -266,7 +287,7 @@ public class ConversationRuntime {
                     // deferred intent; its fresh start is communicated in the
                     // same turn, deterministically rendered.
                     responseText = appendPromotion(session, responseText, outcome);
-                    emit(deltaSink, responseText);
+                    emit(checkedSink, responseText);
                     if (sensitive.hasResidual()) {
                         // Pass 2D-B: GUARDED while a procedure is still live
                         // (possibly the freshly promoted one); FULL only when
@@ -274,19 +295,20 @@ public class ConversationRuntime {
                         // live procedure impossible, so guarded turns no longer
                         // need to be read-only.
                         AgentResponse residual = isGuardedProcedureActive(session)
-                                ? respondGuardedViaAgent(session, sensitive.residualText(), deltaSink)
-                                : respondViaAgent(session, sensitive.residualText(), deltaSink);
+                                ? respondGuardedViaAgent(session, sensitive.residualText(), checkedSink)
+                                : respondViaAgent(session, sensitive.residualText(), checkedSink);
                         responseText = combineResponses(responseText, residual.text());
                     }
                 } else if (sensitive.resendRequested()) {
+                    checkNotSuperseded(session.getSessionId(), voiceGeneration);
                     ProcedureOutcome outcome = procedureCoordinator.resendVerificationCode(session);
                     responseText = renderDirect(session, outcome);
                     turnMetadata = safeDirectTurnMetadata(outcome);
                     outcomeLabel = "verification";
-                    emit(deltaSink, responseText);
+                    emit(checkedSink, responseText);
                     if (sensitive.hasResidual()) {
                         // The guarded verification is still unresolved.
-                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText(), deltaSink);
+                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText(), checkedSink);
                         responseText = combineResponses(responseText, residual.text());
                     }
                 } else {
@@ -295,7 +317,7 @@ public class ConversationRuntime {
                     // mutation request (deferred by the coordinator), a
                     // correction, or an explicit replacement. A second live
                     // procedure is impossible by coordinator construction.
-                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText, deltaSink);
+                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText, checkedSink);
                     responseText = agentResponse.text();
                     outcomeLabel = agentResponse.outcome().toTurnLabel("verification_unclear");
                 }
@@ -311,7 +333,7 @@ public class ConversationRuntime {
                     // Pass 2D-B: a terminal outcome may promote the deferred intent;
                     // both pieces are communicated deterministically in one turn.
                     case YES -> {
-                        ProcedureOutcome confirmed = confirmWithSafeFallback(session);
+                        ProcedureOutcome confirmed = confirmWithSafeFallback(session, voiceGeneration);
                         yield appendPromotion(session, renderDirect(session, confirmed), confirmed);
                     }
                     case NO -> {
@@ -323,12 +345,12 @@ public class ConversationRuntime {
                         // agent can understand a second request (deferred by the
                         // coordinator), a correction, or an explicit replacement.
                         // The coordinator makes a second live procedure impossible.
-                        unclearResponse = respondGuardedViaAgent(session, normalizedText, deltaSink);
+                        unclearResponse = respondGuardedViaAgent(session, normalizedText, checkedSink);
                         yield unclearResponse.text();
                     }
                 };
                 if (unclearResponse == null) {
-                    emit(deltaSink, responseText);
+                    emit(checkedSink, responseText);
                 }
                 outcomeLabel = unclearResponse != null
                         ? unclearResponse.outcome().toTurnLabel("confirmation_unclear")
@@ -343,8 +365,8 @@ public class ConversationRuntime {
                 // contested slot explicitly instead of the coordinator
                 // silently deciding the queued request's fate.
                 AgentResponse agentResponse = session.getDeferredIntent().isPresent()
-                        ? respondGuardedViaAgent(session, normalizedText, deltaSink)
-                        : respondViaAgent(session, normalizedText, deltaSink);
+                        ? respondGuardedViaAgent(session, normalizedText, checkedSink)
+                        : respondViaAgent(session, normalizedText, checkedSink);
                 responseText = agentResponse.text();
                 outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
             }
@@ -641,7 +663,11 @@ public class ConversationRuntime {
         return directRenderer.render(languageResolver.resolve(session), outcome);
     }
 
-    private ProcedureOutcome confirmWithSafeFallback(ConversationSession session) {
+    private ProcedureOutcome confirmWithSafeFallback(ConversationSession session, long voiceGeneration) {
+        // A barged-in turn must never commit a stale confirmation: if the
+        // caller interrupted after saying YES, the new turn (not this one)
+        // decides what happens next.
+        checkNotSuperseded(session.getSessionId(), voiceGeneration);
         try {
             return procedureCoordinator.confirmActive(session);
         } catch (Exception e) {
@@ -650,7 +676,11 @@ public class ConversationRuntime {
         }
     }
 
-    private ProcedureOutcome submitVerificationWithSafeFallback(ConversationSession session, String code) {
+    private ProcedureOutcome submitVerificationWithSafeFallback(ConversationSession session, String code,
+            long voiceGeneration) {
+        // Same stale-mutation guard as confirmations: a superseded turn
+        // must not submit an OTP the caller may have withdrawn by barging in.
+        checkNotSuperseded(session.getSessionId(), voiceGeneration);
         try {
             return procedureCoordinator.submitVerificationCode(session, code);
         } catch (Exception e) {
@@ -688,6 +718,63 @@ public class ConversationRuntime {
             // fall through to generation
         }
         return TraceIds.newTraceId();
+    }
+
+    /**
+     * Voice barge-in generation for cooperative cancellation. Extracts the
+     * generation minted by the voice controller from the turn's provider
+     * metadata; 0 means "no tracking" (chat turns, tests, old callers).
+     * Never throws.
+     */
+    private static long resolveVoiceGeneration(UserTurn turn) {
+        try {
+            Map<String, String> metadata = turn.providerMetadata();
+            String raw = metadata == null ? null : metadata.get(METADATA_VOICE_GENERATION);
+            if (raw != null && !raw.isBlank()) {
+                return Long.parseLong(raw.trim());
+            }
+        } catch (Exception ignored) {
+            // fall through to 0
+        }
+        return 0;
+    }
+
+    /**
+     * Wraps the SSE delta sink so every emitted token first verifies this
+     * turn is still the session's latest voice generation. A superseded turn
+     * (caller barged in) throws {@link TurnAbortedException} here - within
+     * one token - instead of streaming an obsolete reply to a caller who has
+     * moved on. The abort unwinds through the per-session lock's finally,
+     * releasing it for the barge-in turn.
+     *
+     * <p>When {@code voiceGeneration} is 0 (no tracking) the sink is
+     * returned unwrapped: zero behavior change for chat turns.
+     *
+     * <p>Package-visible for {@link VoiceGenerationCancellationTest}.
+     */
+    Consumer<String> generationCheckedSink(String sessionId, long voiceGeneration,
+            Consumer<String> deltaSink) {
+        if (voiceGeneration <= 0 || deltaSink == null) {
+            return deltaSink;
+        }
+        return delta -> {
+            checkNotSuperseded(sessionId, voiceGeneration);
+            deltaSink.accept(delta);
+        };
+    }
+
+    /**
+     * Throws {@link TurnAbortedException} if a newer voice generation has
+     * started for this session since this turn began. Call before
+     * committing any business mutation so a barged-in turn can never
+     * execute a stale intent (e.g. confirming a cancellation the caller
+     * just withdrew). No-op when {@code voiceGeneration} is 0.
+     */
+    private void checkNotSuperseded(String sessionId, long voiceGeneration) {
+        if (voiceGeneration > 0 && sessionStore.currentVoiceGeneration(sessionId) != voiceGeneration) {
+            throw new TurnAbortedException(
+                    new IllegalStateException("voice turn superseded by a newer generation"));
+        }
     }
 
     /** Records the latest turn number for abort classification and MDC. Never throws. */

@@ -1,6 +1,7 @@
 package com.voxticket.api.voice;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,6 +11,8 @@ import com.voxticket.conversation.AssistantTurn;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationRuntime;
 import com.voxticket.conversation.ConversationStateView;
+import com.voxticket.conversation.SessionBusyException;
+import com.voxticket.conversation.SessionStore;
 import com.voxticket.conversation.UserTurn;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.observability.TraceIds;
@@ -20,7 +23,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * Pure unit test (no Spring context): the voice turn endpoint must build a
@@ -32,6 +37,9 @@ class VoiceTurnControllerTest {
 
     @Mock
     private ConversationRuntime conversationRuntime;
+
+    @Mock
+    private SessionStore sessionStore;
 
     @InjectMocks
     private VoiceTurnController controller;
@@ -65,5 +73,18 @@ class VoiceTurnControllerTest {
         assertThat(response.text()).isEqualTo("stubbed voice reply");
         assertThat(response.turnNumber()).isEqualTo(1);
         assertThat(response.identityAssurance()).isEqualTo("ANONYMOUS");
+    }
+
+    @Test
+    void sessionBusyPropagatesAsThe429MappedException() {
+        // The blocking endpoint does not swallow the exception: Spring
+        // resolves it to 429 via the @ResponseStatus on SessionBusyException.
+        when(conversationRuntime.processTurn(any())).thenThrow(new SessionBusyException("voice-room-1", 2000));
+
+        assertThatThrownBy(() ->
+                        controller.turn(new VoiceTurnRequest("voice-room-1", "hello"), new MockHttpServletRequest()))
+                .isInstanceOf(SessionBusyException.class);
+        assertThat(SessionBusyException.class.getAnnotation(ResponseStatus.class).value())
+                .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
     }
 }
