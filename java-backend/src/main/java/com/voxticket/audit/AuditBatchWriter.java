@@ -382,7 +382,8 @@ public class AuditBatchWriter {
         jdbc.update("INSERT INTO voice_call_turn_metrics"
                         + " (id, call_id, turn_number, trace_id, stt_latency_ms, brain_ttft_ms, tts_first_audio_ms,"
                         + " e2e_ms, aborted, barge_in, stt_language, error)"
-                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+                        + " ON CONFLICT (call_id, turn_number) DO NOTHING",
                 UUID.randomUUID(), callId, metric.turnNumber(), metric.traceId(),
                 metric.sttLatencyMs(), metric.brainTtftMs(), metric.ttsFirstAudioMs(),
                 metric.e2eMs(), metric.aborted(), metric.bargeIn(), metric.sttLanguage(), metric.error());

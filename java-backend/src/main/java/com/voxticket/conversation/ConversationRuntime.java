@@ -372,6 +372,19 @@ public class ConversationRuntime {
             log.warn("event=turn_aborted sessionId={} turnNumber={} channel={} traceId={}",
                     session.getSessionId(), abortedTurn, session.getChannel(), traceId);
             throw aborted;
+        } catch (RuntimeException unexpected) {
+            // P2: an unexpected failure must not silently drop the turn's
+            // decision trace. Publish whatever stages were captured with an
+            // error outcome and the exception type as the error code, then
+            // rethrow so the caller still sees the original failure.
+            int failedTurn = currentTurn[0];
+            traceBuilder.errorCode(unexpected.getClass().getSimpleName());
+            finishTrace(session, traceBuilder, "error", false);
+            auditService.recordTurnCompletion(session, failedTurn, "error", false);
+            log.warn("event=turn_unexpected_error sessionId={} turnNumber={} channel={} traceId={} errorType={}",
+                    session.getSessionId(), failedTurn, session.getChannel(), traceId,
+                    unexpected.getClass().getSimpleName());
+            throw unexpected;
         } finally {
             session.setActiveTraceBuilder(null);
         }
