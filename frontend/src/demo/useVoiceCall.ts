@@ -79,7 +79,22 @@ export function useVoiceCall() {
     setDetail(null);
     try {
       // Mic permission first: fail fast with a clear message.
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Explicit audio processing constraints: Chrome enables AEC/NS/AGC by
+      // default for `{ audio: true }`, but stating them documents the
+      // requirement and covers browsers where the defaults differ. These are
+      // "ideal" (not "exact"): a browser lacking one keeps working. This is
+      // the client-side half of echo/noise handling; the worker-side half is
+      // the AEC warmup + adaptive interruption in python-voice/agent.py.
+      // No extra server-side DSP (e.g. RNNoise) is warranted at FYP scope:
+      // it would add latency and ops cost for no measurable quality gain
+      // over this combination.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       stream.getTracks().forEach((t) => t.stop());
 
       setState('connecting');

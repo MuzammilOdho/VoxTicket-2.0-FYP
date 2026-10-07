@@ -154,6 +154,14 @@ class Config:
     worker_id: str = ""  # default: <hostname>-<pid>, resolved in entrypoint
     greeting: str = "Welcome to VoxTicket! How can I help you today?"
     log_level: str = "INFO"
+    # Silero VAD speech-onset threshold (0.0-1.0). 0.4 aligns with
+    # AssemblyAI's internal VAD default (0.4): the two VADs agree on speech
+    # onset, so turn detection and STT endpointing don't fight each other.
+    # Tuning: lower (0.25-0.35) if soft speech is missed; higher (0.45-0.6)
+    # if keyboard/fan/traffic false-triggers turns. Change in 0.05 steps and
+    # re-run the voice-quality matrix; adaptive interruption guards the
+    # extra false triggers a lower value admits.
+    vad_activation_threshold: float = 0.4
     # Seconds after the agent starts speaking during which caller audio is
     # ignored for interruption (AEC warmup: prevents the agent's own voice
     # from false-triggering barge-in before echo cancellation settles).
@@ -260,6 +268,7 @@ def load_config(env: dict | None = None) -> Config:
         worker_id=opt("WORKER_ID", ""),
         greeting=opt("GREETING", "Welcome to VoxTicket! How can I help you today?"),
         log_level=opt("LOG_LEVEL", "INFO"),
+        vad_activation_threshold=opt_float("VAD_ACTIVATION_THRESHOLD", 0.4),
         aec_warmup_duration_s=opt_float("AEC_WARMUP_DURATION_S", 3.0),
         transcription_timeout_s=opt_float("TRANSCRIPTION_TIMEOUT_S", 8.0),
         transcription_reprompt=opt(
@@ -1310,12 +1319,12 @@ async def entrypoint(ctx: agents.JobContext):
 
     session = AgentSession(
         stt=build_stt(cfg),
-        # activation_threshold 0.4 aligns with AssemblyAI's internal VAD
-        # default (0.4): the two VADs agree on speech onset, so turn
-        # detection and STT endpointing don't fight each other. Lower =
-        # more sensitive; adaptive interruption now guards against the
-        # extra false triggers this admits.
-        vad=silero.VAD.load(activation_threshold=0.4),
+        # Speech-onset threshold from config (VAD_ACTIVATION_THRESHOLD,
+        # default 0.4): aligns with AssemblyAI's internal VAD default so the
+        # two VADs agree on speech onset and turn detection and STT
+        # endpointing don't fight each other. See the config field comment
+        # for the tuning methodology.
+        vad=silero.VAD.load(activation_threshold=cfg.vad_activation_threshold),
         tts=tts_setup.tts,
         # Placeholder LLM: non-None is REQUIRED, otherwise the pipeline
         # silently skips reply generation ("skip response if no llm is set").
