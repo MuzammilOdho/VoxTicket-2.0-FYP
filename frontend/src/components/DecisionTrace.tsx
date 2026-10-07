@@ -20,14 +20,14 @@ function Node({
   const [open, setOpen] = useState(false);
   const dot =
     status === 'ok'
-      ? 'bg-emerald-500'
+      ? 'bg-ok'
       : status === 'warn'
         ? 'bg-amber-500'
         : status === 'bad'
           ? 'bg-rose-500'
-          : 'bg-slate-300';
+          : 'bg-smoke';
   return (
-    <div className="min-w-[10.5rem] flex-1 rounded-none border border-line bg-raised shadow-none">
+    <div className="min-w-[10.5rem] flex-1 rounded-xl border border-line bg-raised">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 p-3 text-left">
         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
         <span className="min-w-0">
@@ -41,13 +41,13 @@ function Node({
         </span>
         <span className="ml-auto text-xs text-ink-mute">{open ? '▾' : '▸'}</span>
       </button>
-      {open && children && <div className="border-t border-slate-100 p-3 text-xs text-ink-dim">{children}</div>}
+      {open && children && <div className="border-t border-line/70 p-3 text-xs text-ink-dim">{children}</div>}
     </div>
   );
 }
 
 function Arrow() {
-  return <div className="hidden shrink-0 self-center text-slate-300 md:block">→</div>;
+  return <div className="hidden shrink-0 self-center text-smoke md:block">→</div>;
 }
 
 function Field({ k, v }: { k: string; v: React.ReactNode }) {
@@ -139,24 +139,24 @@ export function DecisionTrace({ trace, voice }: { trace: TurnTrace; voice?: Voic
       </div>
 
       {voice && (
-        <div className="mt-3 rounded-none border border-sky-200 bg-sky-50 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-sky-700">
+        <div className="mt-3 rounded-xl border border-info/25 bg-info/[0.06] p-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-info">
             Voice pipeline
             {voice.bargeIn && <StatusBadge value="BARGE_IN" />}
             {voice.aborted && <StatusBadge value="ABORTED" />}
             {voice.error && <StatusBadge value="ERROR" label={voice.error} />}
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="flex items-center gap-2"><span className="text-sky-600 font-medium">STT</span><Latency ms={voice.sttLatencyMs} maxMs={voice.e2eMs ?? undefined} /></span>
-            <span className="text-sky-300">→</span>
-            <span className="flex items-center gap-2"><span className="text-sky-600 font-medium">Java Brain</span><Latency ms={voice.e2eMs} /></span>
-            <span className="text-sky-300">→</span>
-            <span className="flex items-center gap-2"><span className="text-sky-600 font-medium">TTFT</span><Latency ms={voice.brainTtftMs} maxMs={voice.e2eMs ?? undefined} /></span>
-            <span className="text-sky-300">→</span>
-            <span className="flex items-center gap-2"><span className="text-sky-600 font-medium">TTS First Audio</span><Latency ms={voice.ttsFirstAudioMs} maxMs={voice.e2eMs ?? undefined} /></span>
-            <span className="text-sky-300">→</span>
-            <span className="flex items-center gap-2"><span className="text-sky-600 font-medium">End-to-End</span><Latency ms={voice.e2eMs} /></span>
-            {voice.sttLanguage && <span className="text-xs text-sky-600">STT lang: {voice.sttLanguage}</span>}
+            <span className="flex items-center gap-2"><span className="text-info font-medium">STT</span><Latency ms={voice.sttLatencyMs} maxMs={voice.e2eMs ?? undefined} /></span>
+            <span className="text-info">→</span>
+            <span className="flex items-center gap-2"><span className="text-info font-medium">Java Brain</span><Latency ms={voice.e2eMs} /></span>
+            <span className="text-info">→</span>
+            <span className="flex items-center gap-2"><span className="text-info font-medium">TTFT</span><Latency ms={voice.brainTtftMs} maxMs={voice.e2eMs ?? undefined} /></span>
+            <span className="text-info">→</span>
+            <span className="flex items-center gap-2"><span className="text-info font-medium">TTS First Audio</span><Latency ms={voice.ttsFirstAudioMs} maxMs={voice.e2eMs ?? undefined} /></span>
+            <span className="text-info">→</span>
+            <span className="flex items-center gap-2"><span className="text-info font-medium">End-to-End</span><Latency ms={voice.e2eMs} /></span>
+            {voice.sttLanguage && <span className="text-xs text-info">STT lang: {voice.sttLanguage}</span>}
           </div>
         </div>
       )}

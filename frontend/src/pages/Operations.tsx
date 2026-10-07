@@ -33,7 +33,7 @@ export function Operations() {
             key={t.kind}
             to={`/admin/operations/${t.kind}`}
             className={({ isActive }) =>
-              `rounded-none px-3 py-1.5 text-sm ${isActive ? 'bg-signal font-medium text-white' : 'bg-raised text-ink-dim border border-line hover:bg-raised'}`
+              `rounded-xl px-3 py-1.5 text-sm ${isActive ? 'bg-signal font-medium text-white' : 'bg-raised text-ink-dim border border-line hover:bg-raised'}`
             }
           >
             {t.label}
@@ -44,7 +44,7 @@ export function Operations() {
         <TextInput label="Search" placeholder="id / number / customer" value={q} onChange={(e) => setQD(e.target.value)} />
         <button
           onClick={() => { setPage(0); setAppliedQ(q || undefined); }}
-          className="rounded-none bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-xl bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
         >
           Apply
         </button>

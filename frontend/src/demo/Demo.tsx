@@ -1,418 +1,254 @@
-/** VoxTicket demo: scenario picker -> customer preview -> support workspace. */
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+/** VoxTicket demo — unified Gemini-style window.
+ *
+ *  One page, one session: the backend assigns a random seeded customer on
+ *  every load (a reload is a new session as a new customer). Chat and voice
+ *  share a single composer — the mic button starts a LiveKit voice call
+ *  inline. Confirmations and OTP verification are inline inside the chat
+ *  message — never a blocking popup — so the user can keep chatting.
+ */
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ANONYMOUS_CONTEXT, PERSONAS, SCENARIOS, type Persona } from './personas';
-import { useDemoChat } from './useDemoChat';
-import { Badge, Button, Loading, TextInput } from '../ui/primitives';
+import { useDemoChat, type ChatMessage } from './useDemoChat';
+import { useDemoCustomer, type DemoCustomer } from './useDemoCustomer';
+import { useVoiceCall, formatElapsed, type Speaking } from './useVoiceCall';
+import { useLiveCaptions } from './useLiveCaptions';
+import { Badge, ErrorBox, Kicker, Loading } from '../ui/primitives';
 
-const VoiceSession = lazy(() => import('./VoiceSession').then((m) => ({ default: m.VoiceSession })));
-
-type Mode = 'chat' | 'voice';
-type Step = 'pick' | 'preview' | 'workspace';
+const TRY_ASKING = [
+  'Where is my order?',
+  'Cancel my latest order',
+  'I want to return an item',
+  'Switch to Urdu',
+];
 
 export function Demo() {
-  const [step, setStep] = useState<Step>('pick');
-  const [persona, setPersona] = useState<Persona | null>(null);
-  const [anonymous, setAnonymous] = useState(false);
-  const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
-
-  if (step === 'pick' || (!persona && !anonymous)) {
-    return (
-      <ScenarioPicker
-        onSelectPersona={(p, prompt) => {
-          setPersona(p);
-          setAnonymous(false);
-          setInitialPrompt(prompt ?? null);
-          setStep('preview');
-        }}
-        onSelectAnonymous={() => {
-          setPersona(null);
-          setAnonymous(true);
-          setInitialPrompt(null);
-          setStep('workspace');
-        }}
-      />
-    );
-  }
-
-  if (step === 'preview' && persona) {
-    return (
-      <CustomerPreview
-        persona={persona}
-        initialPrompt={initialPrompt}
-        onBack={() => setStep('pick')}
-        onEnter={(prompt) => {
-          setInitialPrompt(prompt);
-          setStep('workspace');
-        }}
-      />
-    );
-  }
-
-  return (
-    <Workspace
-      persona={persona}
-      initialPrompt={initialPrompt}
-      onChange={() => {
-        setStep('pick');
-        setPersona(null);
-        setAnonymous(false);
-        setInitialPrompt(null);
-      }}
-    />
-  );
-}
-
-/* ---------------- scenario picker ---------------- */
-
-function ScenarioPicker({ onSelectPersona, onSelectAnonymous }: {
-  onSelectPersona: (p: Persona, prompt?: string) => void;
-  onSelectAnonymous: () => void;
-}) {
-  const [filter, setFilter] = useState('');
-  const scenarios = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return SCENARIOS;
-    return SCENARIOS.filter((s) => s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
-  }, [filter]);
-
-  const personaById = (id: string) => PERSONAS.find((p) => p.id === id)!;
-
-  return (
-    <div className="min-h-screen bg-canvas text-ink">
-      <header className="border-b border-line">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
-          <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex h-6 w-6 items-center justify-center bg-signal font-mono text-xs font-bold text-[#101010]">V</span>
-            <span className="text-[15px] font-semibold text-ink">VoxTicket demo</span>
-          </Link>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-ink-mute">Synthetic environment</span>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl px-5 py-10">
-        <h1 className="text-3xl font-semibold tracking-tight">What do you want to test?</h1>
-        <p className="mt-2 max-w-2xl text-[15px] text-ink-dim">
-          Pick a scenario — we'll assign you the right synthetic customer automatically,
-          with a real phone number from the demo dataset. Or browse customers directly.
-        </p>
-
-        <div className="mt-6 max-w-sm">
-          <TextInput placeholder="Filter scenarios…" value={filter} onChange={(e) => setFilter(e.target.value)} />
-        </div>
-
-        <div className="mt-6 grid gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
-          {scenarios.map((s) => {
-            const p = personaById(s.personaId);
-            return (
-              <button
-                key={s.id}
-                onClick={() => onSelectPersona(p, s.prompt)}
-                className="group bg-raised p-5 text-left transition-colors hover:bg-raised-2"
-              >
-                <div className="text-[15px] font-semibold text-ink group-hover:text-signal">{s.title}</div>
-                <p className="mt-2 text-sm leading-relaxed text-ink-dim">{s.description}</p>
-                <div className="mt-3 font-mono text-[11px] text-ink-mute">as {p.name} · {p.phone}</div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-10">
-          <h2 className="text-xl font-semibold tracking-tight">Or pick a customer directly</h2>
-          <div className="mt-4 grid gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
-            {PERSONAS.map((p) => (
-              <button key={p.id} onClick={() => onSelectPersona(p)} className="group bg-raised p-4 text-left transition-colors hover:bg-raised-2">
-                <div className="text-sm font-semibold text-ink group-hover:text-signal">{p.name}</div>
-                <div className="mt-1 font-mono text-[11px] text-ink-mute">{p.phone}</div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {p.tags.slice(0, 2).map((t) => (
-                    <span key={t} className="border border-line px-1 py-0.5 font-mono text-[10px] uppercase text-ink-mute">{t}</span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-10 border border-dashed border-line p-5">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="text-[15px] font-semibold text-ink">Anonymous demo</div>
-              <p className="mt-1 max-w-xl text-sm text-ink-dim">{ANONYMOUS_CONTEXT.note}</p>
-            </div>
-            <Button variant="ghost" onClick={onSelectAnonymous}>Start anonymous</Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- customer preview ---------------- */
-
-function CustomerPreview({ persona, initialPrompt, onBack, onEnter }: {
-  persona: Persona;
-  initialPrompt: string | null;
-  onBack: () => void;
-  onEnter: (prompt: string | null) => void;
-}) {
-  return (
-    <div className="min-h-screen bg-canvas text-ink">
-      <header className="border-b border-line">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-5">
-          <button onClick={onBack} className="text-sm text-ink-mute hover:text-ink">← Scenarios</button>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-ink-mute">Customer preview</span>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-4xl px-5 py-10">
-        <Badge tone="signal" pulse>Synthetic customer assigned</Badge>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight">You are now testing as {persona.name}.</h1>
-        <p className="mt-2 max-w-2xl text-[15px] text-ink-dim">{persona.scenario}</p>
-
-        <div className="mt-8 grid gap-px border border-line bg-line md:grid-cols-2">
-          <div className="bg-raised p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Identity</div>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between"><dt className="text-ink-mute">Name</dt><dd className="text-ink">{persona.name}</dd></div>
-              <div className="flex justify-between"><dt className="text-ink-mute">Phone</dt><dd className="font-mono text-ink">{persona.phone}</dd></div>
-              <div className="flex justify-between"><dt className="text-ink-mute">Email</dt><dd className="font-mono text-xs text-ink">{persona.email}</dd></div>
-              <div className="flex justify-between"><dt className="text-ink-mute">Status</dt><dd><Badge tone="ok">{persona.accountStatus}</Badge></dd></div>
-            </dl>
-          </div>
-          <div className="bg-raised p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Orders ({persona.orders.length})</div>
-            <div className="mt-3 space-y-3">
-              {persona.orders.map((o) => (
-                <div key={o.number} className="border-b border-line-soft pb-3 last:border-0 last:pb-0">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-signal">{o.number}</span>
-                    <span className="text-xs text-ink-mute">{o.status}</span>
-                  </div>
-                  <div className="mt-1 text-sm text-ink">{o.items} · {o.total}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-ink-mute">{o.payment}{o.note ? ` · ${o.note}` : ''}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {initialPrompt && (
-          <div className="mt-6 border border-signal/40 bg-signal/5 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-signal">Suggested first message</div>
-            <div className="mt-2 text-sm text-ink">“{initialPrompt}”</div>
-          </div>
-        )}
-
-        <div className="mt-8 flex gap-3">
-          <Button variant="primary" onClick={() => onEnter(initialPrompt)} className="!px-8 !py-3">Enter demo workspace</Button>
-          <Button variant="ghost" onClick={onBack} className="!px-6 !py-3">Choose different</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- workspace ---------------- */
-
-function Workspace({ persona, initialPrompt, onChange }: {
-  persona: Persona | null;
-  initialPrompt: string | null;
-  onChange: () => void;
-}) {
-  const [mode, setMode] = useState<Mode>('chat');
+  const { customer, loading, error, reassign } = useDemoCustomer();
   const chat = useDemoChat();
-  const sentInitial = useRef(false);
+  const voice = useVoiceCall();
+  const [voiceCollapsed, setVoiceCollapsed] = useState(false);
+  const [sessionEpoch, setSessionEpoch] = useState(0);
 
-  const phone = persona?.phone ?? '';
-  const displayName = persona?.name ?? 'Anonymous';
+  const phone = customer?.phone ?? '';
 
-  // Auto-send the scenario prompt on first entering chat mode.
-  useEffect(() => {
-    if (initialPrompt && mode === 'chat' && !sentInitial.current && chat.messages.length === 0) {
-      sentInitial.current = true;
-      chat.send(initialPrompt, phone);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  const newSession = () => {
+    if (voice.active) voice.hangup();
+    chat.reset();
+    setVoiceCollapsed(false);
+    setSessionEpoch((e) => e + 1);
+    reassign();
+  };
 
-  return (
-    <div className="flex min-h-screen flex-col bg-canvas text-ink">
-      <header className="border-b border-line">
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-5">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2.5">
-              <span className="flex h-6 w-6 items-center justify-center bg-signal font-mono text-xs font-bold text-[#101010]">V</span>
-              <span className="text-[15px] font-semibold text-ink">VoxTicket demo</span>
+  const sendText = (text: string) => chat.send(text, phone);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-void">
+        <Loading label="Assigning your customer" />
+      </div>
+    );
+  }
+
+  if (error || !customer) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-void px-6">
+        <div className="w-full max-w-md">
+          <ErrorBox
+            message={error ?? 'Could not assign a customer'}
+            onRetry={reassign}
+          />
+          <p className="mt-4 text-center text-[13px] text-ash">
+            The demo needs the backend running with the{' '}
+            <span className="font-mono">dev</span> profile.
+          </p>
+          <div className="mt-3 text-center">
+            <Link to="/" className="text-[13px] text-fog transition-colors hover:text-white">
+              ← Back to site
             </Link>
-            <button onClick={onChange} className="text-sm text-ink-mute hover:text-ink">← Scenarios</button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge tone="signal" pulse>Synthetic</Badge>
-            <span className="hidden font-mono text-xs text-ink-mute sm:block">{displayName}{phone ? ` · ${phone}` : ''}</span>
           </div>
         </div>
-      </header>
+      </div>
+    );
+  }
 
-      <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-px bg-line lg:grid-cols-[1fr_340px]">
-        <div className="flex min-h-[70vh] flex-col bg-canvas">
-          <div className="flex border-b border-line">
-            {(['chat', 'voice'] as Mode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`px-5 py-3 text-sm font-medium transition-colors ${
-                  mode === m ? 'border-b-2 border-signal text-ink' : 'text-ink-mute hover:text-ink'
-                }`}
-              >
-                {m === 'chat' ? 'Chat' : 'Voice'}
-              </button>
-            ))}
+  return (
+    <div className="flex min-h-screen flex-col bg-void text-white lg:h-[100dvh]">
+      <audio ref={voice.audioRef} autoPlay playsInline className="hidden" />
+
+      <header className="glass sticky top-0 z-30 h-16 shrink-0 border-b border-line/70">
+        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-4 px-6">
+          <Link to="/" className="flex shrink-0 items-center gap-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-signal font-mono text-[11px] font-bold text-[#08090a]">
+              V
+            </span>
+            <span className="text-[16px] font-medium tracking-[-0.01em] text-white">VoxTicket demo</span>
+          </Link>
+          <div className="flex min-w-0 items-center gap-3">
+            <Badge tone="signal" pulse>
+              <span className="hidden sm:inline">Testing as&nbsp;</span>{customer.name}
+            </Badge>
+            <span className="hidden font-mono text-[12px] text-ash md:block">{customer.phone}</span>
             {chat.sessionId && (
-              <span className="ml-auto hidden items-center px-4 font-mono text-[11px] text-ink-mute sm:flex">
+              <span className="hidden font-mono text-[11px] text-ash lg:block">
                 {chat.sessionId.slice(0, 18)}…
               </span>
             )}
-          </div>
-          <div className="flex-1">
-            {mode === 'chat' ? (
-              <ChatPane displayName={displayName} phone={phone} chat={chat} />
-            ) : (
-              <Suspense fallback={<Loading label="Loading voice session" />}>
-                <VoiceSession personaName={displayName} />
-              </Suspense>
-            )}
+            <button
+              onClick={newSession}
+              title="Start a new session with a new customer"
+              className="shrink-0 rounded-md border border-line px-3 py-1.5 text-[13px] text-fog transition-colors hover:border-smoke hover:text-white"
+            >
+              New session
+            </button>
           </div>
         </div>
+      </header>
 
-        <aside className="bg-raised p-5">
-          {persona ? (
-            <>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Customer context</div>
-              <div className="mt-3 text-lg font-semibold text-ink">{persona.name}</div>
-              <div className="mt-0.5 font-mono text-xs text-ink-mute">{persona.phone}</div>
-              <div className="mt-0.5 font-mono text-xs text-ink-mute">{persona.email}</div>
-              <div className="mt-2"><Badge tone="ok">{persona.accountStatus}</Badge></div>
+      <div className="mx-auto grid w-full max-w-[1400px] flex-1 min-h-0 lg:grid-cols-[1fr_340px] lg:overflow-hidden">
+        {/* ------- unified thread ------- */}
+        <div className="flex min-h-0 flex-col">
+          <Thread
+            key={sessionEpoch}
+            customer={customer}
+            messages={chat.messages}
+            busy={chat.busy}
+            onSend={sendText}
+            onReset={chat.reset}
+            voice={voice}
+            voiceCollapsed={voiceCollapsed}
+            setVoiceCollapsed={setVoiceCollapsed}
+          />
+        </div>
 
-              <div className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">
-                Orders ({persona.orders.length})
-              </div>
-              <div className="mt-2 space-y-3">
-                {persona.orders.map((o) => (
-                  <button
-                    key={o.number}
-                    onClick={() => {
-                      setMode('chat');
-                      chat.send(`Tell me about order ${o.number}`, phone);
-                    }}
-                    className="block w-full border border-line bg-canvas p-3 text-left transition-colors hover:border-ink-mute"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs text-signal">{o.number}</span>
-                      <span className="text-[11px] text-ink-mute">{o.status}</span>
-                    </div>
-                    <div className="mt-1 text-[13px] text-ink">{o.items}</div>
-                    <div className="font-mono text-[11px] text-ink-mute">{o.total} · {o.payment}</div>
-                  </button>
-                ))}
-              </div>
+        {/* ------- customer sidebar (from backend) ------- */}
+        <aside className="border-t border-line/70 p-6 lg:border-l lg:border-t-0 lg:h-full lg:min-h-0 lg:overflow-y-auto">
+          <Kicker>Customer</Kicker>
+          <div className="mt-3 text-[18px] font-medium tracking-[-0.01em] text-white">{customer.name}</div>
+          <div className="mt-1 font-mono text-[12px] text-ash">{customer.phone}</div>
+          <div className="mt-0.5 truncate font-mono text-[12px] text-ash">{customer.email}</div>
+          <div className="mt-2.5">
+            <Badge tone={customer.status === 'ACTIVE' ? 'ok' : 'warn'}>{customer.status}</Badge>
+          </div>
 
-              <div className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Try asking</div>
-              <div className="mt-2 space-y-2">
-                {persona.tryAsk.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => {
-                      setMode('chat');
-                      chat.send(q, phone);
-                    }}
-                    className="block w-full border border-line bg-canvas px-3 py-2 text-left text-sm text-ink-dim transition-colors hover:border-ink-mute hover:text-ink"
-                  >
-                    “{q}”
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Anonymous session</div>
-              <p className="mt-3 text-sm leading-relaxed text-ink-dim">{ANONYMOUS_CONTEXT.note}</p>
-              <div className="mt-4 border border-dashed border-line p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Sample reference</div>
-                <div className="mt-1 font-mono text-xs text-signal">{ANONYMOUS_CONTEXT.sampleOrder}</div>
-                <p className="mt-1 text-xs text-ink-mute">Mention this order number to see how the agent handles unauthenticated lookups.</p>
-              </div>
-              <div className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">Try asking</div>
-              <div className="mt-2 space-y-2">
-                {ANONYMOUS_CONTEXT.tryAsk.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => {
-                      setMode('chat');
-                      chat.send(q, '');
-                    }}
-                    className="block w-full border border-line bg-canvas px-3 py-2 text-left text-sm text-ink-dim transition-colors hover:border-ink-mute hover:text-ink"
-                  >
-                    “{q}”
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+          <Kicker className="mt-7">Orders ({customer.orders.length})</Kicker>
+          <div className="mt-3 space-y-2.5">
+            {customer.orders.map((o) => (
+              <button
+                key={o.number}
+                onClick={() => sendText(`Tell me about order ${o.number}`)}
+                className="g-border-soft lift block w-full rounded-xl p-4 text-left"
+                title="Ask the agent about this order"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-[12px] text-signal">{o.number}</span>
+                  <Badge tone="mute">{o.status}</Badge>
+                </div>
+                <div className="mt-1.5 text-[13px] leading-snug text-white">{o.items}</div>
+                <div className="mt-1 font-mono text-[11px] text-ash">
+                  {o.total} {o.currency} · {o.fulfillmentStatus}
+                </div>
+              </button>
+            ))}
+          </div>
 
-          <div className="mt-6 border-t border-line-soft pt-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">How this works</div>
-            <p className="mt-2 text-xs leading-relaxed text-ink-mute">
-              AI understands your request; deterministic Java procedures control what the system is allowed to do.
-              Confirmations and OTP verification are enforced in code.
+          <Kicker className="mt-7">Try asking</Kicker>
+          <div className="mt-3 space-y-2">
+            {TRY_ASKING.map((q) => (
+              <button
+                key={q}
+                onClick={() => sendText(q)}
+                className="block w-full rounded-lg border border-line/70 bg-white/[0.02] px-3.5 py-2.5 text-left text-[13px] text-mist transition-colors hover:border-smoke hover:text-white"
+              >
+                “{q}”
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-8 border-t border-line/60 pt-5">
+            <Kicker>Seeded data</Kicker>
+            <p className="mt-2.5 text-[12px] leading-relaxed text-ash">
+              This customer comes straight from the backend seed dataset — the same
+              records the agent reads. AI understands your request; deterministic
+              Java procedures control what the system is allowed to do.
             </p>
           </div>
         </aside>
       </div>
+      {/* Spacer so the fixed mobile composer never covers bottom content. */}
+      <div className="h-28 shrink-0 lg:hidden" aria-hidden />
     </div>
   );
 }
 
-/* ---------------- chat pane ---------------- */
+/* ================= thread + composer ================= */
 
-function ChatPane({ displayName, phone, chat }: {
-  displayName: string;
-  phone: string;
-  chat: ReturnType<typeof useDemoChat>;
+function Thread({ customer, messages, busy, onSend, onReset, voice, voiceCollapsed, setVoiceCollapsed }: {
+  customer: DemoCustomer;
+  messages: ChatMessage[];
+  busy: boolean;
+  onSend: (text: string) => void;
+  onReset: () => void;
+  voice: ReturnType<typeof useVoiceCall>;
+  voiceCollapsed: boolean;
+  setVoiceCollapsed: (v: boolean) => void;
 }) {
   const [draft, setDraft] = useState('');
+  const [callNotice, setCallNotice] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [chat.messages.length]);
+  }, [messages.length, voice.state, voiceCollapsed]);
+
+  // Remember a finished call as a quiet transcript notice.
+  useEffect(() => {
+    if (voice.state === 'idle' && voice.lastCallSec > 0) setCallNotice(voice.lastCallSec);
+  }, [voice.state, voice.lastCallSec]);
 
   const submit = () => {
-    chat.send(draft, phone);
+    if (!draft.trim() || busy) return;
+    onSend(draft);
     setDraft('');
   };
 
+  // Inline actions render only on the latest actionable assistant message.
+  let lastAssistantIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === 'assistant' && !m.pending && !m.error) {
+      lastAssistantIdx = i;
+      break;
+    }
+  }
+
+  const micLabel =
+    voice.state === 'live' ? 'End voice call'
+    : voice.state === 'mic' || voice.state === 'connecting' ? 'Connecting…'
+    : 'Start voice call';
+
+
   return (
-    <div className="flex h-full min-h-[60vh] flex-col">
-      <div className="flex-1 space-y-4 overflow-y-auto p-5">
-        {chat.messages.length === 0 && (
-          <div className="mx-auto max-w-md pt-10 text-center">
-            <div className="text-[15px] font-medium text-ink">You're {displayName}.</div>
-            <p className="mt-2 text-sm leading-relaxed text-ink-mute">
-              Say hello to start. Ask about orders, shipments, returns — or switch to Urdu mid-conversation.
+    <div className="flex min-h-[60vh] flex-col lg:h-full lg:min-h-0">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+        {messages.length === 0 && !voice.active && callNotice === null && (
+          <div className="mx-auto max-w-md pt-12 text-center">
+            <Badge tone="signal" pulse>Session started</Badge>
+            <div className="mt-4 text-[16px] font-medium text-white">You're {customer.name}.</div>
+            <p className="mt-2.5 text-[14px] leading-relaxed text-fog">
+              Type below or tap the mic to talk. Ask about orders, shipments,
+              returns — or switch to Urdu mid-conversation.
             </p>
           </div>
         )}
-        {chat.messages.map((m) => (
+
+        {messages.map((m, idx) => (
           <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
-              className={`max-w-[80%] px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[80%] px-4 py-2.5 text-[14px] leading-relaxed ${
                 m.role === 'user'
-                  ? 'bg-ink text-[#101010]'
+                  ? 'rounded-2xl rounded-br-md bg-white text-[#08090a]'
                   : m.error
-                    ? 'border border-bad/40 text-bad'
-                    : 'border border-line bg-raised text-ink'
+                    ? 'rounded-2xl rounded-bl-md border border-bad/40 text-bad'
+                    : 'rounded-2xl rounded-bl-md border border-line/80 bg-carbon text-mist'
               }`}
             >
               {m.pending ? (
@@ -420,20 +256,76 @@ function ChatPane({ displayName, phone, chat }: {
               ) : (
                 <span className="whitespace-pre-wrap">{m.text}</span>
               )}
-              {(m.requiresConfirmation || m.requiresVerification) && !m.pending && (
-                <div className="mt-2 flex gap-2">
-                  <Badge tone="warn">{m.requiresConfirmation ? 'Awaiting confirmation' : 'Awaiting verification'}</Badge>
+
+              {/* Inline confirmation — never a popup; the user can keep chatting. */}
+              {idx === lastAssistantIdx && m.requiresConfirmation && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => onSend('yes')}
+                    disabled={busy}
+                    className="rounded-md bg-signal px-4 py-1.5 text-[13px] font-medium text-[#08090a] transition-all hover:brightness-110 disabled:opacity-40"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    onClick={() => onSend('no')}
+                    disabled={busy}
+                    className="rounded-md border border-line px-4 py-1.5 text-[13px] text-mist transition-colors hover:border-smoke hover:text-white disabled:opacity-40"
+                  >
+                    Decline
+                  </button>
                 </div>
+              )}
+
+              {/* Inline OTP entry — same principle: no blocking modal. */}
+              {idx === lastAssistantIdx && m.requiresVerification && (
+                <OtpInline busy={busy} onSubmit={onSend} />
               )}
             </div>
           </div>
         ))}
+
+        {callNotice !== null && (
+          <div className="flex justify-center">
+            <span className="flex items-center gap-2.5 rounded-full border border-line/70 bg-white/[0.03] py-1.5 pl-3 pr-2 font-mono text-[11px] text-ash">
+              Voice call ended · {formatElapsed(callNotice)}
+              <button
+                onClick={() => setCallNotice(null)}
+                className="rounded-full p-1 transition-colors hover:bg-white/[0.08] hover:text-white"
+                title="Dismiss"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </span>
+          </div>
+        )}
+
+        {voice.active && (
+          voiceCollapsed
+            ? <VoiceSlimBar voice={voice} onExpand={() => setVoiceCollapsed(false)} />
+            : <VoiceCallView voice={voice} customer={customer} onCollapse={() => setVoiceCollapsed(true)} />
+        )}
+        {voice.state === 'error' && (
+          <div className="mx-auto w-full max-w-md">
+            <ErrorBox message={voice.detail ?? 'Could not start the voice call'} onRetry={voice.start} />
+            <div className="mt-3 text-center">
+              <button onClick={voice.dismissError} className="text-[13px] text-ash transition-colors hover:text-white">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
-      <div className="border-t border-line p-4">
-        <div className="flex gap-2">
-          <TextInput
-            placeholder={`Message as ${displayName}…`}
+
+      {/* Gemini-style unified composer — fixed to the viewport bottom on
+          mobile; a normal flex footer inside the locked desktop layout. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line/70 bg-void p-4 lg:static lg:shrink-0">
+        <div className="flex items-center gap-2 rounded-[28px] border border-line bg-carbon py-2 pl-5 pr-2 transition-colors focus-within:border-smoke">
+          <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -442,20 +334,440 @@ function ChatPane({ displayName, phone, chat }: {
                 submit();
               }
             }}
-            disabled={chat.busy}
-            className="!py-2.5"
+            placeholder={`Message as ${customer.name}…`}
+            disabled={busy}
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-white outline-none placeholder:text-ash disabled:opacity-50"
           />
-          <Button variant="primary" onClick={submit} disabled={chat.busy || !draft.trim()}>Send</Button>
+          <button
+            onClick={() => {
+              if (voice.active) voice.hangup();
+              else {
+                setVoiceCollapsed(false);
+                voice.start();
+              }
+            }}
+            title={micLabel}
+            disabled={voice.state === 'mic' || voice.state === 'connecting'}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all disabled:opacity-50 ${
+              voice.state === 'live'
+                ? 'bg-bad text-white shadow-[0_0_20px_-4px_rgba(235,87,87,0.5)] hover:brightness-110'
+                : 'text-fog hover:bg-white/[0.06] hover:text-white'
+            }`}
+          >
+            {voice.state === 'live' ? <EndCallIcon /> : <CallIcon />}
+          </button>
+          <button
+            onClick={submit}
+            disabled={busy || !draft.trim()}
+            title="Send"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-signal text-[#08090a] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <SendIcon />
+          </button>
         </div>
-        <div className="mt-2 flex items-center justify-between">
-          <span className="font-mono text-[11px] text-ink-mute">
-            {chat.busy ? 'Agent is responding…' : 'Connected to the Java brain'}
+        <div className="mt-2.5 flex items-center justify-between px-1">
+          <span className="font-mono text-[11px] text-ash">
+            {voice.state === 'live'
+              ? `Voice call live · ${formatElapsed(voice.elapsedSec)}`
+              : busy
+                ? 'Agent is responding…'
+                : 'Connected to the Java brain'}
           </span>
-          {chat.messages.length > 0 && (
-            <button onClick={chat.reset} className="font-mono text-[11px] text-ink-mute hover:text-ink">Reset session</button>
+          {messages.length > 0 && (
+            <button onClick={onReset} className="font-mono text-[11px] text-ash transition-colors hover:text-white">
+              Reset thread
+            </button>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+/* ================= inline OTP ================= */
+
+function OtpInline({ busy, onSubmit }: {
+  busy: boolean;
+  onSubmit: (text: string) => void;
+}) {
+  const [code, setCode] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const submit = () => {
+    const c = code.trim();
+    if (c.length > 0 && !busy) {
+      onSubmit(c);
+      setCode('');
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-lg border border-line/70 bg-void/70 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog">
+        Verification code
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          ref={inputRef}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          inputMode="numeric"
+          placeholder="••••••"
+          disabled={busy}
+          className="min-w-0 flex-1 rounded-md border border-line bg-white/[0.02] px-3 py-2 text-center font-mono text-[18px] tracking-[0.3em] text-white outline-none transition-colors placeholder:text-ash focus:border-signal disabled:opacity-50"
+        />
+        <button
+          onClick={submit}
+          disabled={busy || code.trim().length === 0}
+          className="shrink-0 rounded-md bg-signal px-4 py-2 text-[13px] font-medium text-[#08090a] transition-all hover:brightness-110 disabled:opacity-40"
+        >
+          Verify
+        </button>
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <button
+          onClick={() => onSubmit('resend code')}
+          disabled={busy}
+          className="text-[12px] text-fog transition-colors hover:text-white disabled:opacity-40"
+        >
+          Resend code
+        </button>
+        <span className="font-mono text-[10px] text-ash">dev log: event=dev_otp_delivery</span>
+      </div>
+    </div>
+  );
+}
+
+/* ================= voice call ================= */
+
+/* ================= live call window =================
+   Two-pane live view modeled on the landing hero card:
+   transcript (real call events + live captions of the caller) on the
+   left, real session facts on the right, waveform + controls below.
+   The agent's own words and its decision trace stay server-side — the
+   browser has no access to them — so the right panel shows session
+   facts, never a fabricated trace. */
+
+interface CallEvent {
+  id: number;
+  at: Date;
+  text: string;
+}
+
+function VoiceCallView({ voice, customer, onCollapse }: {
+  voice: ReturnType<typeof useVoiceCall>;
+  customer: DemoCustomer;
+  onCollapse: () => void;
+}) {
+  const { state, agentPresent, speaking, muted, elapsedSec } = voice;
+  const live = state === 'live';
+  const { captions, supported } = useLiveCaptions(live);
+  const [events, setEvents] = useState<CallEvent[]>([]);
+  const evId = useRef(0);
+  const prevAgent = useRef(agentPresent);
+  const prevMuted = useRef(muted);
+
+  const pushEvent = (text: string) =>
+    setEvents((e) => [...e, { id: evId.current++, at: new Date(), text }]);
+
+  useEffect(() => {
+    pushEvent('Call started');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (agentPresent && !prevAgent.current) pushEvent('Agent connected');
+    if (!agentPresent && prevAgent.current) pushEvent('Agent disconnected');
+    prevAgent.current = agentPresent;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentPresent]);
+  useEffect(() => {
+    if (muted !== prevMuted.current) pushEvent(muted ? 'You muted the microphone' : 'You unmuted the microphone');
+    prevMuted.current = muted;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted]);
+
+  const fmtT = (d: Date) =>
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const finals = captions.filter((c) => c.final);
+  const interim = captions.find((c) => !c.final);
+
+  return (
+    <div className="g-border mx-auto w-full max-w-4xl overflow-hidden rounded-xl">
+      {/* header */}
+      <div className="flex items-center justify-between border-b border-line/70 px-5 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="vq-pulse absolute inline-flex h-full w-full rounded-full bg-signal" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-signal" />
+          </span>
+          <span className="font-mono text-[12px] text-fog">voxticket — live call</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge tone={agentPresent ? 'signal' : 'mute'} pulse={agentPresent}>
+            {agentPresent ? 'Connected' : state === 'live' ? 'Waiting for agent' : 'Connecting'}
+          </Badge>
+          <span className="font-mono text-[12px] text-ash">{formatElapsed(elapsedSec)}</span>
+          <button
+            onClick={onCollapse}
+            title="Minimize call"
+            className="rounded-md p-1.5 text-ash transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          <button
+            onClick={voice.hangup}
+            title="End call"
+            className="rounded-md p-1.5 text-ash transition-colors hover:bg-bad/10 hover:text-bad"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {(state === 'mic' || state === 'connecting') ? (
+        <div className="flex items-center justify-center gap-3 px-5 py-10">
+          <WaveformBars count={5} animated />
+          <span className="text-[13px] text-fog">
+            {state === 'mic' ? 'Requesting microphone…' : 'Connecting to LiveKit…'}
+          </span>
+        </div>
+      ) : (
+        <>
+          <div className="grid md:grid-cols-[1fr_240px]">
+            {/* transcript */}
+            <div className="max-h-[300px] min-h-[220px] space-y-2.5 overflow-y-auto p-5">
+              {events.map((e) => (
+                <div key={e.id} className="flex gap-3 font-mono text-[12px]">
+                  <span className="shrink-0 text-ash">{fmtT(e.at)}</span>
+                  <span className="text-fog">{e.text}</span>
+                </div>
+              ))}
+              {finals.map((c) => (
+                <div key={c.id} className="flex justify-end">
+                  <div className="max-w-[85%] rounded-xl rounded-br-md bg-white/[0.07] px-4 py-2.5 text-[14px] leading-relaxed text-mist">
+                    {c.text}
+                  </div>
+                </div>
+              ))}
+              {interim && (
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] rounded-xl rounded-br-md bg-white/[0.03] px-4 py-2.5 text-[14px] italic leading-relaxed text-ash">
+                    {interim.text}…
+                  </div>
+                </div>
+              )}
+              {finals.length === 0 && (
+                <p className="pt-2 text-[13px] leading-relaxed text-ash">
+                  {supported
+                    ? 'Your speech appears here as live captions while you talk.'
+                    : 'Live captions need Chrome or Edge — call events still appear here.'}
+                </p>
+              )}
+            </div>
+
+            {/* session facts */}
+            <div className="border-t border-line/70 bg-obsidian/60 p-5 md:border-l md:border-t-0">
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ash">Session</div>
+              <div className="mt-4 space-y-3 font-mono text-[12px]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ash">customer</span>
+                  <span className="truncate text-mist">{customer.name}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ash">agent</span>
+                  <span className={agentPresent ? 'text-signal' : 'text-fog'}>
+                    {agentPresent ? 'connected' : 'waiting…'}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ash">speaking</span>
+                  <span className={speaking === 'agent' ? 'text-signal' : speaking === 'you' ? 'text-signal-teal' : 'text-fog'}>
+                    {speaking === 'agent' ? 'agent' : speaking === 'you' ? 'you' : '—'}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ash">mic</span>
+                  <span className={muted ? 'text-warn' : 'text-mist'}>{muted ? 'muted' : 'live'}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ash">elapsed</span>
+                  <span className="text-mist">{formatElapsed(elapsedSec)}</span>
+                </div>
+              </div>
+              {live && !agentPresent && (
+                <p className="mt-4 border-t border-line/60 pt-4 text-[12px] leading-relaxed text-ash">
+                  The voice agent hasn't joined yet — start{' '}
+                  <span className="font-mono">python-voice/agent.py</span>.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* bottom: waveform + controls */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line/70 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <WaveformBars count={9} animated={speaking !== null} />
+              <VoiceStatus state={state} agentPresent={agentPresent} speaking={speaking} />
+            </div>
+            {live && (
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={voice.toggleMute}
+                  className={`rounded-full border px-5 py-2 text-[13px] font-medium transition-colors ${
+                    muted
+                      ? 'border-warn/60 bg-warn/10 text-warn'
+                      : 'border-line text-mist hover:border-smoke hover:text-white'
+                  }`}
+                >
+                  {muted ? 'Unmute' : 'Mute'}
+                </button>
+                <button
+                  onClick={voice.hangup}
+                  className="rounded-full border border-bad/50 px-5 py-2 text-[13px] font-medium text-bad transition-colors hover:bg-bad/10"
+                >
+                  End call
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function VoiceSlimBar({ voice, onExpand }: {
+  voice: ReturnType<typeof useVoiceCall>;
+  onExpand: () => void;
+}) {
+  return (
+    <div className="g-border-soft mx-auto flex w-full max-w-lg items-center gap-3 rounded-full py-2 pl-4 pr-2">
+      <span className="relative flex h-2 w-2 shrink-0">
+        <span className="vq-pulse absolute inline-flex h-full w-full rounded-full bg-signal" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
+      </span>
+      <button onClick={onExpand} className="min-w-0 flex-1 truncate text-left text-[13px] text-mist transition-colors hover:text-white">
+        Voice call · {formatElapsed(voice.elapsedSec)} · <VoiceStatusText state={voice.state} agentPresent={voice.agentPresent} speaking={voice.speaking} />
+      </button>
+      <button
+        onClick={onExpand}
+        title="Expand call"
+        className="shrink-0 rounded-full p-2 text-ash transition-colors hover:bg-white/[0.06] hover:text-white"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <polyline points="18 15 12 9 6 15" />
+        </svg>
+      </button>
+      <button
+        onClick={voice.hangup}
+        className="shrink-0 rounded-full border border-bad/50 px-4 py-1.5 text-[12px] font-medium text-bad transition-colors hover:bg-bad/10"
+      >
+        End
+      </button>
+    </div>
+  );
+}
+
+
+function VoiceStatus({ state, agentPresent, speaking }: {
+  state: string;
+  agentPresent: boolean;
+  speaking: Speaking;
+}) {
+  return <span className="text-[13px]"><VoiceStatusText state={state} agentPresent={agentPresent} speaking={speaking} /></span>;
+}
+
+function VoiceStatusText({ state, agentPresent, speaking }: {
+  state: string;
+  agentPresent: boolean;
+  speaking: Speaking;
+}) {
+  if (state !== 'live') {
+    return <span className="text-fog">{state === 'mic' ? 'Requesting microphone…' : 'Connecting…'}</span>;
+  }
+  if (!agentPresent) {
+    return (
+      <span className="flex items-center gap-2 text-fog">
+        <span className="h-1.5 w-1.5 rounded-full bg-ash" /> Waiting for agent…
+      </span>
+    );
+  }
+  if (speaking === 'agent') {
+    return (
+      <span className="flex items-center gap-2 text-signal">
+        <span className="vq-pulse h-1.5 w-1.5 rounded-full bg-signal" /> Agent speaking…
+      </span>
+    );
+  }
+  if (speaking === 'you') {
+    return (
+      <span className="flex items-center gap-2 text-signal-teal">
+        <span className="vq-pulse h-1.5 w-1.5 rounded-full bg-signal-teal" /> You're speaking…
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-2 text-fog">
+      <span className="h-1.5 w-1.5 rounded-full bg-pulse-green" /> Listening…
+    </span>
+  );
+}
+
+function WaveformBars({ count, animated }: { count: number; animated: boolean }) {
+  const heights = [38, 62, 45, 78, 92, 58, 70, 48, 66, 40, 74, 52];
+  return (
+    <div className="flex h-9 items-center gap-[3px]" aria-hidden>
+      {Array.from({ length: count }).map((_, i) => (
+        <span
+          key={i}
+          className={`w-[3px] rounded-full ${animated ? 'vq-bar bg-signal' : 'bg-smoke'}`}
+          style={{ height: `${heights[i % heights.length]}%`, animationDelay: `${(i % 6) * 0.12}s` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ================= composer icons ================= */
+
+function CallIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function EndCallIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+      <line x1="4" y1="4" x2="20" y2="20" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </svg>
   );
 }

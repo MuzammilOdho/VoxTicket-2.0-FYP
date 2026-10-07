@@ -1,36 +1,55 @@
-/** Product / How-it-works / Technology pages. */
+/** Product / How-it-works / Technology pages — Linear style. */
 import { Page } from './chrome';
-import { Badge, ButtonLink } from '../ui/primitives';
+import { Badge, ButtonLink, Kicker } from '../ui/primitives';
+import { Reveal } from '../ui/motion';
 
-function DocShell({ kicker, title, intro, children }: { kicker: string; title: string; intro: string; children: React.ReactNode }) {
+function DocShell({ kicker, title, intro, children }: {
+  kicker: string;
+  title: string;
+  intro: string;
+  children: React.ReactNode;
+}) {
   return (
     <Page>
-      <div className="mx-auto max-w-4xl px-5 py-14 md:py-20">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-signal">{kicker}</div>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight text-ink">{title}</h1>
-        <p className="mt-4 text-lg leading-relaxed text-ink-dim">{intro}</p>
-        <div className="mt-10 space-y-10">{children}</div>
+      <div className="mx-auto max-w-[1200px] px-6 py-16 md:py-24">
+        <Reveal>
+          <Kicker>{kicker}</Kicker>
+          <h1 className="display-tight mt-4 max-w-3xl text-[40px] font-medium leading-[1.05] text-white md:text-[64px] md:leading-[1.0]">
+            {title}
+          </h1>
+          <p className="mt-5 max-w-2xl text-[17px] leading-[1.6] text-fog">{intro}</p>
+        </Reveal>
+        <div className="mt-14 space-y-0">{children}</div>
       </div>
     </Page>
   );
 }
 
-function Block({ title, body, points }: { title: string; body: string; points?: string[] }) {
+function Block({ title, body, points, index }: {
+  title: string;
+  body: string;
+  points?: string[];
+  index: number;
+}) {
   return (
-    <section className="border-t border-line pt-6">
-      <h2 className="text-xl font-semibold text-ink">{title}</h2>
-      <p className="mt-2 text-[15px] leading-relaxed text-ink-dim">{body}</p>
-      {points && (
-        <ul className="mt-4 space-y-2">
-          {points.map((p) => (
-            <li key={p} className="flex gap-3 text-sm text-ink-dim">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-signal" />
-              <span>{p}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <Reveal delay={Math.min(index, 4) * 60}>
+      <section className="grid gap-6 border-t border-graphite py-10 md:grid-cols-[240px_1fr] md:py-12">
+        <h2 className="heading-tight text-[20px] font-medium leading-[1.33] text-white">{title}</h2>
+        <div>
+          <p className="max-w-2xl text-[16px] leading-[1.6] text-mist">{body}</p>
+          {points && (
+            <ul className="mt-5 space-y-2.5">
+              {points.map((p) => (
+                <li key={p} className="flex gap-3 text-[14px] leading-relaxed text-fog">
+                  <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-signal" />
+                  <span>{p}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+    </Reveal>
   );
 }
 
@@ -42,6 +61,7 @@ export function Product() {
       intro="One agent across voice and chat that resolves the support workload e-commerce teams actually drown in: where is my order, cancel it, return it, refund it, fix my payment."
     >
       <Block
+        index={0}
         title="Voice-first conversations"
         body="Callers speak naturally and hear answers in under a second. The pipeline — LiveKit transport, AssemblyAI transcription, Cartesia synthesis — is tuned for interruption: talk over the agent and it stops, listens, and picks up the new thread."
         points={[
@@ -51,6 +71,7 @@ export function Product() {
         ]}
       />
       <Block
+        index={1}
         title="Commerce-aware answers"
         body="VoxTicket is wired into the order system. It looks up orders, payments, shipments, and tickets — and answers from live state, not from a knowledge-base guess."
         points={[
@@ -60,6 +81,7 @@ export function Product() {
         ]}
       />
       <Block
+        index={2}
         title="Procedures, not promises"
         body="Cancellations, returns, claims, and refunds run as deterministic state machines: the agent explains, the customer confirms explicitly, OTP verification fires where required, and every transition is audited."
         points={[
@@ -69,12 +91,15 @@ export function Product() {
         ]}
       />
       <Block
+        index={3}
         title="Multilingual support"
         body="Language is detected per turn and the voice follows it. A caller can start in English, switch to Urdu mid-call, and the agent keeps up — no language menu, no restart."
       />
-      <div className="flex gap-3 pt-4">
-        <ButtonLink to="/demo" variant="primary">Try the demo</ButtonLink>
-      </div>
+      <Reveal>
+        <div className="flex gap-3 border-t border-graphite pt-10">
+          <ButtonLink to="/demo" variant="primary" className="!px-6 !py-3">Try the demo</ButtonLink>
+        </div>
+      </Reveal>
     </DocShell>
   );
 }
@@ -86,30 +111,17 @@ export function HowItWorks() {
       title="From speech to resolution"
       intro="A turn through the system: what happens between the caller finishing a sentence and hearing the answer."
     >
-      <Block
-        title="1 · Capture"
-        body="The caller's audio streams to the voice worker over LiveKit. Silero VAD detects speech; AssemblyAI Universal streaming produces the transcript; the audio turn detector decides the caller has finished."
-      />
-      <Block
-        title="2 · Understand"
-        body="The transcript is sent to the Java brain. A prompt guard screens for injection, the input is normalized, and a model router picks the right tier — fast models for simple turns, stronger ones for complex reasoning."
-      />
-      <Block
-        title="3 · Act (under rules)"
-        body="The agent calls tools: order lookups, RAG policy search, procedure controls. Tools that mutate state are gated — starting a cancellation is allowed, completing one requires the customer's explicit confirmation."
-      />
-      <Block
-        title="4 · Speak"
-        body="The reply streams back as server-sent events, sentence by sentence, into Cartesia TTS. The caller hears the first sentence while the rest generates. If the caller interrupts, the turn aborts cooperatively and the new turn takes over."
-      />
-      <Block
-        title="5 · Record"
-        body="Every turn emits a decision trace — model, tokens, tools, latency, procedure outcomes — to the operations console. Nothing the agent did is a black box."
-      />
-      <div className="flex gap-3 pt-4">
-        <ButtonLink to="/technology" variant="ghost">Architecture details</ButtonLink>
-        <ButtonLink to="/demo" variant="primary">Try the demo</ButtonLink>
-      </div>
+      <Block index={0} title="1 · Capture" body="The caller's audio streams to the voice worker over LiveKit. Silero VAD detects speech; AssemblyAI Universal streaming produces the transcript; the audio turn detector decides the caller has finished." />
+      <Block index={1} title="2 · Understand" body="The transcript is sent to the Java brain. A prompt guard screens for injection, the input is normalized, and a model router picks the right tier — fast models for simple turns, stronger ones for complex reasoning." />
+      <Block index={2} title="3 · Act (under rules)" body="The agent calls tools: order lookups, RAG policy search, procedure controls. Tools that mutate state are gated — starting a cancellation is allowed, completing one requires the customer's explicit confirmation." />
+      <Block index={3} title="4 · Speak" body="The reply streams back as server-sent events, sentence by sentence, into Cartesia TTS. The caller hears the first sentence while the rest generates. If the caller interrupts, the turn aborts cooperatively and the new turn takes over." />
+      <Block index={4} title="5 · Record" body="Every turn emits a decision trace — model, tokens, tools, latency, procedure outcomes — to the operations console. Nothing the agent did is a black box." />
+      <Reveal>
+        <div className="flex flex-wrap gap-3 border-t border-graphite pt-10">
+          <ButtonLink to="/technology" variant="ghost" className="!px-6 !py-3">Architecture details</ButtonLink>
+          <ButtonLink to="/demo" variant="primary" className="!px-6 !py-3">Try the demo</ButtonLink>
+        </div>
+      </Reveal>
     </DocShell>
   );
 }
@@ -144,30 +156,33 @@ export function Technology() {
       title="Architecture"
       intro="A realtime voice pipeline on a deterministic Java core. The AI proposes; the system disposes."
     >
-      <div className="space-y-px border border-line bg-line">
-        {ARCH.map((a) => (
-          <div key={a.layer} className="bg-raised p-6">
-            <div className="flex items-center gap-3">
+      <div className="g-border-soft overflow-hidden rounded-xl">
+        {ARCH.map((a, i) => (
+          <Reveal key={a.layer} delay={Math.min(i, 4) * 60}>
+            <div className={`p-6 md:p-8 ${i > 0 ? 'border-t border-line/70' : ''}`}>
               <Badge tone="signal">{a.layer}</Badge>
+              <ul className="mt-4 space-y-2.5">
+                {a.items.map((item) => (
+                  <li key={item} className="flex gap-3">
+                    <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-smoke" />
+                    <span className="font-mono text-[13px] leading-relaxed text-mist">{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="mt-4 space-y-2">
-              {a.items.map((i) => (
-                <li key={i} className="flex gap-3 text-sm text-ink-dim">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 bg-line" />
-                  <span className="font-mono text-[13px]">{i}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          </Reveal>
         ))}
       </div>
       <Block
+        index={5}
         title="Why this shape"
         body="Voice demands low latency, but support demands correctness. So the hot path is streaming and the dangerous path is deterministic: mutations only happen inside procedures with explicit confirmation, and the language model can never bypass them — it has no direct access to the database."
       />
-      <div className="flex gap-3 pt-4">
-        <ButtonLink to="/demo" variant="primary">Try the demo</ButtonLink>
-      </div>
+      <Reveal>
+        <div className="flex gap-3 border-t border-graphite pt-10">
+          <ButtonLink to="/demo" variant="primary" className="!px-6 !py-3">Try the demo</ButtonLink>
+        </div>
+      </Reveal>
     </DocShell>
   );
 }

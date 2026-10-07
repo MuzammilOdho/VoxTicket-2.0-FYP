@@ -141,7 +141,7 @@ voxticket:
       tier1:
         provider: GOOGLE
         model: gemini-3.5-flash-lite
-        temperature: 0.3
+        temperature: 0.7
         max-output-tokens: 800
         reasoning-effort: low
         timeout-seconds: 20
@@ -150,7 +150,7 @@ voxticket:
       tier2:
         provider: GROQ
         model: openai/gpt-oss-120b
-        temperature: 0.3
+        temperature: 0.7
         max-output-tokens: 3072
         reasoning-effort: medium
         timeout-seconds: 20
@@ -203,7 +203,7 @@ voxticket:
       # ml-model:   Groq classifier model id for prompt-injection scoring.
       # ml-threshold: 0.0 - 1.0. Score at/above -> message flagged suspicious.
       # ml-max-tokens: output cap for the classifier call (single score).
-      provider: ml
+      provider: heuristic
       ml-model: meta-llama/llama-prompt-guard-2-86m
       ml-threshold: 0.5
       ml-max-tokens: 10

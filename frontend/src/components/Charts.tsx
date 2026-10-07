@@ -12,10 +12,10 @@ import {
   YAxis,
 } from 'recharts';
 
-/* Muted technical palette: signal orange leads, the rest recede. */
-const COLORS = ['#ff5c1a', '#3ddc84', '#ffb224', '#ff5c5c', '#6cb8ff', '#b8b4b1', '#7d7976', '#ff8c5a'];
+/* Linear palette: acid lime leads, the rest recede. */
+const COLORS = ['#e4f222', '#27a644', '#6366f1', '#02b8cc', '#ffb224', '#eb5757', '#8a8f98', '#62666d'];
 
-const AXIS = { fontSize: 11, fill: '#7d7976', fontFamily: 'var(--font-mono)' };
+const AXIS = { fontSize: 11, fill: '#8a8f98', fontFamily: 'var(--font-mono)' };
 
 export interface NameValue {
   name: string;
@@ -51,7 +51,7 @@ export function BarChartCard({ title, data, height }: { title?: string; data: Na
   return (
     <ChartShell title={title} height={height}>
       <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2b2928" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#23252a" />
         <XAxis dataKey="name" tick={AXIS} interval={0} angle={-18} dy={8} height={48} />
         <YAxis tick={AXIS} />
         <Tooltip contentStyle={tooltipStyle} />
@@ -69,7 +69,7 @@ export function DonutChartCard({ title, data, height }: { title?: string; data: 
   return (
     <ChartShell title={title} height={height}>
       <PieChart>
-        <Pie data={data} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2} label={{ fontSize: 11, fill: '#b8b4b1' }} stroke="#1d1a18">
+        <Pie data={data} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2} label={{ fontSize: 11, fill: '#d0d6e0' }} stroke="#0f1011">
           {data.map((_, i) => (
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}

@@ -1,12 +1,23 @@
-/** VoxTicket UI primitives: Factory-dark technical surfaces. */
+/** VoxTicket UI primitives — Linear "midnight precision instrument".
+ *  6px buttons/inputs, 12px cards, 9999px pills, 4px badges.
+ *  Acid lime (#e4f222) is the ONLY chromatic action element. */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 /* ---------- layout ---------- */
 
-export function Card({ children, className = '', pad = true }: { children: ReactNode; className?: string; pad?: boolean }) {
+export function Card({ children, className = '', pad = true, glass = false }: {
+  children: ReactNode;
+  className?: string;
+  pad?: boolean;
+  glass?: boolean;
+}) {
   return (
-    <div className={`border border-line bg-raised ${pad ? 'p-4' : ''} ${className}`}>
+    <div
+      className={`${glass ? 'g-border' : 'border border-line bg-raised'} rounded-xl ${
+        pad ? 'p-6' : ''
+      } ${className}`}
+    >
       {children}
     </div>
   );
@@ -14,8 +25,8 @@ export function Card({ children, className = '', pad = true }: { children: React
 
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">{children}</h2>
+    <div className="mb-4 flex items-center justify-between">
+      <h2 className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-mute">{children}</h2>
       {right}
     </div>
   );
@@ -23,7 +34,25 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 
 /* ---------- buttons ---------- */
 
-type BtnVariant = 'primary' | 'ghost' | 'danger' | 'light';
+type BtnVariant = 'primary' | 'ghost' | 'danger' | 'light' | 'pill';
+
+const btnBase =
+  'inline-flex items-center justify-center gap-2 px-4 py-2 text-[13px] font-medium tracking-[-0.011em] transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40';
+
+const btnStyles: Record<BtnVariant, string> = {
+  // The one chromatic button in the system.
+  primary:
+    'rounded-md bg-signal text-[#08090a] hover:brightness-110 hover:shadow-[0_8px_28px_-8px_rgba(228,242,34,0.45)] active:brightness-95 disabled:hover:bg-signal disabled:hover:shadow-none',
+  light:
+    'rounded-md bg-ink text-[#08090a] hover:bg-white disabled:hover:bg-ink',
+  ghost:
+    'rounded-md border border-line bg-transparent text-ink-dim hover:border-smoke hover:bg-white/[0.04] hover:text-ink',
+  danger:
+    'rounded-md border border-bad/50 text-bad hover:bg-bad/10',
+  // White pill — nav CTA.
+  pill:
+    'rounded-full bg-white text-[#08090a] hover:bg-bone active:bg-mist',
+};
 
 export function Button({
   children,
@@ -40,31 +69,26 @@ export function Button({
   type?: 'button' | 'submit';
   className?: string;
 }) {
-  const base =
-    'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40';
-  const styles: Record<BtnVariant, string> = {
-    primary: 'bg-signal text-[#101010] hover:bg-[#ff6f38] disabled:hover:bg-signal',
-    light: 'bg-ink text-[#101010] hover:bg-white disabled:hover:bg-ink',
-    ghost: 'border border-line bg-transparent text-ink hover:border-ink-mute hover:bg-raised-2',
-    danger: 'border border-bad/60 text-bad hover:bg-bad/10',
-  };
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${styles[variant]} ${className}`}>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${btnBase} ${btnStyles[variant]} ${className}`}
+    >
       {children}
     </button>
   );
 }
 
-export function ButtonLink({ to, children, variant = 'ghost', className = '' }: { to: string; children: ReactNode; variant?: BtnVariant; className?: string }) {
-  const base = 'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors';
-  const styles: Record<BtnVariant, string> = {
-    primary: 'bg-signal text-[#101010] hover:bg-[#ff6f38]',
-    light: 'bg-ink text-[#101010] hover:bg-white',
-    ghost: 'border border-line bg-transparent text-ink hover:border-ink-mute hover:bg-raised-2',
-    danger: 'border border-bad/60 text-bad hover:bg-bad/10',
-  };
+export function ButtonLink({ to, children, variant = 'ghost', className = '' }: {
+  to: string;
+  children: ReactNode;
+  variant?: BtnVariant;
+  className?: string;
+}) {
   return (
-    <Link to={to} className={`${base} ${styles[variant]} ${className}`}>
+    <Link to={to} className={`${btnBase} ${btnStyles[variant]} ${className}`}>
       {children}
     </Link>
   );
@@ -72,21 +96,46 @@ export function ButtonLink({ to, children, variant = 'ghost', className = '' }: 
 
 /* ---------- badges / status ---------- */
 
-export function Badge({ tone = 'mute', children, pulse }: { tone?: 'mute' | 'signal' | 'ok' | 'warn' | 'bad' | 'info'; children: ReactNode; pulse?: boolean }) {
+export function Badge({ tone = 'mute', children, pulse }: {
+  tone?: 'mute' | 'signal' | 'ok' | 'warn' | 'bad' | 'info' | 'violet';
+  children: ReactNode;
+  pulse?: boolean;
+}) {
   const tones: Record<string, string> = {
-    mute: 'border-line text-ink-mute',
-    signal: 'border-signal/60 text-signal',
-    ok: 'border-ok/50 text-ok',
-    warn: 'border-warn/50 text-warn',
-    bad: 'border-bad/60 text-bad',
-    info: 'border-info/50 text-info',
+    mute: 'bg-white/[0.05] text-ink-mute',
+    signal: 'bg-signal/10 text-signal',
+    ok: 'bg-ok/10 text-ok',
+    warn: 'bg-warn/10 text-warn',
+    bad: 'bg-bad/10 text-bad',
+    info: 'bg-info/10 text-info',
+    violet: 'bg-iris-violet/15 text-lavender',
   };
   return (
-    <span className={`inline-flex items-center gap-1.5 border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider ${tones[tone]}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] font-normal ${tones[tone]}`}
+    >
       {pulse && <span className="vq-pulse inline-block h-1.5 w-1.5 rounded-full bg-current" />}
       {children}
     </span>
   );
+}
+
+/** Pill chip — tags, filters, compact triggers. */
+export function Pill({ children, active, onClick, className = '' }: {
+  children: ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+  className?: string;
+}) {
+  const cls = active
+    ? 'border-signal/60 bg-signal/10 text-signal'
+    : 'border-line bg-white/[0.03] text-ink-dim hover:border-smoke hover:text-ink';
+  const inner = (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] transition-colors ${cls} ${className}`}>
+      {children}
+    </span>
+  );
+  return onClick ? <button onClick={onClick}>{inner}</button> : inner;
 }
 
 /* ---------- inputs ---------- */
@@ -94,7 +143,7 @@ export function Badge({ tone = 'mute', children, pulse }: { tone?: 'mute' | 'sig
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">{label}</span>
+      <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-ink-mute">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-mute">{hint}</span>}
     </label>
@@ -105,7 +154,7 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full border border-line bg-canvas px-3 py-2 text-sm text-ink placeholder:text-ink-mute/60 outline-none focus:border-ink-mute ${props.className ?? ''}`}
+      className={`w-full rounded-md border border-line bg-white/[0.02] px-3.5 py-3 text-[14px] text-ink placeholder:text-ink-mute/70 outline-none transition-colors focus:border-ink-dim ${props.className ?? ''}`}
     />
   );
 }
@@ -114,7 +163,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`border border-line bg-canvas px-2.5 py-1.5 text-sm text-ink outline-none focus:border-ink-mute ${props.className ?? ''}`}
+      className={`rounded-md border border-line bg-raised px-2.5 py-1.5 text-sm text-ink outline-none transition-colors focus:border-ink-dim ${props.className ?? ''}`}
     />
   );
 }
@@ -132,7 +181,7 @@ export function KV({ k, v, mono }: { k: string; v: ReactNode; mono?: boolean }) 
 
 export function Empty({ title, body }: { title: string; body?: string }) {
   return (
-    <div className="border border-dashed border-line px-4 py-10 text-center">
+    <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center">
       <div className="text-sm font-medium text-ink-dim">{title}</div>
       {body && <div className="mt-1 text-xs text-ink-mute">{body}</div>}
     </div>
@@ -142,7 +191,7 @@ export function Empty({ title, body }: { title: string; body?: string }) {
 export function Loading({ label = 'Loading' }: { label?: string }) {
   return (
     <div className="flex items-center gap-3 px-4 py-10 text-sm text-ink-mute">
-      <span className="vq-pulse inline-block h-2 w-2 bg-signal" />
+      <span className="vq-pulse inline-block h-2 w-2 rounded-full bg-signal" />
       {label}…
     </div>
   );
@@ -150,7 +199,7 @@ export function Loading({ label = 'Loading' }: { label?: string }) {
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="border border-bad/40 bg-bad/5 px-4 py-6 text-center">
+    <div className="rounded-xl border border-bad/40 bg-bad/5 px-4 py-6 text-center">
       <div className="text-sm font-medium text-bad">Something went wrong</div>
       <div className="mt-1 font-mono text-xs text-ink-mute">{message}</div>
       {onRetry && (
@@ -185,4 +234,13 @@ export function Divider() {
 
 export function Mono({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <span className={`font-mono ${className}`}>{children}</span>;
+}
+
+/** Kicker — small uppercase section label, Linear style. */
+export function Kicker({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`text-[11px] font-medium uppercase tracking-[0.14em] text-ink-mute ${className}`}>
+      {children}
+    </div>
+  );
 }

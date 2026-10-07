@@ -30,7 +30,7 @@ export function VoiceCallDetail() {
             <EmptyState title="No voice call record for this session" hint="This session may be a chat conversation." />
           ) : (
             <div className="space-y-4">
-              <div className="rounded-none border border-line bg-raised p-4 shadow-none">
+              <div className="rounded-xl border border-line bg-raised p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm font-semibold">{d.call.room}</span>
                   <StatusBadge value={d.call.outcome} />

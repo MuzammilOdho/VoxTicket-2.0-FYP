@@ -54,6 +54,9 @@ public class AdminSecurityConfig {
                                 "/api/v1/voice/turn",
                                 "/api/v1/voice/turn/stream",
                                 "/api/v1/voice/token",
+                                // Public demo support (dev/test profile only): serves a
+                                // seeded customer + orders to the demo page.
+                                "/api/v1/demo/**",
                                 // Telemetry endpoints: authenticated by the
                                 // VoiceTelemetrySecretFilter (shared secret), not the ADMIN role.
                                 "/api/v1/voice/telemetry",

@@ -3,9 +3,9 @@ import { StatusBadge } from './StatusBadge';
 import type { TimelineEntry } from '../api/types';
 
 function kindColor(kind: string): string {
-  if (kind === 'MESSAGE') return 'border-sky-400';
-  if (kind === 'EVENT') return 'border-amber-400';
-  return 'border-indigo-400';
+  if (kind === 'MESSAGE') return 'border-info';
+  if (kind === 'EVENT') return 'border-warn';
+  return 'border-iris-violet';
 }
 
 export function Timeline({ entries }: { entries: TimelineEntry[] }) {
@@ -15,7 +15,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
   return (
     <ol className="space-y-2">
       {entries.map((e, i) => (
-        <li key={i} className={`rounded-r-lg border-l-4 bg-raised p-3 shadow-none ${kindColor(e.kind)}`}>
+        <li key={i} className={`rounded-xl border border-line/70 border-l-2 bg-raised p-3.5 ${kindColor(e.kind)}`}>
           <div className="flex flex-wrap items-center gap-2 text-xs text-ink-mute">
             <span className="font-mono text-ink-mute">#{e.turnNumber}</span>
             <StatusBadge value={e.kind} />

@@ -13,7 +13,7 @@ function TurnTraceBlock({ traceId, turnNumber, voice }: { traceId: string; turnN
   const [open, setOpen] = useState(false);
   const q = useTurnTrace(traceId, open, turnNumber);
   return (
-    <div className="mt-2 rounded-none border border-line bg-raised">
+    <div className="mt-2 rounded-xl border border-line bg-raised">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-signal">
         <span>{open ? '▾' : '▸'}</span> AI decision trace
         <span className="font-mono text-[11px] font-normal text-ink-mute">{traceId.slice(0, 16)}…</span>
@@ -42,7 +42,7 @@ function TurnCard({
   const userMsg = entries.find((e) => e.kind === 'MESSAGE' && /user/i.test(e.label));
   const assistantMsg = entries.find((e) => e.kind === 'MESSAGE' && /assistant/i.test(e.label));
   return (
-    <div className="rounded-none border border-line bg-raised p-4 shadow-none">
+    <div className="rounded-xl border border-line bg-raised p-4">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm font-semibold text-ink-dim">Turn #{turnNumber}</span>
         {voice?.bargeIn && <StatusBadge value="BARGE_IN" />}
@@ -51,14 +51,14 @@ function TurnCard({
         {voice?.error && <StatusBadge value="ERROR" label={voice.error} />}
       </div>
       {userMsg && (
-        <div className="mb-1 rounded-none bg-sky-50 p-2 text-sm text-ink">
-          <span className="mr-2 text-xs font-semibold uppercase text-sky-600">User</span>
+        <div className="mb-1 rounded-xl bg-info/[0.08] p-2.5 text-sm text-ink">
+          <span className="mr-2 text-xs font-medium uppercase text-info">User</span>
           {userMsg.detail ?? userMsg.label}
         </div>
       )}
       {assistantMsg && (
-        <div className="mb-1 rounded-none bg-emerald-50 p-2 text-sm text-ink">
-          <span className="mr-2 text-xs font-semibold uppercase text-emerald-600">Assistant</span>
+        <div className="mb-1 rounded-xl bg-ok/[0.08] p-2.5 text-sm text-ink">
+          <span className="mr-2 text-xs font-medium uppercase text-ok">Assistant</span>
           {assistantMsg.detail ?? assistantMsg.label}
         </div>
       )}
@@ -104,7 +104,7 @@ export function ConversationDetail() {
         {(d) => (
           <div className="space-y-4">
             {/* Session header */}
-            <div className="rounded-none border border-line bg-raised p-4 shadow-none">
+            <div className="rounded-xl border border-line bg-raised p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge value={s!.status} />
                 <StatusBadge value={s!.channel} />

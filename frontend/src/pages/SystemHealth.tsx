@@ -18,7 +18,7 @@ export function SystemHealth() {
             </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {h.components.map((c) => (
-                <div key={c.name} className="rounded-none border border-line bg-raised p-4 shadow-none">
+                <div key={c.name} className="rounded-xl border border-line bg-raised p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-ink">{c.name}</div>
                     <StatusBadge value={c.status} />

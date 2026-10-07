@@ -39,7 +39,7 @@ export function AuditLog() {
         />
         <TextInput label="From" type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
         <TextInput label="To" type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-        <button onClick={apply} className="rounded-none bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
+        <button onClick={apply} className="rounded-xl bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
           Apply
         </button>
       </FilterBar>

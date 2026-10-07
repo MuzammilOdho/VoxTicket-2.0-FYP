@@ -20,7 +20,7 @@ export function AiRag() {
               <KpiCard title="Similarity p95" value={r.similarityP95 !== null ? r.similarityP95.toFixed(3) : 'n/a'} />
               <KpiCard title="Retrieval quality" value={r.similarityP50 !== null && r.similarityP50 >= 0.35 ? 'healthy' : 'check'} accent={r.similarityP50 !== null && r.similarityP50 >= 0.35 ? 'green' : 'amber'} sub="p50 vs 0.35 threshold" />
             </div>
-            <div className="rounded-none border border-line bg-raised p-4 text-sm text-ink-mute shadow-none">
+            <div className="rounded-xl border border-line bg-raised p-4 text-sm text-ink-mute">
               Similarity percentiles describe the cosine-similarity distribution of retrieved knowledge chunks.
               Low p50 values suggest the knowledge base or the similarity threshold needs attention.
             </div>
