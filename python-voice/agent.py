@@ -74,11 +74,12 @@ from dotenv import load_dotenv
 # even when the values are correctly set in .env.
 load_dotenv()
 
-from livekit import agents
+from livekit import agents, rtc
 from livekit.agents import Agent, AgentServer, AgentSession, llm
 from livekit.agents import stt as stt_api
 from livekit.agents import tts as tts_api
 from livekit.agents.tokenize import SentenceStream, SentenceTokenizer, token_stream
+from livekit.agents.voice import room_io
 # All provider plugins are imported at module top level (main thread).
 # livekit-agents requires plugin registration on the main thread, so the
 # imports cannot be lazy inside the factories - only the *selection* of
@@ -978,6 +979,57 @@ class _PlaceholderLLM(llm.LLM):
         raise RuntimeError("unreachable: VoxTicketAgent.llm_node is fully overridden")
 
 
+# --------------------------------------------------------------------------
+# Adaptive audio: network tiers from the demo frontend
+# --------------------------------------------------------------------------
+#
+# The demo publishes its mic at an adaptive tier ('full' | 'low' |
+# 'survival', see frontend/src/demo/adaptiveAudio.ts) and broadcasts the
+# tier on the LiveKit data channel (topic "voxticket.network", JSON schema
+# mirrored in adaptiveAudio.ts encodeTierBroadcast). The worker applies the
+# matching turn-taking patience per tier via the public
+# AgentSession.update_options runtime API.
+#
+# Why patience, not codec: on a jittery link the caller's speech arrives in
+# bursts with small network pauses. The default endpointing (0.5s) mistakes
+# a network pause for end-of-turn and either cuts the caller off or commits
+# a turn whose tail never arrived ("misses words"). Waiting longer costs a
+# beat of responsiveness and buys complete sentences.
+
+_NETWORK_TOPIC = "voxticket.network"
+_NETWORK_BROADCAST_VERSION = 1
+_NETWORK_TIERS = ("full", "low", "survival")
+
+# (min_delay, max_delay) seconds per tier: how long after the caller stops
+# speaking the worker waits before committing the turn. 'full' is the
+# framework default; worse tiers wait longer.
+_NETWORK_ENDPOINTING: dict[str, tuple[float, float]] = {
+    "full": (0.5, 3.0),
+    "low": (0.8, 4.0),
+    "survival": (1.2, 5.0),
+}
+
+
+def decode_tier_broadcast(raw: bytes) -> dict | None:
+    """Parse a 'voxticket.network' data-channel payload.
+
+    Returns the payload dict, or None when it is malformed, a version we
+    don't understand, or names an unknown tier. Never raises: a bad
+    broadcast must degrade to "keep current tier", never to a failed call.
+    """
+    try:
+        payload = json.loads(bytes(raw).decode("utf-8"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("v") != _NETWORK_BROADCAST_VERSION:
+        return None
+    if payload.get("tier") not in _NETWORK_TIERS:
+        return None
+    return payload
+
+
 class VoxTicketAgent(Agent):
     def __init__(self, *, brain: VoxTicketBrain, session_id: str,
                  tts: tts_api.TTS, voices: VoiceControl,
@@ -1010,11 +1062,47 @@ class VoxTicketAgent(Agent):
         self._caller_phone_cache: str | None = None  # resolved lazily from the LiveKit room (see below)
         self._barge_in_count = 0
         self._pending_turn: TurnTelemetry | None = None  # stashed for tts_node
+        # Last network tier applied from the demo's data-channel broadcast
+        # (None until the first broadcast arrives; the frontend starts at
+        # 'low' and heartbeats it, so this converges within seconds).
+        self._network_tier: str | None = None
 
     @property
     def barge_in_count(self) -> int:
         """Turns cancelled by caller barge-in during this call."""
         return self._barge_in_count
+
+    @property
+    def network_tier(self) -> str | None:
+        """Last network tier applied from the demo frontend (None if none yet)."""
+        return self._network_tier
+
+    def apply_network_tier(self, tier: str | None) -> bool:
+        """Apply the demo frontend's audio tier (see _NETWORK_ENDPOINTING).
+
+        Unknown tiers and repeats are ignored (returns False). Applies the
+        tier's endpointing patience via the public AgentSession.update_options
+        runtime API; takes effect on subsequent turns. Never raises: a
+        failed tier application keeps the current patience, it never breaks
+        the call.
+        """
+        if tier not in _NETWORK_TIERS or tier == self._network_tier:
+            return False
+        min_delay, max_delay = _NETWORK_ENDPOINTING[tier]
+        try:
+            self.session.update_options(
+                endpointing_opts={"min_delay": min_delay, "max_delay": max_delay}
+            )
+        except Exception:
+            logger.warning("network tier %r: failed to update endpointing", tier,
+                           exc_info=True)
+            return False
+        self._network_tier = tier
+        logger.info(
+            "network tier -> %s (endpointing min_delay=%.1fs max_delay=%.1fs)",
+            tier, min_delay, max_delay,
+        )
+        return True
 
     def _caller_phone(self) -> str | None:
         """The caller's identity for the Java brain: the E.164 phone the demo
@@ -1354,6 +1442,24 @@ async def entrypoint(ctx: agents.JobContext):
     # must never await.)
     session.on("user_input_transcribed", stt_final.handle)
 
+    def _on_network_tier(data_packet: rtc.DataPacket) -> None:
+        # Sync by necessity (EventEmitter.emit invokes handlers inline).
+        # The demo frontend broadcasts its adaptive audio tier on the
+        # 'voxticket.network' data topic (tier + measured loss/jitter/RTT);
+        # the worker answers with matching endpointing patience. Unknown
+        # topics and malformed payloads are ignored.
+        try:
+            if data_packet.topic != _NETWORK_TOPIC:
+                return
+            payload = decode_tier_broadcast(data_packet.data)
+            if payload is None:
+                return
+            agent.apply_network_tier(payload.get("tier"))
+        except Exception:
+            logger.debug("ignoring malformed network-tier broadcast", exc_info=True)
+
+    ctx.room.on("data_received", _on_network_tier)
+
     def _on_transcription_timeout(ev) -> None:
         # Sync by necessity (EventEmitter.emit invokes handlers inline).
         # VAD heard speech but STT produced nothing: the caller gets a
@@ -1403,7 +1509,24 @@ async def entrypoint(ctx: agents.JobContext):
         "Placeholder LLM active; replies come from VoxTicketAgent.llm_node -> Java brain"
     )
     logger.info("Starting voice session for room %s", ctx.room.name)
-    await session.start(room=ctx.room, agent=agent)
+    # The agent's own voice gets the same loss protection as the caller's
+    # mic: RED (redundant audio data) rebuilds a lost packet from its
+    # neighbour with no retransmit round-trip — the direct fix for "voice
+    # breaks and misses words" on lossy links. DTX keeps silence free.
+    # Always on: inaudible overhead on a fast link, call saving on a slow
+    # one. (The demo's mic side sets the same flags in
+    # frontend/src/demo/adaptiveAudio.ts.)
+    # NOTE: room_output_options belongs on start(), not on the AgentSession
+    # constructor — the constructor rejects it (TypeError).
+    await session.start(
+        room=ctx.room,
+        agent=agent,
+        room_output_options=room_io.RoomOutputOptions(
+            audio_publish_options=rtc.TrackPublishOptions(
+                red=True, dtx=True, source=rtc.TrackSource.SOURCE_MICROPHONE,
+            ),
+        ),
+    )
 
 
 if __name__ == "__main__":

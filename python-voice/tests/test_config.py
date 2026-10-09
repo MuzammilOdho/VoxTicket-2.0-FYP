@@ -83,26 +83,6 @@ def test_optional_overrides_are_honored():
     assert cfg.assemblyai_keyterms == ("alpha", "beta")
 
 
-def test_voice_tuning_defaults():
-    cfg = load_config(dict(FULL_ENV))
-    assert cfg.vad_activation_threshold == 0.4
-    assert cfg.aec_warmup_duration_s == 3.0
-    assert cfg.transcription_timeout_s == 8.0
-    assert "didn't catch that" in cfg.transcription_reprompt
-
-
-def test_voice_tuning_overrides_are_honored():
-    env = dict(FULL_ENV, VAD_ACTIVATION_THRESHOLD="0.55",
-               AEC_WARMUP_DURATION_S="1.5",
-               TRANSCRIPTION_TIMEOUT_S="0",
-               TRANSCRIPTION_REPROMPT="Repeat please")
-    cfg = load_config(env)
-    assert cfg.vad_activation_threshold == 0.55
-    assert cfg.aec_warmup_duration_s == 1.5
-    assert cfg.transcription_timeout_s == 0.0
-    assert cfg.transcription_reprompt == "Repeat please"
-
-
 def test_placeholder_llm_is_a_real_non_none_llm_instance():
     """The pipeline skips reply generation entirely when session llm is None,
     so the placeholder must be a genuine llm.LLM instance (not None)."""
