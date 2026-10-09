@@ -12,6 +12,7 @@ import { useDemoChat, type ChatMessage } from './useDemoChat';
 import { useDemoCustomer, type DemoCustomer } from './useDemoCustomer';
 import { useVoiceCall, formatElapsed, type Speaking } from './useVoiceCall';
 import { useLiveCaptions } from './useLiveCaptions';
+import { AdminPreview } from './AdminPreview';
 import { Badge, ErrorBox, Kicker, Loading } from '../ui/primitives';
 
 const TRY_ASKING = [
@@ -27,6 +28,7 @@ export function Demo() {
   const voice = useVoiceCall();
   const [voiceCollapsed, setVoiceCollapsed] = useState(false);
   const [sessionEpoch, setSessionEpoch] = useState(0);
+  const [adminPreviewOpen, setAdminPreviewOpen] = useState(false);
 
   const phone = customer?.phone ?? '';
 
@@ -92,6 +94,13 @@ export function Demo() {
                 {chat.sessionId.slice(0, 18)}…
               </span>
             )}
+            <button
+              onClick={() => setAdminPreviewOpen(true)}
+              title="Preview the operator dashboard with demo credentials"
+              className="shrink-0 rounded-md border border-signal/40 px-3 py-1.5 text-[13px] text-signal transition-colors hover:border-signal hover:bg-signal/[0.06]"
+            >
+              Preview admin console
+            </button>
             <button
               onClick={newSession}
               title="Start a new session with a new customer"
@@ -175,6 +184,12 @@ export function Demo() {
       </div>
       {/* Spacer so the fixed mobile composer never covers bottom content. */}
       <div className="h-28 shrink-0 lg:hidden" aria-hidden />
+
+      <AdminPreview
+        open={adminPreviewOpen}
+        onClose={() => setAdminPreviewOpen(false)}
+        sessionId={chat.sessionId}
+      />
     </div>
   );
 }
