@@ -1,0 +1,901 @@
+{
+  "version": "v1",
+  "examples": [
+    {
+      "id": "t1-en-001",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Where is my order?"
+    },
+    {
+      "id": "t1-en-002",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Track my order ORD-10010 please"
+    },
+    {
+      "id": "t1-en-003",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Has my order shipped yet?"
+    },
+    {
+      "id": "t1-en-004",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "cancel"
+      ],
+      "text": "I want to cancel my order ORD-10011"
+    },
+    {
+      "id": "t1-en-005",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "cancel"
+      ],
+      "text": "Please cancel order ORD-10012"
+    },
+    {
+      "id": "t1-en-006",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "return"
+      ],
+      "text": "I want to return these shoes, order ORD-10013"
+    },
+    {
+      "id": "t1-en-007",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "return"
+      ],
+      "text": "How do I return my order?"
+    },
+    {
+      "id": "t1-en-008",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "greeting"
+      ],
+      "text": "Hello, I need help with my order"
+    },
+    {
+      "id": "t1-en-009",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "greeting"
+      ],
+      "text": "Hi there"
+    },
+    {
+      "id": "t1-en-010",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "claim"
+      ],
+      "text": "I want to file a claim for my damaged item"
+    },
+    {
+      "id": "t1-en-011",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "claim"
+      ],
+      "text": "My package arrived broken, what can I do?"
+    },
+    {
+      "id": "t1-en-012",
+      "tier": "TIER_1",
+      "language": "ENGLISH",
+      "tags": [
+        "refund"
+      ],
+      "text": "When will I get my refund?"
+    },
+    {
+      "id": "t1-ur-001",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "order-status"
+      ],
+      "text": "میرا آرڈر کہاں ہے؟"
+    },
+    {
+      "id": "t1-ur-002",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "order-status"
+      ],
+      "text": "میرا آرڈر ORD-10020 ٹریک کریں"
+    },
+    {
+      "id": "t1-ur-003",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "order-status"
+      ],
+      "text": "کیا میرا آرڈر بھیج دیا گیا ہے؟"
+    },
+    {
+      "id": "t1-ur-004",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "cancel"
+      ],
+      "text": "میں اپنا آرڈر ORD-10021 منسوخ کرنا چاہتا ہوں"
+    },
+    {
+      "id": "t1-ur-005",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "cancel"
+      ],
+      "text": "براہ کرم آرڈر ORD-10022 منسوخ کر دیں"
+    },
+    {
+      "id": "t1-ur-006",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "return"
+      ],
+      "text": "میں یہ جوتے واپس کرنا چاہتا ہوں، آرڈر ORD-10023"
+    },
+    {
+      "id": "t1-ur-007",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "return"
+      ],
+      "text": "میں اپنا آرڈر کیسے واپس کروں؟"
+    },
+    {
+      "id": "t1-ur-008",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "greeting"
+      ],
+      "text": "السلام علیکم، مجھے اپنے آرڈر میں مدد چاہیے"
+    },
+    {
+      "id": "t1-ur-009",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "greeting"
+      ],
+      "text": "آداب"
+    },
+    {
+      "id": "t1-ur-010",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "claim"
+      ],
+      "text": "میں اپنی ٹوٹی ہوئی چیز کا دعویٰ کرنا چاہتا ہوں"
+    },
+    {
+      "id": "t1-ur-011",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "claim"
+      ],
+      "text": "میرا پارسل ٹوٹا ہوا آیا ہے، میں کیا کروں؟"
+    },
+    {
+      "id": "t1-ur-012",
+      "tier": "TIER_1",
+      "language": "URDU",
+      "tags": [
+        "refund"
+      ],
+      "text": "مجھے میرا ریفنڈ کب ملے گا؟"
+    },
+    {
+      "id": "t1-ro-001",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Mera order kahan hai?"
+    },
+    {
+      "id": "t1-ro-002",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Mera order ORD-10030 track karo"
+    },
+    {
+      "id": "t1-ro-003",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Kya mera order bhej diya gaya hai?"
+    },
+    {
+      "id": "t1-ro-004",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "cancel"
+      ],
+      "text": "Main apna order ORD-10031 cancel karna chahta hun"
+    },
+    {
+      "id": "t1-ro-005",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "cancel"
+      ],
+      "text": "Order ORD-10032 cancel kar dein please"
+    },
+    {
+      "id": "t1-ro-006",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "return"
+      ],
+      "text": "Main ye shoes wapas karna chahta hun, order ORD-10033"
+    },
+    {
+      "id": "t1-ro-007",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "return"
+      ],
+      "text": "Main apna order kaise wapas karun?"
+    },
+    {
+      "id": "t1-ro-008",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "greeting"
+      ],
+      "text": "Assalam o alaikum, mujhe apne order mein madad chahiye"
+    },
+    {
+      "id": "t1-ro-009",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "greeting"
+      ],
+      "text": "Salam"
+    },
+    {
+      "id": "t1-ro-010",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "claim"
+      ],
+      "text": "Main apni tooti hui cheez ka claim karna chahta hun"
+    },
+    {
+      "id": "t1-ro-011",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "claim"
+      ],
+      "text": "Mera parcel toota hua aaya hai, main kya karun?"
+    },
+    {
+      "id": "t1-ro-012",
+      "tier": "TIER_1",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "refund"
+      ],
+      "text": "Mujhe mera refund kab milega?"
+    },
+    {
+      "id": "t1-co-001",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Mera order kahan hai? Order number ORD-10040 hai"
+    },
+    {
+      "id": "t1-co-002",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Please track my order, ORD-10041"
+    },
+    {
+      "id": "t1-co-003",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "order-status"
+      ],
+      "text": "Has my order shipped? Mujhe abhi tak nahi mila"
+    },
+    {
+      "id": "t1-co-004",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "cancel"
+      ],
+      "text": "I want to cancel my order, ORD-10042 cancel kar dein"
+    },
+    {
+      "id": "t1-co-005",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "cancel"
+      ],
+      "text": "Order ORD-10043 ko cancel karna hai"
+    },
+    {
+      "id": "t1-co-006",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "return"
+      ],
+      "text": "I want to return these shoes, order ORD-10044 hai"
+    },
+    {
+      "id": "t1-co-007",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "return"
+      ],
+      "text": "Return ka process kya hai?"
+    },
+    {
+      "id": "t1-co-008",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "greeting"
+      ],
+      "text": "Hello, mujhe apne order ke baare mein poochna hai"
+    },
+    {
+      "id": "t1-co-009",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "greeting"
+      ],
+      "text": "Hi, salam"
+    },
+    {
+      "id": "t1-co-010",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "claim"
+      ],
+      "text": "My item arrived damaged, claim karna hai"
+    },
+    {
+      "id": "t1-co-011",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "claim"
+      ],
+      "text": "Parcel toota hua aaya, what should I do?"
+    },
+    {
+      "id": "t1-co-012",
+      "tier": "TIER_1",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "refund"
+      ],
+      "text": "Refund kab tak aayega?"
+    },
+    {
+      "id": "t2-en-001",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "multi-order",
+        "cancel"
+      ],
+      "text": "Cancel ORD-10050 and ORD-10051, but keep ORD-10052 if it has already shipped"
+    },
+    {
+      "id": "t2-en-002",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "multi-order",
+        "return"
+      ],
+      "text": "I want to return the shoes from ORD-10053 and exchange the shirt from ORD-10054 for a larger size"
+    },
+    {
+      "id": "t2-en-003",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "dispute",
+        "conditional"
+      ],
+      "text": "My order ORD-10055 arrived with two items missing, and the third item is the wrong color. I need a partial refund for the missing ones and a replacement for the wrong one, but only if the replacement can arrive before Friday"
+    },
+    {
+      "id": "t2-en-004",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "multi-order",
+        "comparison"
+      ],
+      "text": "Compare the delivery dates for ORD-10056, ORD-10057 and ORD-10058 and tell me which one will arrive first"
+    },
+    {
+      "id": "t2-en-005",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "conditional",
+        "refund"
+      ],
+      "text": "If my refund for ORD-10059 has not been processed yet, cancel it and instead send me store credit, otherwise just tell me the status"
+    },
+    {
+      "id": "t2-en-006",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "dispute"
+      ],
+      "text": "I ordered three different phone cases in ORD-10060. The red one is fine, but the blue one has a cracked corner and the black one never arrived. What are my options?"
+    },
+    {
+      "id": "t2-en-007",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "multi-order",
+        "conditional"
+      ],
+      "text": "Transfer the shipping address change from ORD-10061 to ORD-10062 as well, unless ORD-10062 is already out for delivery"
+    },
+    {
+      "id": "t2-en-008",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "dispute"
+      ],
+      "text": "Why was I charged twice for ORD-10063? I see two deductions on my card and I only placed one order. I want one of them reversed but I am not sure which transaction is the duplicate"
+    },
+    {
+      "id": "t2-en-009",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "multi-order"
+      ],
+      "text": "Merge my two pending orders ORD-10064 and ORD-10065 into a single shipment if possible"
+    },
+    {
+      "id": "t2-en-010",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "dispute"
+      ],
+      "text": "The jacket in ORD-10066 does not match the size chart on your website. I measured it and it is 4 cm narrower than listed. I want to know whether this is a manufacturing defect or a listing error before I decide between a return and an exchange"
+    },
+    {
+      "id": "t2-en-011",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "conditional",
+        "return"
+      ],
+      "text": "Cancel the return I requested yesterday for ORD-10067 because the missing part arrived this morning, but keep the claim open for the scratched screen"
+    },
+    {
+      "id": "t2-en-012",
+      "tier": "TIER_2",
+      "language": "ENGLISH",
+      "tags": [
+        "multi-order",
+        "invoice"
+      ],
+      "text": "I need a formal invoice for ORD-10068, ORD-10069 and ORD-10070 combined for my company reimbursement, with the tax breakdown shown separately"
+    },
+    {
+      "id": "t2-ur-001",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "multi-order",
+        "cancel"
+      ],
+      "text": "ORD-10080 اور ORD-10081 منسوخ کر دیں، لیکن ORD-10082 رہنے دیں اگر وہ بھیج دیا گیا ہے"
+    },
+    {
+      "id": "t2-ur-002",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "multi-order",
+        "return"
+      ],
+      "text": "میں ORD-10083 سے جوتے واپس کرنا چاہتا ہوں اور ORD-10084 کی قمیض بڑے سائز میں تبدیل کرنا چاہتا ہوں"
+    },
+    {
+      "id": "t2-ur-003",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "dispute",
+        "conditional"
+      ],
+      "text": "میرا آرڈر ORD-10085 دو چیزیں غائب کے ساتھ آیا ہے، اور تیسری چیز غلط رنگ کی ہے۔ مجھے غائب چیزوں کا جزوی ریفنڈ اور غلط چیز کی تبدیلی چاہیے، لیکن صرف اس صورت میں جب تبدیلی جمعے سے پہلے آ سکے"
+    },
+    {
+      "id": "t2-ur-004",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "multi-order",
+        "comparison"
+      ],
+      "text": "ORD-10086، ORD-10087 اور ORD-10088 کی ڈیلیوری کی تاریخوں کا موازنہ کریں اور بتائیں کون سا پہلے آئے گا"
+    },
+    {
+      "id": "t2-ur-005",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "conditional",
+        "refund"
+      ],
+      "text": "اگر ORD-10089 کا ریفنڈ ابھی تک پروسیس نہیں ہوا تو اسے منسوخ کر کے مجھے اسٹور کریڈٹ دے دیں، ورنہ صرف اسٹیٹس بتا دیں"
+    },
+    {
+      "id": "t2-ur-006",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "dispute"
+      ],
+      "text": "میں نے ORD-10090 میں تین مختلف فون کور منگوائے تھے۔ لال والا ٹھیک ہے، لیکن نیلے کا کونا ٹوٹا ہے اور کالا کبھی آیا ہی نہیں۔ میرے پاس کیا آپشنز ہیں؟"
+    },
+    {
+      "id": "t2-ur-007",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "multi-order",
+        "conditional"
+      ],
+      "text": "ORD-10091 کی شپنگ ایڈریس کی تبدیلی ORD-10092 پر بھی لاگو کر دیں، جب تک ORD-10092 ڈیلیوری کے لیے نہ نکل چکا ہو"
+    },
+    {
+      "id": "t2-ur-008",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "dispute"
+      ],
+      "text": "مجھے ORD-10093 کے لیے دو بار چارج کیوں کیا گیا؟ میرے کارڈ پر دو کٹوتیاں نظر آ رہی ہیں جبکہ میں نے صرف ایک آرڈر کیا تھا۔ میں ایک کو واپس کروانا چاہتا ہوں"
+    },
+    {
+      "id": "t2-ur-009",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "multi-order"
+      ],
+      "text": "میرے دو زیر التواء آرڈرز ORD-10094 اور ORD-10095 کو اگر ممکن ہو تو ایک ہی شپمنٹ میں ضم کر دیں"
+    },
+    {
+      "id": "t2-ur-010",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "dispute"
+      ],
+      "text": "ORD-10096 کی جیکٹ آپ کی ویب سائٹ کے سائز چارٹ سے میل نہیں کھاتی۔ میں نے ناپا ہے اور یہ درج سے 4 سینٹی میٹر تنگ ہے۔ میں فیصلہ کرنے سے پہلے جاننا چاہتا ہوں کہ یہ مینوفیکچرنگ کی خرابی ہے یا لسٹنگ کی غلطی"
+    },
+    {
+      "id": "t2-ur-011",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "conditional",
+        "return"
+      ],
+      "text": "ORD-10097 کے لیے کل جو ریٹرن ریکوئسٹ کی تھی اسے منسوخ کر دیں کیونکہ گمشدہ پرزہ آج صبح آ گیا ہے، لیکن اسکریچ والی اسکرین کا دعویٰ کھلا رکھیں"
+    },
+    {
+      "id": "t2-ur-012",
+      "tier": "TIER_2",
+      "language": "URDU",
+      "tags": [
+        "multi-order",
+        "invoice"
+      ],
+      "text": "مجھے ORD-10098، ORD-10099 اور ORD-10100 کا مشترکہ رسمی انوائس چاہیے کمپنی ری ایمبرسمنٹ کے لیے، ٹیکس کی تفصیل الگ سے دکھائیں"
+    },
+    {
+      "id": "t2-ro-001",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "multi-order",
+        "cancel"
+      ],
+      "text": "ORD-10110 aur ORD-10111 cancel kar dein, lekin ORD-10112 rehne dein agar woh bhej diya gaya hai"
+    },
+    {
+      "id": "t2-ro-002",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "multi-order",
+        "return"
+      ],
+      "text": "Main ORD-10113 se shoes wapas karna chahta hun aur ORD-10114 ki shirt baray size mein exchange karna chahta hun"
+    },
+    {
+      "id": "t2-ro-003",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "dispute",
+        "conditional"
+      ],
+      "text": "Mera order ORD-10115 do cheezein missing ke saath aaya hai, aur teesri cheez ghalat color ki hai. Mujhe missing cheezon ka partial refund aur ghalat cheez ki replacement chahiye, lekin sirf agar replacement Friday se pehle aa sake"
+    },
+    {
+      "id": "t2-ro-004",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "multi-order",
+        "comparison"
+      ],
+      "text": "ORD-10116, ORD-10117 aur ORD-10118 ki delivery dates compare karo aur batao kaun sa pehle aayega"
+    },
+    {
+      "id": "t2-ro-005",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "conditional",
+        "refund"
+      ],
+      "text": "Agar ORD-10119 ka refund abhi tak process nahi hua to usay cancel kar ke mujhe store credit de dein, warna sirf status bata dein"
+    },
+    {
+      "id": "t2-ro-006",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "dispute"
+      ],
+      "text": "Maine ORD-10120 mein teen different phone covers mangwaye thay. Red wala theek hai, lekin blue ka corner toota hai aur black kabhi aaya hi nahi. Mere paas kya options hain?"
+    },
+    {
+      "id": "t2-ro-007",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "multi-order",
+        "conditional"
+      ],
+      "text": "ORD-10121 ki shipping address change ORD-10122 par bhi apply kar dein, jab tak ORD-10122 delivery ke liye na nikal chuka ho"
+    },
+    {
+      "id": "t2-ro-008",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "dispute"
+      ],
+      "text": "Mujhe ORD-10123 ke liye do baar charge kyun kiya gaya? Mere card par do deductions nazar aa rahi hain jabke maine sirf ek order kiya tha"
+    },
+    {
+      "id": "t2-ro-009",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "multi-order"
+      ],
+      "text": "Mere do pending orders ORD-10124 aur ORD-10125 ko agar possible ho to single shipment mein merge kar dein"
+    },
+    {
+      "id": "t2-ro-010",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "dispute"
+      ],
+      "text": "ORD-10126 ki jacket aap ki website ke size chart se match nahi karti. Maine naapa hai aur ye listed se 4 cm narrow hai. Main return aur exchange mein decide karne se pehle jaanna chahta hun ke ye manufacturing defect hai ya listing error"
+    },
+    {
+      "id": "t2-ro-011",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "conditional",
+        "return"
+      ],
+      "text": "ORD-10127 ke liye kal jo return request ki thi usay cancel kar dein kyunke missing part aaj subah aa gaya hai, lekin scratched screen ka claim open rakhein"
+    },
+    {
+      "id": "t2-ro-012",
+      "tier": "TIER_2",
+      "language": "ROMAN_URDU",
+      "tags": [
+        "multi-order",
+        "invoice"
+      ],
+      "text": "Mujhe ORD-10128, ORD-10129 aur ORD-10130 ka combined formal invoice chahiye company reimbursement ke liye, tax breakdown alag se show karein"
+    },
+    {
+      "id": "t2-co-001",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "multi-order",
+        "cancel"
+      ],
+      "text": "ORD-10140 aur ORD-10141 cancel kar dein, but keep ORD-10142 agar woh already ship ho gaya hai"
+    },
+    {
+      "id": "t2-co-002",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "multi-order",
+        "return"
+      ],
+      "text": "I want to return the shoes from ORD-10143 aur shirt ko ORD-10144 se large size mein exchange karna hai"
+    },
+    {
+      "id": "t2-co-003",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "dispute",
+        "conditional"
+      ],
+      "text": "Mera order ORD-10145 do items missing ke saath aaya, and the third one is wrong color. I need a partial refund for the missing ones, lekin replacement sirf tab chahiye agar Friday se pehle aa sake"
+    },
+    {
+      "id": "t2-co-004",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "multi-order",
+        "comparison"
+      ],
+      "text": "Compare the delivery dates for ORD-10146, ORD-10147 aur ORD-10148, tell me kaun sa pehle arrive hoga"
+    },
+    {
+      "id": "t2-co-005",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "conditional",
+        "refund"
+      ],
+      "text": "If mera refund for ORD-10149 abhi tak process nahi hua, cancel it and give me store credit instead, warna just status bata dein"
+    },
+    {
+      "id": "t2-co-006",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "dispute"
+      ],
+      "text": "I ordered teen different phone cases in ORD-10150. Red wala is fine, lekin blue one has a cracked corner aur black wala never arrived. What are my options?"
+    },
+    {
+      "id": "t2-co-007",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "multi-order",
+        "conditional"
+      ],
+      "text": "Shipping address change from ORD-10151 ko ORD-10152 par bhi apply kar dein, unless ORD-10152 is already out for delivery"
+    },
+    {
+      "id": "t2-co-008",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "dispute"
+      ],
+      "text": "Why was I charged do baar for ORD-10153? I see two deductions on my card aur maine sirf ek order place kiya tha"
+    },
+    {
+      "id": "t2-co-009",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "multi-order"
+      ],
+      "text": "Merge my two pending orders ORD-10154 aur ORD-10155 into a single shipment agar possible ho"
+    },
+    {
+      "id": "t2-co-010",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "dispute"
+      ],
+      "text": "The jacket in ORD-10156 does not match the size chart on your website. Maine measure kiya, it is 4 cm narrower than listed. I want to know ye manufacturing defect hai ya listing error, before I decide return vs exchange"
+    },
+    {
+      "id": "t2-co-011",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "conditional",
+        "return"
+      ],
+      "text": "Cancel the return I requested kal for ORD-10157 kyunke missing part aaj subah aa gaya, lekin keep the claim open for the scratched screen"
+    },
+    {
+      "id": "t2-co-012",
+      "tier": "TIER_2",
+      "language": "CODE_SWITCH",
+      "tags": [
+        "multi-order",
+        "invoice"
+      ],
+      "text": "I need a formal invoice for ORD-10158, ORD-10159 aur ORD-10160 combined, for company reimbursement, tax breakdown alag se"
+    }
+  ]
+}

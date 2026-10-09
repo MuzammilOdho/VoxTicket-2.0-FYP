@@ -1,0 +1,46 @@
+# Test profile only. Loaded from src/test/resources, which takes precedence over
+# the main classpath for tests. Dummy provider keys satisfy the
+# TierChatClientRegistry startup validation so @SpringBootTest contexts can
+# boot without real credentials. No test ever makes a live provider call.
+#
+# The Spring AI model auto-configuration disables are stated explicitly so the
+# test profile can never accidentally activate OpenAI speech/transcription/
+# image/moderation or the global chat client, even if the main config changes.
+spring:
+  ai:
+    model:
+      chat: none
+      embedding: ollama
+      audio:
+        speech: none
+        transcription: none
+      image: none
+      moderation: none
+    chat:
+      client:
+        enabled: false
+
+voxticket:
+  voice:
+    livekit:
+      url: ws://localhost:7880
+      api-key: test-key
+      api-secret: test-secret
+  ai:
+    providers:
+      google:
+        enabled: true
+        api-key: test-google-key
+      groq:
+        enabled: true
+        api-key: test-groq-key
+        base-url: https://api.groq.com/openai/v1
+      cerebras:
+        enabled: true
+        api-key: test-cerebras-key
+        base-url: https://api.cerebras.ai/v1
+    # Phase 2: tests run the deterministic rule-only router so no routing
+    # model artifacts are needed to boot the context. Focused routing tests
+    # construct the semantic components directly with stub embeddings.
+    selector:
+      strategy: RULE_ONLY

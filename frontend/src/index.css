@@ -1,0 +1,217 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   VoxTicket design system — "midnight precision instrument" (Linear).
+   Legacy token names are remapped onto the Linear palette so every
+   existing surface restyles without touching page logic.
+------------------------------------------------------------------- */
+
+@theme {
+  /* Legacy names → Linear palette */
+  --color-canvas: #08090a;      /* Void — page canvas */
+  --color-raised: #0f1011;      /* Carbon — card surfaces */
+  --color-raised-2: #161718;    /* Obsidian — elevated panels */
+  --color-line: #23252a;        /* Graphite — hairline borders */
+  --color-line-soft: #1c1e21;   /* softer hairline */
+  --color-ink: #ffffff;         /* Paper — primary type */
+  --color-ink-dim: #d0d6e0;    /* Mist — body type */
+  --color-ink-mute: #8a8f98;   /* Fog — tertiary type */
+  --color-signal: #e4f222;      /* Acid lime — the one chromatic action */
+  --color-signal-dim: #9aa815;  /* dimmed acid for text-on-dark accents */
+  --color-ok: #27a644;          /* Pulse green */
+  --color-warn: #ffb224;
+  --color-bad: #eb5757;         /* Coral red */
+  --color-info: #02b8cc;        /* Signal teal */
+
+  /* Explicit Linear tokens for new work */
+  --color-void: #08090a;
+  --color-carbon: #0f1011;
+  --color-obsidian: #161718;
+  --color-graphite: #23252a;
+  --color-smoke: #383b3f;
+  --color-ash: #62666d;
+  --color-fog: #8a8f98;
+  --color-mist: #d0d6e0;
+  --color-bone: #e5e5e6;
+  --color-paper: #ffffff;
+  --color-acid-lime: #e4f222;
+  --color-pulse-green: #27a644;
+  --color-coral-red: #eb5757;
+  --color-signal-teal: #02b8cc;
+  --color-iris-violet: #6366f1;
+  --color-lavender: #8b5cf6;
+
+  /* Typography — Inter Variable primary, mono for code-adjacent text */
+  --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Berkeley Mono", ui-monospace, SFMono-Regular,
+    Menlo, Monaco, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-paper);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv01" on, "ss03" on, "zero" on;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tight tracking for display type — non-negotiable at 48px+. */
+.display-tight { letter-spacing: -0.022em; }
+.heading-tight { letter-spacing: -0.012em; }
+.body-tight { letter-spacing: -0.011em; }
+
+::selection {
+  background: var(--color-acid-lime);
+  color: #08090a;
+}
+
+/* Subtle scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-graphite) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--color-graphite); border-radius: 9999px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ------------------------------------------------------------------
+   Glassy gradient borders — modern SaaS surface treatment.
+   .g-border: hairline gradient border (light from top-left, acid kiss
+   at the far edge). .glass: translucent blurred surface.
+------------------------------------------------------------------- */
+.g-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-carbon), var(--color-carbon)) padding-box,
+    linear-gradient(140deg,
+      rgba(255, 255, 255, 0.16),
+      rgba(255, 255, 255, 0.05) 32%,
+      rgba(228, 242, 34, 0.10) 78%,
+      rgba(255, 255, 255, 0.08)
+    ) border-box;
+}
+.g-border-soft {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-carbon), var(--color-carbon)) padding-box,
+    linear-gradient(140deg,
+      rgba(255, 255, 255, 0.10),
+      rgba(255, 255, 255, 0.03) 45%,
+      rgba(255, 255, 255, 0.07)
+    ) border-box;
+}
+.glass {
+  background: rgba(15, 16, 17, 0.62);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Card hover lift — geometry does the work shadows usually would. */
+.lift {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 240ms ease, border-color 240ms ease;
+}
+.lift:hover { transform: translateY(-2px); }
+
+/* ------------------------------------------------------------------
+   Scroll reveals — driven by <Reveal/> (IntersectionObserver).
+   Minimal: 16px rise, 560ms ease-out, staggered via --reveal-delay.
+------------------------------------------------------------------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 560ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Gradient floor under the hero product card — atmospheric only. */
+.hero-floor {
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 9, 10, 0) 0%,
+    rgba(8, 9, 10, 0.55) 42%,
+    rgba(208, 214, 224, 0.10) 100%
+  );
+  pointer-events: none;
+}
+
+/* Faint grid texture for hero backdrop. */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
+}
+
+/* Acid glow — primary CTA aura only, used sparingly. */
+.acid-glow {
+  box-shadow:
+    0 0 0 1px rgba(228, 242, 34, 0.28),
+    0 8px 32px -8px rgba(228, 242, 34, 0.35);
+}
+
+/* Restrained motion for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal { opacity: 1; transform: none; }
+}
+
+/* Voice waveform bars. */
+@keyframes vq-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.vq-bar {
+  transform-origin: center;
+  animation: vq-bar 0.9s ease-in-out infinite;
+}
+
+/* Live pulse dot. */
+@keyframes vq-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.vq-pulse {
+  animation: vq-pulse 1.6s ease-in-out infinite;
+}
+
+/* Typing indicator. */
+@keyframes vq-blink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+.vq-typing span {
+  animation: vq-blink 1.2s infinite;
+}
+.vq-typing span:nth-child(2) { animation-delay: 0.15s; }
+.vq-typing span:nth-child(3) { animation-delay: 0.3s; }
+
+/* Voice call orb — expanding rings while the agent speaks. */
+@keyframes vq-ring {
+  0% { transform: scale(1); opacity: 0.45; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.vq-ring {
+  animation: vq-ring 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.vq-ring-delay { animation-delay: 0.9s; }
