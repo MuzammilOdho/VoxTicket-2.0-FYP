@@ -517,6 +517,11 @@ function VoiceCallView({ voice, customer, onCollapse }: {
           <Badge tone={agentPresent ? 'signal' : 'mute'} pulse={agentPresent}>
             {agentPresent ? 'Connected' : state === 'live' ? 'Waiting for agent' : 'Connecting'}
           </Badge>
+          {state === 'live' && (
+            <Badge tone={voice.networkBadge.tone} title={voice.networkBadge.hint}>
+              {voice.networkBadge.label}
+            </Badge>
+          )}
           <span className="font-mono text-[12px] text-ash">{formatElapsed(elapsedSec)}</span>
           <button
             onClick={onCollapse}
