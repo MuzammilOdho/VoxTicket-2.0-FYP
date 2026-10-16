@@ -1,5 +1,6 @@
 package com.voxticket.observability;
 
+import com.voxticket.agent.ToolSideEffect;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,7 +31,7 @@ public final class TurnTrace {
     public record RagDoc(String docId, String category, double similarity) {}
 
     /** One tool invocation observed during the turn. */
-    public record ToolCall(String name, String result, double durationMs) {}
+    public record ToolCall(String name, String result, double durationMs, ToolSideEffect sideEffect) {}
 
     private final String sessionId;
     private final int turnNumber;
@@ -41,6 +42,12 @@ public final class TurnTrace {
     private final Instant endedAt;
     private final String outcome;
     private final boolean aborted;
+    /**
+     * P0.5: why the turn aborted - {@code "superseded"} (a newer voice
+     * generation barged in) or {@code "client_disconnect"} (hang-up /
+     * network drop). Null when the turn was not aborted.
+     */
+    private final String abortReason;
 
     private final Double normalizeMs;
     private final Double guardMs;
@@ -68,9 +75,23 @@ public final class TurnTrace {
     private final String model;
     private final Integer promptTokens;
     private final Integer completionTokens;
+    /**
+     * P3.1: the system-prompt template identity this turn ran with - the
+     * version selected by {@code voxticket.prompt.version} and the SHA-256
+     * of the loaded template bytes, so the trace pins the prompt
+     * byte-for-byte.
+     */
+    private final String promptVersion;
+    private final String promptContentHash;
 
     private final Boolean ragCacheHit;
     private final List<RagDoc> ragDocs;
+    /**
+     * P0.1: true when the RAG round-trip exceeded its time budget and the
+     * turn continued without policy context. Null/False = searched normally
+     * (or RAG was never invoked this turn).
+     */
+    private final Boolean ragSkipped;
 
     private final List<ToolCall> tools;
 
@@ -92,6 +113,7 @@ public final class TurnTrace {
         this.endedAt = b.endedAt;
         this.outcome = b.outcome;
         this.aborted = b.aborted;
+        this.abortReason = b.abortReason;
         this.normalizeMs = b.normalizeMs;
         this.guardMs = b.guardMs;
         this.routingMs = b.routingMs;
@@ -113,8 +135,11 @@ public final class TurnTrace {
         this.provider = b.provider;
         this.model = b.model;
         this.promptTokens = b.promptTokens;
+        this.promptVersion = b.promptVersion;
+        this.promptContentHash = b.promptContentHash;
         this.completionTokens = b.completionTokens;
         this.ragCacheHit = b.ragCacheHit;
+        this.ragSkipped = b.ragSkipped;
         this.ragDocs = List.copyOf(b.ragDocs);
         this.tools = List.copyOf(b.tools);
         this.procedureType = b.procedureType;
@@ -137,6 +162,7 @@ public final class TurnTrace {
     public Instant endedAt() { return endedAt; }
     public String outcome() { return outcome; }
     public boolean aborted() { return aborted; }
+    public String abortReason() { return abortReason; }
     public Double normalizeMs() { return normalizeMs; }
     public Double guardMs() { return guardMs; }
     public Double routingMs() { return routingMs; }
@@ -159,7 +185,10 @@ public final class TurnTrace {
     public String model() { return model; }
     public Integer promptTokens() { return promptTokens; }
     public Integer completionTokens() { return completionTokens; }
+    public String promptVersion() { return promptVersion; }
+    public String promptContentHash() { return promptContentHash; }
     public Boolean ragCacheHit() { return ragCacheHit; }
+    public Boolean ragSkipped() { return ragSkipped; }
     public List<RagDoc> ragDocs() { return ragDocs; }
     public List<ToolCall> tools() { return tools; }
     public String procedureType() { return procedureType; }
@@ -180,6 +209,7 @@ public final class TurnTrace {
         private Instant endedAt;
         private String outcome;
         private boolean aborted;
+        private String abortReason;
 
         private Double normalizeMs;
         private Double guardMs;
@@ -207,8 +237,11 @@ public final class TurnTrace {
         private String model;
         private Integer promptTokens;
         private Integer completionTokens;
+        private String promptVersion;
+        private String promptContentHash;
 
         private Boolean ragCacheHit;
+        private Boolean ragSkipped;
         private final List<RagDoc> ragDocs = new ArrayList<>();
 
         private final List<ToolCall> tools = new ArrayList<>();
@@ -233,6 +266,7 @@ public final class TurnTrace {
         public Builder endedAt(Instant v) { this.endedAt = v; return this; }
         public Builder outcome(String v) { this.outcome = v; return this; }
         public Builder aborted(boolean v) { this.aborted = v; return this; }
+        public Builder abortReason(String v) { this.abortReason = v; return this; }
 
         public Builder normalizeMs(Double v) { this.normalizeMs = v; return this; }
         public Builder guardMs(Double v) { this.guardMs = v; return this; }
@@ -258,17 +292,22 @@ public final class TurnTrace {
 
         public Builder provider(String v) { this.provider = v; return this; }
         public Builder model(String v) { this.model = v; return this; }
+        /** P3.1: the prompt-template version this turn ran with. */
+        public Builder promptVersion(String v) { this.promptVersion = v; return this; }
+        /** P3.1: SHA-256 of the loaded template bytes. */
+        public Builder promptContentHash(String v) { this.promptContentHash = v; return this; }
         public Builder promptTokens(Integer v) { this.promptTokens = v; return this; }
         public Builder completionTokens(Integer v) { this.completionTokens = v; return this; }
 
         public Builder ragCacheHit(Boolean v) { this.ragCacheHit = v; return this; }
+        public Builder ragSkipped(Boolean v) { this.ragSkipped = v; return this; }
         public Builder addRagDoc(String docId, String category, double similarity) {
             this.ragDocs.add(new RagDoc(docId, category, similarity));
             return this;
         }
 
-        public Builder addToolCall(String name, String result, double durationMs) {
-            this.tools.add(new ToolCall(name, result, durationMs));
+        public Builder addToolCall(String name, String result, double durationMs, ToolSideEffect sideEffect) {
+            this.tools.add(new ToolCall(name, result, durationMs, sideEffect));
             return this;
         }
 
@@ -285,7 +324,11 @@ public final class TurnTrace {
 
         /** Overflow detail. Callers must not put OTP/secrets/prompts/reasoning here. */
         public Builder detail(String key, Object value) {
-            this.decision.put(key, value);
+            // P3.2: the decision map is redacted overflow detail - mask any
+            // OTP-like digit spans before they enter the trace, following the
+            // existing redact-before-set pattern.
+            Object safeValue = value instanceof String s ? OtpRedactor.mask(s) : value;
+            this.decision.put(key, safeValue);
             return this;
         }
 

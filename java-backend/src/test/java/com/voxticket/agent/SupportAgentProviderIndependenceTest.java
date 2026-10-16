@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.PromptProperties;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
@@ -41,7 +43,7 @@ class SupportAgentProviderIndependenceTest {
                 registry, mock(ContextBuilder.class), mock(ModelSelector.class),
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
                 mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class),
-                new ConversationLanguageResolver());
+                new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
 
         // Provider-agnostic behavior works with the real registry behind it.
         String prompt = agent.buildSystemPrompt(ConversationSession.newSession("s1", Channel.CHAT));

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import java.util.Map;
@@ -37,7 +38,8 @@ class ProcedureToolResultContractTest {
     @BeforeEach
     void setUp() {
         coordinator = mock(ProcedureCoordinator.class);
-        tools = new ProcedureRequestTools(coordinator, ConversationSession.newSession("s-" + UUID.randomUUID(), Channel.CHAT));
+        tools = new ProcedureRequestTools(coordinator, ConversationSession.newSession("s-" + UUID.randomUUID(), Channel.CHAT),
+                new TimeoutProperties(10, 8, 10));
     }
 
     private ProcedureOutcome outcome(boolean success, String code, String message, Map<String, String> metadata) {

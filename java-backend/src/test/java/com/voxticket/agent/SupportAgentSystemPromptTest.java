@@ -4,11 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.PromptProperties;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.ObligationType;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
+import com.voxticket.conversation.Slot;
+import com.voxticket.conversation.SlotProvenance;
 import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
@@ -33,7 +38,7 @@ class SupportAgentSystemPromptTest {
                 mock(TierChatClientRegistry.class), mock(ContextBuilder.class), mock(ModelSelector.class),
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
                 mock(ProcedureCoordinator.class), mock(TurnMetrics.class), mock(ConversationAuditService.class),
-                new ConversationLanguageResolver());
+                new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
     }
 
     private VerifiedOrderRef dummyRef(String orderNumber) {
@@ -162,6 +167,33 @@ class SupportAgentSystemPromptTest {
         // model sees the display name, never the SKU.
         assertThat(prompt).doesNotContain("SKU-RS-9");
         assertThat(prompt).doesNotContain("pausedProcedure:");
+    }
+
+    @Test
+    void dialogueStateRendersStackSlotsAndObligations() {
+        ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
+        session.setDeferredIntent(new com.voxticket.procedure.DeferredProcedureIntent(
+                ProcedureType.CLAIM, "ORD-10001", UUID.randomUUID(), "Running Shoes", "SKU-RS-9", "DAMAGED", "1", null, Instant.now()));
+        session.setDeferredIntent(new com.voxticket.procedure.DeferredProcedureIntent(
+                ProcedureType.RETURN, "ORD-10002", UUID.randomUUID(), null, null, null, "1", null, Instant.now()));
+        session.getDialogueState().setSlot(
+                new Slot("order_reference", "ORD-10001", 0.6, SlotProvenance.USER_SAID, 1));
+        session.getDialogueState().addObligation(ObligationType.RESUME_DEFERRED, "claim on order ORD-10001", 1);
+
+        String prompt = agent.buildSystemPrompt(session);
+
+        // The top of the stack keeps the established line names.
+        assertThat(prompt).contains("deferredProcedure: RETURN");
+        assertThat(prompt).contains("deferredTarget: ORD-10002");
+        // Deeper entries render too.
+        assertThat(prompt).contains("queuedRequest2Procedure: CLAIM");
+        assertThat(prompt).contains("queuedRequest2Target: ORD-10001");
+        assertThat(prompt).contains("queuedRequest2Item: Running Shoes");
+        // Slots render with confidence and provenance; obligations render.
+        assertThat(prompt).contains("slot order_reference=ORD-10001 (confidence 0.60, user_said)");
+        assertThat(prompt).contains("obligation RESUME_DEFERRED: claim on order ORD-10001");
+        // Internal identity stays out of the prompt.
+        assertThat(prompt).doesNotContain("SKU-RS-9");
     }
 
     @Test

@@ -54,6 +54,11 @@ public class AdminSecurityConfig {
                                 "/api/v1/voice/turn",
                                 "/api/v1/voice/turn/stream",
                                 "/api/v1/voice/token",
+                                // P4.1: outbound trigger API - same public
+                                // posture as the other voice endpoints
+                                // (validation + consent are the guards here).
+                                "/api/v1/voice/outbound",
+                                "/api/v1/voice/outbound/**",
                                 // Public demo support (dev/test profile only): serves a
                                 // seeded customer + orders to the demo page.
                                 "/api/v1/demo/**",

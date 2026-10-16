@@ -22,6 +22,7 @@ public record TurnTraceDto(
         Instant endedAt,
         String outcome,
         boolean aborted,
+        String abortReason,
         Double normalizeMs,
         Double guardMs,
         Double routingMs,
@@ -44,7 +45,9 @@ public record TurnTraceDto(
         String model,
         Integer promptTokens,
         Integer completionTokens,
+        String promptVersion,
         Boolean ragCacheHit,
+        Boolean ragSkipped,
         List<RagDoc> ragDocs,
         List<ToolCall> tools,
         String procedureType,
@@ -56,6 +59,6 @@ public record TurnTraceDto(
     public record RagDoc(String docId, String category, double similarity) {
     }
 
-    public record ToolCall(String name, String result, double durationMs) {
+    public record ToolCall(String name, String result, double durationMs, String sideEffect) {
     }
 }

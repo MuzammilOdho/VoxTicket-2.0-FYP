@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  * responsibility later.
  */
 @Service
-@Transactional
+@Transactional(timeout = 10)
 public class CancellationService {
 
     private final OrderRepository orderRepository;

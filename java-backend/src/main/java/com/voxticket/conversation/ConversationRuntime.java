@@ -1,6 +1,7 @@
 package com.voxticket.conversation;
 
 import com.voxticket.agent.AgentResponse;
+import com.voxticket.agent.PromptVersion;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.agent.ToolAccessMode;
 import com.voxticket.audit.ConversationAuditService;
@@ -26,6 +27,7 @@ import com.voxticket.verification.SensitiveTurn;
 import com.voxticket.verification.SensitiveTurnParser;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -33,6 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -50,6 +53,15 @@ public class ConversationRuntime {
     private static final String REDACTED_FLAGGED_PLACEHOLDER = "[message withheld - flagged by security filter]";
     private static final String PROCEDURE_FAILURE_MESSAGE = "Something went wrong while processing that - please try again, or ask for a human agent.";
 
+    /**
+     * P3.2: recording disclosure. The first turn of a PHONE-channel session
+     * gets this deterministic line prepended to the assistant's greeting.
+     * It is prepended identically to the spoken stream (first emitted
+     * delta), the recorded history, and the audit transcript, so all three
+     * agree on what the caller heard.
+     */
+    private static final String RECORDING_DISCLOSURE = "This call may be recorded for quality and training. ";
+
     /** Phase 10 gap-fix (proposal #3): a small, evidence-grounded set of phrases observed fabricating a failure with no tool ever attempted. Diagnostic only - never changes behavior. */
     private static final List<String> FABRICATION_SIGNAL_PHRASES = List.of(
             "having trouble", "technical issue", "technical problem", "system issue", "system problem", "couldn't start", "couldn't process");
@@ -61,6 +73,16 @@ public class ConversationRuntime {
      * turn behaves exactly as before - chat turns are unaffected.
      */
     public static final String METADATA_VOICE_GENERATION = "voiceGeneration";
+
+    /**
+     * P0.6: provider-metadata key carrying the worker-minted idempotency key
+     * for this turn (from the {@code Idempotency-Key} request header).
+     * Present only when the caller sent one; absent/blank means "no
+     * idempotency" and the turn behaves exactly as before. The key is opaque
+     * (a UUID minted per logical turn by the caller) - never derived from
+     * caller input and never logged.
+     */
+    public static final String METADATA_IDEMPOTENCY_KEY = "idempotencyKey";
 
     private final SessionStore sessionStore;
     private final IdentityService identityService;
@@ -112,8 +134,9 @@ public class ConversationRuntime {
      * as they generate, and deterministic branches emit their full text as
      * one delta. {@code deltaSink} must throw
      * {@link TurnAbortedException} (unchecked) when
-     * the client disconnected; it unwinds through the per-session lock,
-     * skipping assistant-message recording for the aborted turn.
+     * the client disconnected; it unwinds through the session-ownership
+     * release, and the aborted turn records only what was actually emitted
+     * (P1.3 history repair).
      */
     public AssistantTurn processTurnStream(UserTurn turn, Consumer<String> deltaSink) {
         if (deltaSink == null) {
@@ -129,9 +152,25 @@ public class ConversationRuntime {
         }
     }
 
+    /**
+     * P3.2: prepends the recording disclosure to the assistant's text on the
+     * first turn of a phone call. The spoken stream gets the same prefix via
+     * the wrapped sink, so stream, history, and audit transcript agree.
+     */
+    private static String disclosed(String text, boolean discloseRecording) {
+        return discloseRecording ? RECORDING_DISCLOSURE + text : text;
+    }
+
     private AssistantTurn processTurnInternal(UserTurn turn, Consumer<String> deltaSink) {
         long startNanos = System.nanoTime();
-        return sessionStore.withSession(turn.sessionId(), turn.channel(), session -> {
+        // P1.1: the voice generation is resolved before ownership acquisition
+        // so the session store can apply preemptive ownership semantics.
+        long voiceGeneration = resolveVoiceGeneration(turn);
+        return sessionStore.withSession(turn.sessionId(), turn.channel(), voiceGeneration, (session, handle) -> {
+            // P1.1: the turn's ownership handle travels on the thread for
+            // phase gates and tool wrappers; cleared in the finally so it
+            // cannot leak across turns on pooled threads.
+            TurnContext.setCurrent(handle);
             // P0 (correlation): the trace ID arrives via UserTurn provider
             // metadata (populated by the controllers from the traceparent
             // header). A missing/blank value degrades to a fresh ID and never
@@ -141,8 +180,9 @@ public class ConversationRuntime {
             MDC.put(TraceIds.MDC_TRACE_ID, traceId);
             MDC.put(TraceIds.MDC_SESSION_ID, session.getSessionId());
             try {
-                return processTurnForSession(turn, deltaSink, session, startNanos, traceId);
+                return processTurnForSession(turn, deltaSink, session, handle, voiceGeneration, startNanos, traceId);
             } finally {
+                TurnContext.clear();
                 MDC.clear();
             }
         });
@@ -154,24 +194,42 @@ public class ConversationRuntime {
      *
      * <p>Catches {@link TurnAbortedException} to classify the turn explicitly
      * (turn-completion audit marker with outcome {@code "aborted"} plus the
-     * {@code voxticket.turn.aborted} metric) before rethrowing - the partial
-     * reply is still dropped and the per-session lock still releases via the
-     * session store's finally.
+     * {@code voxticket.turn.aborted} metric) and to repair history (P1.3:
+     * the exact emitted deltas are recorded as a partial assistant message)
+     * before rethrowing - nothing is committed or spoken, and the session
+     * ownership still releases via the session store's finally.
      */
     private AssistantTurn processTurnForSession(UserTurn turn, Consumer<String> deltaSink,
-            ConversationSession session, long startNanos, String traceId) {
+            ConversationSession session, TurnHandle handle, long voiceGeneration, long startNanos, String traceId) {
         // Latest turn number, for abort classification: set right after every
         // session.recordUserMessage(...) below.
         int[] currentTurn = new int[]{-1};
-        // Voice barge-in generation: 0 means "no tracking" (chat turns and
-        // old voice callers). A newer generation arriving mid-turn means the
-        // caller barged in; this turn aborts cooperatively at the next check
-        // point instead of running to completion behind the new turn.
-        long voiceGeneration = resolveVoiceGeneration(turn);
+        // P1.3 (history repair): every delta that passes the
+        // generation-checked sink is recorded here, so an aborted turn can
+        // write back exactly what the caller heard (not what was generated).
+        List<String> emittedDeltas = new ArrayList<>();
         // The delta sink is the highest-frequency check point (every LLM
-        // token): a superseded turn aborts within one token, releasing the
-        // session lock for the barge-in turn.
-        Consumer<String> checkedSink = generationCheckedSink(session.getSessionId(), voiceGeneration, deltaSink);
+        // token): a superseded turn aborts within one token instead of
+        // streaming an obsolete reply. (Ownership already transferred to the
+        // barge-in turn at preemption; this just stops the old holder fast.)
+        Consumer<String> checkedSink = generationCheckedSink(session.getSessionId(), voiceGeneration, deltaSink, emittedDeltas);
+        // P3.2: on the first turn of a phone call the disclosure is prepended
+        // to the first emitted delta, so the spoken greeting carries it. The
+        // recorded history and audit transcript get the same prefix below.
+        // getTurnCount() is 0 exactly when this turn will be recorded as
+        // turn 1 (recordUserMessage assigns getTurnCount()+1).
+        boolean discloseRecording = session.getChannel() == Channel.PHONE && session.getTurnCount() == 0;
+        if (discloseRecording && checkedSink != null) {
+            Consumer<String> rawSink = checkedSink;
+            AtomicBoolean disclosed = new AtomicBoolean(false);
+            checkedSink = delta -> {
+                if (disclosed.compareAndSet(false, true)) {
+                    rawSink.accept(RECORDING_DISCLOSURE + delta);
+                } else {
+                    rawSink.accept(delta);
+                }
+            };
+        }
         // P2 (turn decision trace): one builder per turn, installed on the
         // session so stage components (agent, RAG, tools, coordinator) can
         // record their observations. recordUserMessage is called exactly once
@@ -181,6 +239,13 @@ public class ConversationRuntime {
         // builder never leaks across turns.
         TurnTrace.Builder traceBuilder = TurnTrace.builder(
                 session.getSessionId(), session.getTurnCount() + 1, session.getChannel().name(), traceId, Instant.now());
+        // P3.1: pin the prompt-template identity on the trace - the version
+        // selected by voxticket.prompt.version and the SHA-256 of the loaded
+        // template bytes, so the trace identifies the prompt byte-for-byte.
+        PromptVersion promptVersion = supportAgent.currentPromptVersion();
+        if (promptVersion != null) {
+            traceBuilder.promptVersion(promptVersion.version()).promptContentHash(promptVersion.contentHash());
+        }
         session.setActiveTraceBuilder(traceBuilder);
         try {
             // A newer voice turn may have started while this one waited for
@@ -204,14 +269,21 @@ public class ConversationRuntime {
                 int turnNumber = session.recordUserMessage("[message rejected - too long: " + normalization.rejectedLength() + " characters]");
                 markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, "[message rejected - too long: " + normalization.rejectedLength() + " characters]");
-                session.recordAssistantMessage(TOO_LONG_MESSAGE);
-                auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, TOO_LONG_MESSAGE);
+                session.recordAssistantMessage(disclosed(TOO_LONG_MESSAGE, discloseRecording));
+                auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, disclosed(TOO_LONG_MESSAGE, discloseRecording));
                 completeTurn(session, turnNumber, startNanos, "input_too_long");
-                emit(checkedSink, TOO_LONG_MESSAGE);
-                return new AssistantTurn(TOO_LONG_MESSAGE, false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
+                emit(checkedSink, disclosed(TOO_LONG_MESSAGE, discloseRecording));
+                return new AssistantTurn(disclosed(TOO_LONG_MESSAGE, discloseRecording), false, false, stateView(session, turnNumber), Map.of("rejectionReason", "INPUT_TOO_LONG"));
             }
 
             String normalizedText = normalization.text();
+
+            // P2.3: when the previous turn aborted (P1.3 left a partial
+            // assistant message), classify this utterance against what was
+            // heard using deterministic markers. The signal is a hint for
+            // the model - it still proposes via updateDialogueState and
+            // Java validates.
+            recordInterruptionSignal(session, normalizedText);
 
             String responseText;
             int turnNumber;
@@ -243,11 +315,11 @@ public class ConversationRuntime {
                 markTurn(currentTurn, turnNumber);
                 auditService.recordMessage(session, turnNumber, MessageRole.USER, REDACTED_FLAGGED_PLACEHOLDER);
                 auditService.recordEvent(session, turnNumber, ConversationEventType.SAFETY_BLOCKED, "category=" + verdict.category());
-                session.recordAssistantMessage(SAFE_DEFLECTION_MESSAGE);
-                auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, SAFE_DEFLECTION_MESSAGE);
+                session.recordAssistantMessage(disclosed(SAFE_DEFLECTION_MESSAGE, discloseRecording));
+                auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, disclosed(SAFE_DEFLECTION_MESSAGE, discloseRecording));
                 completeTurn(session, turnNumber, startNanos, "blocked");
-                emit(checkedSink, SAFE_DEFLECTION_MESSAGE);
-                return new AssistantTurn(SAFE_DEFLECTION_MESSAGE, false, false, stateView(session, turnNumber), Map.of());
+                emit(checkedSink, disclosed(SAFE_DEFLECTION_MESSAGE, discloseRecording));
+                return new AssistantTurn(disclosed(SAFE_DEFLECTION_MESSAGE, discloseRecording), false, false, stateView(session, turnNumber), Map.of());
             }
 
             if (active.isPresent() && active.get().getStatus() == ProcedureStatus.AWAITING_VERIFICATION) {
@@ -276,7 +348,8 @@ public class ConversationRuntime {
                     // Pass 2C: the direct path never reaches the LLM. Presentation is
                     // rendered deterministically from the stable outcome code and
                     // safe metadata in the customer's language.
-                    ProcedureOutcome outcome = submitVerificationWithSafeFallback(session, sensitive.otpCandidate(), voiceGeneration);
+                    ProcedureOutcome outcome = submitVerificationWithSafeFallback(session, sensitive.otpCandidate(), voiceGeneration,
+                            idempotencyKey(turn));
                     responseText = renderDirect(session, outcome);
                     // Pass 2C security cleanup: internal DEV metadata (devOtp,
                     // hashes, salts, internal IDs) stays inside the
@@ -301,7 +374,7 @@ public class ConversationRuntime {
                     }
                 } else if (sensitive.resendRequested()) {
                     checkNotSuperseded(session.getSessionId(), voiceGeneration);
-                    ProcedureOutcome outcome = procedureCoordinator.resendVerificationCode(session);
+                    ProcedureOutcome outcome = procedureCoordinator.resendVerificationCode(session, idempotencyKey(turn));
                     responseText = renderDirect(session, outcome);
                     turnMetadata = safeDirectTurnMetadata(outcome);
                     outcomeLabel = "verification";
@@ -333,7 +406,7 @@ public class ConversationRuntime {
                     // Pass 2D-B: a terminal outcome may promote the deferred intent;
                     // both pieces are communicated deterministically in one turn.
                     case YES -> {
-                        ProcedureOutcome confirmed = confirmWithSafeFallback(session, voiceGeneration);
+                        ProcedureOutcome confirmed = confirmWithSafeFallback(session, voiceGeneration, idempotencyKey(turn));
                         yield appendPromotion(session, renderDirect(session, confirmed), confirmed);
                     }
                     case NO -> {
@@ -370,22 +443,47 @@ public class ConversationRuntime {
                 responseText = agentResponse.text();
                 outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
             }
-            session.recordAssistantMessage(responseText);
-            auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, responseText);
+            // P3.2: the recorded reply carries the recording disclosure on
+            // the first phone turn, exactly as it was spoken.
+            String recordedText = disclosed(responseText, discloseRecording);
+            session.recordAssistantMessage(recordedText);
+            auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, recordedText);
+            // P2.1: the reply is the answer the ANSWER_QUESTION obligation
+            // was owed for - discharge it now that the turn produced it.
+            session.getDialogueState().dischargeObligation(ObligationType.ANSWER_QUESTION);
 
             ProcedureStatus activeStatus = session.getActiveProcedure().map(ProcedureState::getStatus).orElse(null);
             boolean requiresVerification = activeStatus == ProcedureStatus.AWAITING_VERIFICATION;
             boolean requiresConfirmation = activeStatus == ProcedureStatus.AWAITING_CONFIRMATION;
             completeTurn(session, turnNumber, startNanos, outcomeLabel);
-            return new AssistantTurn(responseText, requiresVerification, requiresConfirmation, stateView(session, turnNumber), turnMetadata);
+            return new AssistantTurn(recordedText, requiresVerification, requiresConfirmation, stateView(session, turnNumber), turnMetadata);
         } catch (TurnAbortedException aborted) {
             // P0 (abort classification): the voice client disconnected
             // mid-turn (barge-in / hang-up). Previously the abort was only
             // inferable from a missing assistant message; now it is recorded
-            // explicitly. The partial reply stays dropped (never recorded)
-            // and the exception keeps propagating so the SSE controller can
-            // complete the emitter quietly.
+            // explicitly.
             int abortedTurn = currentTurn[0];
+            // P1.3 (history repair): write back exactly what the caller
+            // heard - the concatenated emitted deltas, flagged partial - so
+            // the next turn's correction has a faithful record. With zero
+            // emitted deltas the user message stands alone, as before.
+            if (!emittedDeltas.isEmpty() && abortedTurn >= 0) {
+                String partialText = String.join("", emittedDeltas);
+                // P3.2: the caller heard the disclosure first (it was
+                // prepended to the first emitted delta), so the repaired
+                // partial carries it too.
+                String recordedPartial = disclosed(partialText, discloseRecording);
+                session.recordPartialAssistantMessage(recordedPartial);
+                auditService.recordMessage(session, abortedTurn, MessageRole.ASSISTANT, recordedPartial);
+                log.info("event=turn_history_repaired sessionId={} turnNumber={} emittedChars={}",
+                        session.getSessionId(), abortedTurn, recordedPartial.length());
+            }
+            // P0.5: record WHY the turn aborted. A newer voice generation for
+            // this session means the caller barged in and this turn was
+            // superseded; otherwise the client went away on its own
+            // (hang-up / network drop). Chat turns (generation 0) always take
+            // the disconnect branch.
+            traceBuilder.abortReason(resolveAbortReason(session.getSessionId(), voiceGeneration));
             // P2: the aborted turn still gets its decision trace, marked
             // aborted - whatever stages ran before the disconnect are kept.
             finishTrace(session, traceBuilder, "aborted", true);
@@ -408,7 +506,11 @@ public class ConversationRuntime {
                     unexpected.getClass().getSimpleName());
             throw unexpected;
         } finally {
-            session.setActiveTraceBuilder(null);
+            // P1.1: identity-checked clear - a preempted holder's cleanup
+            // must never clear the new owner's trace builder.
+            if (session.getActiveTraceBuilder() == traceBuilder) {
+                session.setActiveTraceBuilder(null);
+            }
         }
     }
 
@@ -563,6 +665,12 @@ public class ConversationRuntime {
      * it; {@code null} keeps the classic blocking behavior.
      */
     private AgentResponse respondGuardedViaAgent(ConversationSession session, String text, Consumer<String> deltaSink) {
+        // P1.1: a preempted turn stops before starting provider work - it
+        // must not burn a 20s provider call for a caller who moved on.
+        TurnHandle handle = TurnContext.current();
+        if (handle != null) {
+            handle.checkOwned();
+        }
         session.resetToolInvokedFlag();
         AgentResponse response = deltaSink == null
                 ? supportAgent.respondGuarded(session, text)
@@ -610,6 +718,12 @@ public class ConversationRuntime {
 
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
     private AgentResponse respondViaAgent(ConversationSession session, String normalizedText, Consumer<String> deltaSink) {
+        // P1.1: a preempted turn stops before starting provider work - it
+        // must not burn a 20s provider call for a caller who moved on.
+        TurnHandle handle = TurnContext.current();
+        if (handle != null) {
+            handle.checkOwned();
+        }
         session.resetToolInvokedFlag();
         AgentResponse response = deltaSink == null
                 ? supportAgent.respond(session, normalizedText)
@@ -663,13 +777,13 @@ public class ConversationRuntime {
         return directRenderer.render(languageResolver.resolve(session), outcome);
     }
 
-    private ProcedureOutcome confirmWithSafeFallback(ConversationSession session, long voiceGeneration) {
+    private ProcedureOutcome confirmWithSafeFallback(ConversationSession session, long voiceGeneration, String idempotencyKey) {
         // A barged-in turn must never commit a stale confirmation: if the
         // caller interrupted after saying YES, the new turn (not this one)
         // decides what happens next.
         checkNotSuperseded(session.getSessionId(), voiceGeneration);
         try {
-            return procedureCoordinator.confirmActive(session);
+            return procedureCoordinator.confirmActive(session, idempotencyKey);
         } catch (Exception e) {
             log.error("event=procedure_confirmation_failed sessionId={} errorType={}", session.getSessionId(), e.getClass().getSimpleName(), e);
             return ProcedureOutcome.error("EXECUTION_FAILED", PROCEDURE_FAILURE_MESSAGE);
@@ -677,12 +791,12 @@ public class ConversationRuntime {
     }
 
     private ProcedureOutcome submitVerificationWithSafeFallback(ConversationSession session, String code,
-            long voiceGeneration) {
+            long voiceGeneration, String idempotencyKey) {
         // Same stale-mutation guard as confirmations: a superseded turn
         // must not submit an OTP the caller may have withdrawn by barging in.
         checkNotSuperseded(session.getSessionId(), voiceGeneration);
         try {
-            return procedureCoordinator.submitVerificationCode(session, code);
+            return procedureCoordinator.submitVerificationCode(session, code, idempotencyKey);
         } catch (Exception e) {
             log.error("event=procedure_verification_execution_failed sessionId={} errorType={}", session.getSessionId(), e.getClass().getSimpleName(), e);
             return ProcedureOutcome.error("EXECUTION_FAILED", PROCEDURE_FAILURE_MESSAGE);
@@ -744,8 +858,12 @@ public class ConversationRuntime {
      * turn is still the session's latest voice generation. A superseded turn
      * (caller barged in) throws {@link TurnAbortedException} here - within
      * one token - instead of streaming an obsolete reply to a caller who has
-     * moved on. The abort unwinds through the per-session lock's finally,
-     * releasing it for the barge-in turn.
+     * moved on. The abort unwinds through the ownership release in the
+     * session store's finally.
+     *
+     * <p>P1.3: every delta that passes the check is appended to
+     * {@code emittedDeltas} (when non-null), so an aborted turn can write
+     * back exactly what the caller heard.
      *
      * <p>When {@code voiceGeneration} is 0 (no tracking) the sink is
      * returned unwrapped: zero behavior change for chat turns.
@@ -754,11 +872,35 @@ public class ConversationRuntime {
      */
     Consumer<String> generationCheckedSink(String sessionId, long voiceGeneration,
             Consumer<String> deltaSink) {
-        if (voiceGeneration <= 0 || deltaSink == null) {
-            return deltaSink;
+        return generationCheckedSink(sessionId, voiceGeneration, deltaSink, null);
+    }
+
+    /**
+     * P1.3 variant of {@link #generationCheckedSink(String, long,
+     * Consumer)} that records emitted deltas for history repair.
+     * Package-visible for tests.
+     */
+    Consumer<String> generationCheckedSink(String sessionId, long voiceGeneration,
+            Consumer<String> deltaSink, List<String> emittedDeltas) {
+        if (deltaSink == null) {
+            return null;
+        }
+        if (voiceGeneration <= 0) {
+            // Untracked turn (chat): no generation check, but still record
+            // emitted deltas for history repair when a list is provided.
+            if (emittedDeltas == null) {
+                return deltaSink;
+            }
+            return delta -> {
+                emittedDeltas.add(delta);
+                deltaSink.accept(delta);
+            };
         }
         return delta -> {
             checkNotSuperseded(sessionId, voiceGeneration);
+            if (emittedDeltas != null) {
+                emittedDeltas.add(delta);
+            }
             deltaSink.accept(delta);
         };
     }
@@ -777,6 +919,39 @@ public class ConversationRuntime {
         }
     }
 
+    /**
+     * P0.5: classifies an aborted turn for the trace. A newer voice
+     * generation for this session means the caller barged in (this turn was
+     * superseded); otherwise the client went away on its own. Never throws.
+     */
+    private String resolveAbortReason(String sessionId, long voiceGeneration) {
+        try {
+            if (voiceGeneration > 0 && sessionStore.currentVoiceGeneration(sessionId) != voiceGeneration) {
+                return "superseded";
+            }
+        } catch (Exception ignored) {
+            // Classification must never break abort handling.
+        }
+        return "client_disconnect";
+    }
+
+    /**
+     * P0.6: the worker-minted idempotency key for this turn, or null when
+     * the caller sent none. Never throws; never logs the key.
+     */
+    private static String idempotencyKey(UserTurn turn) {
+        try {
+            Map<String, String> metadata = turn.providerMetadata();
+            String raw = metadata == null ? null : metadata.get(METADATA_IDEMPOTENCY_KEY);
+            if (raw != null && !raw.isBlank()) {
+                return raw.trim();
+            }
+        } catch (Exception ignored) {
+            // fall through to null
+        }
+        return null;
+    }
+
     /** Records the latest turn number for abort classification and MDC. Never throws. */
     private static void markTurn(int[] currentTurn, int turnNumber) {
         currentTurn[0] = turnNumber;
@@ -784,6 +959,57 @@ public class ConversationRuntime {
             MDC.put(TraceIds.MDC_TURN, String.valueOf(turnNumber));
         } catch (Exception ignored) {
             // MDC must never break the turn.
+        }
+    }
+
+    /**
+     * P2.3: records the deterministic interruption signal for this turn.
+     *
+     * <p>Looks at the last assistant message: a partial one means the
+     * previous turn aborted mid-stream (P1.3 history repair), so the new
+     * utterance is classified against the repaired heard text. The signal
+     * is a hint rendered into the prompt - the model still proposes the
+     * classification via {@code updateDialogueState} and
+     * {@link InterruptionClassifier#validateProposal} has the final say.
+     *
+     * <p>A fresh question arriving while other work is pending also creates
+     * an ANSWER_QUESTION obligation: the reply owes the answer before the
+     * pending work resumes. Never throws - classification must not break
+     * the turn.
+     */
+    private void recordInterruptionSignal(ConversationSession session, String normalizedText) {
+        DialogueState state = session.getDialogueState();
+        try {
+            List<ConversationMessage> messages = session.getRecentMessages();
+            String abortedText = null;
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ConversationMessage message = messages.get(i);
+                if (message.role() == MessageRole.ASSISTANT) {
+                    if (message.partial()) {
+                        abortedText = message.text();
+                    }
+                    break;
+                }
+            }
+            if (abortedText == null) {
+                state.clearLastInterruptionSignal();
+                return;
+            }
+            InterruptionSignal signal = InterruptionClassifier.classify(normalizedText, state, abortedText);
+            state.setLastInterruptionSignal(signal);
+            log.info("event=interruption_signal sessionId={} class={} deterministic={} evidence={}",
+                    session.getSessionId(), signal.interruptionClass(), signal.deterministic(), signal.evidence());
+            if (signal.interruptionClass() == InterruptionClass.NEW_INTENT
+                    && InterruptionClassifier.isQuestion(normalizedText)
+                    && (state.hasPendingRequests() || session.getActiveProcedure().isPresent())) {
+                state.addObligation(ObligationType.ANSWER_QUESTION,
+                        "answer the caller's question before resuming the pending request",
+                        session.getTurnCount());
+            }
+        } catch (RuntimeException e) {
+            log.warn("event=interruption_signal_failed sessionId={} errorType={}",
+                    session.getSessionId(), e.getClass().getSimpleName());
+            state.clearLastInterruptionSignal();
         }
     }
 

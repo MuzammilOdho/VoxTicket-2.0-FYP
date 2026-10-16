@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.PromptProperties;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
@@ -68,7 +70,7 @@ class SupportAgentModelInputTest {
                 mock(ProcedureCoordinator.class),
                 mock(TurnMetrics.class),
                 mock(ConversationAuditService.class),
-                new ConversationLanguageResolver());
+                new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

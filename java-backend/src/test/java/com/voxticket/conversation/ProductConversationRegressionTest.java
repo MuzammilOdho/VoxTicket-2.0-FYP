@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.voxticket.agent.AgentResponse;
+import com.voxticket.agent.PromptVersion;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
@@ -94,6 +95,7 @@ class ProductConversationRegressionTest {
                 new ConversationLanguageResolver(), new DirectProcedureResponseRenderer());
         when(supportAgent.respond(any(), any()))
                 .thenReturn(new AgentResponse("How can I help with your order today?", AgentResponse.Outcome.SUCCESS));
+        when(supportAgent.currentPromptVersion()).thenReturn(new PromptVersion("v1", "system", "test-content-hash"));
         when(supportAgent.respondGuarded(any(), any()))
                 .thenReturn(new AgentResponse("Let me make sure I understand before proceeding.", AgentResponse.Outcome.SUCCESS));
         when(identityService.resolveByPhone(any()))
@@ -158,7 +160,7 @@ class ProductConversationRegressionTest {
     }
 
     private void stubTerminalVerification(String code, ProcedureOutcome outcome) {
-        when(procedureCoordinator.submitVerificationCode(any(), eq(code))).thenAnswer(inv ->
+        when(procedureCoordinator.submitVerificationCode(any(), eq(code), any())).thenAnswer(inv ->
                 terminalOutcome(inv.getArgument(0), outcome));
     }
 
@@ -205,7 +207,7 @@ class ProductConversationRegressionTest {
     @Test
     void claimJourney_explicitYes_filesClaim() {
         seedConfirmation("claim-1", ProcedureType.CLAIM, "ORD-10003");
-        when(procedureCoordinator.confirmActive(any())).thenAnswer(inv ->
+        when(procedureCoordinator.confirmActive(any(), any())).thenAnswer(inv ->
                 terminalOutcome(inv.getArgument(0), ProcedureOutcome.ok("CLAIM_FILED", "claim filed",
                         Map.of("orderReference", "ORD-10003", "claimNumber", "CLM-9001"))));
 
@@ -217,13 +219,13 @@ class ProductConversationRegressionTest {
         // construction: only the verification path populates it.
         assertThat(response.metadata()).isEmpty();
         assertThat(response.requiresConfirmation()).isFalse();
-        verify(procedureCoordinator).confirmActive(any());
+        verify(procedureCoordinator).confirmActive(any(), any());
     }
 
     @Test
     void claimJourney_romanUrduYes_filesClaim() {
         seedConfirmation("claim-2", ProcedureType.CLAIM, "ORD-10003");
-        when(procedureCoordinator.confirmActive(any())).thenAnswer(inv ->
+        when(procedureCoordinator.confirmActive(any(), any())).thenAnswer(inv ->
                 terminalOutcome(inv.getArgument(0), ProcedureOutcome.ok("CLAIM_FILED", "claim filed",
                         Map.of("orderReference", "ORD-10003", "claimNumber", "CLM-9002"))));
 
@@ -233,7 +235,7 @@ class ProductConversationRegressionTest {
         // the deterministic renderer answers in Roman Urdu.
         assertThat(response.text()).isEqualTo(
                 "Order ORD-10003 ke liye claim CLM-9002 darj kar diya gaya hai aur hamari team ke jaizay ka muntazir hai.");
-        verify(procedureCoordinator).confirmActive(any());
+        verify(procedureCoordinator).confirmActive(any(), any());
     }
 
     @Test
@@ -268,7 +270,7 @@ class ProductConversationRegressionTest {
     @Test
     void executionBlowup_rendersSafeFailureWithoutLeaking() {
         seedVerification("claim-5", ProcedureType.CLAIM, "ORD-10003");
-        when(procedureCoordinator.submitVerificationCode(any(), eq(OTP))).thenAnswer(inv ->
+        when(procedureCoordinator.submitVerificationCode(any(), eq(OTP), any())).thenAnswer(inv ->
         { throw executionBlowup(inv.getArgument(0),
                 new IllegalStateException("An active claim already exists for item SKU-9")); });
 

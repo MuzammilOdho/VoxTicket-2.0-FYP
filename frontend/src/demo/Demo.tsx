@@ -484,7 +484,7 @@ function VoiceCallView({ voice, customer, onCollapse }: {
   customer: DemoCustomer;
   onCollapse: () => void;
 }) {
-  const { state, agentPresent, speaking, muted, elapsedSec } = voice;
+  const { state, agentPresent, speaking, agentThinking, muted, elapsedSec } = voice;
   const live = state === 'live';
   const { captions, supported } = useLiveCaptions(live);
   const [events, setEvents] = useState<CallEvent[]>([]);
@@ -643,7 +643,7 @@ function VoiceCallView({ voice, customer, onCollapse }: {
           <div className="flex flex-wrap items-center justify-between gap-4 border-t border-line/70 px-5 py-4">
             <div className="flex items-center gap-3">
               <WaveformBars count={9} animated={speaking !== null} />
-              <VoiceStatus state={state} agentPresent={agentPresent} speaking={speaking} />
+              <VoiceStatus state={state} agentPresent={agentPresent} speaking={speaking} thinking={agentThinking} />
             </div>
             {live && (
               <div className="flex items-center gap-2.5">
@@ -683,7 +683,7 @@ function VoiceSlimBar({ voice, onExpand }: {
         <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
       </span>
       <button onClick={onExpand} className="min-w-0 flex-1 truncate text-left text-[13px] text-mist transition-colors hover:text-white">
-        Voice call · {formatElapsed(voice.elapsedSec)} · <VoiceStatusText state={voice.state} agentPresent={voice.agentPresent} speaking={voice.speaking} />
+        Voice call · {formatElapsed(voice.elapsedSec)} · <VoiceStatusText state={voice.state} agentPresent={voice.agentPresent} speaking={voice.speaking} thinking={voice.agentThinking} />
       </button>
       <button
         onClick={onExpand}
@@ -705,18 +705,20 @@ function VoiceSlimBar({ voice, onExpand }: {
 }
 
 
-function VoiceStatus({ state, agentPresent, speaking }: {
+function VoiceStatus({ state, agentPresent, speaking, thinking }: {
   state: string;
   agentPresent: boolean;
   speaking: Speaking;
+  thinking: boolean;
 }) {
-  return <span className="text-[13px]"><VoiceStatusText state={state} agentPresent={agentPresent} speaking={speaking} /></span>;
+  return <span className="text-[13px]"><VoiceStatusText state={state} agentPresent={agentPresent} speaking={speaking} thinking={thinking} /></span>;
 }
 
-function VoiceStatusText({ state, agentPresent, speaking }: {
+function VoiceStatusText({ state, agentPresent, speaking, thinking }: {
   state: string;
   agentPresent: boolean;
   speaking: Speaking;
+  thinking: boolean;
 }) {
   if (state !== 'live') {
     return <span className="text-fog">{state === 'mic' ? 'Requesting microphone…' : 'Connecting…'}</span>;
@@ -739,6 +741,15 @@ function VoiceStatusText({ state, agentPresent, speaking }: {
     return (
       <span className="flex items-center gap-2 text-signal-teal">
         <span className="vq-pulse h-1.5 w-1.5 rounded-full bg-signal-teal" /> You're speaking…
+      </span>
+    );
+  }
+  if (thinking) {
+    // The worker committed the turn and the brain hasn't produced audio yet:
+    // visibly distinct from idle "Listening…".
+    return (
+      <span className="flex items-center gap-2 text-amber">
+        <span className="vq-pulse h-1.5 w-1.5 rounded-full bg-amber" /> Thinking…
       </span>
     );
   }

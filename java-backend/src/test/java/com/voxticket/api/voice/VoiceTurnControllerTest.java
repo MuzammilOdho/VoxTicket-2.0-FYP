@@ -58,7 +58,7 @@ class VoiceTurnControllerTest {
                     Map.of());
         });
 
-        ChatResponse response = controller.turn(new VoiceTurnRequest("voice-room-1", "hello"), new MockHttpServletRequest());
+        ChatResponse response = controller.turn(new VoiceTurnRequest("voice-room-1", "hello"), new MockHttpServletRequest(), null);
 
         verify(conversationRuntime).processTurn(captor.capture());
         UserTurn turn = captor.getValue();
@@ -82,7 +82,7 @@ class VoiceTurnControllerTest {
         when(conversationRuntime.processTurn(any())).thenThrow(new SessionBusyException("voice-room-1", 2000));
 
         assertThatThrownBy(() ->
-                        controller.turn(new VoiceTurnRequest("voice-room-1", "hello"), new MockHttpServletRequest()))
+                        controller.turn(new VoiceTurnRequest("voice-room-1", "hello"), new MockHttpServletRequest(), null))
                 .isInstanceOf(SessionBusyException.class);
         assertThat(SessionBusyException.class.getAnnotation(ResponseStatus.class).value())
                 .isEqualTo(HttpStatus.TOO_MANY_REQUESTS);

@@ -1,7 +1,9 @@
 package com.voxticket.agent;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.TurnAbortedException;
 import com.voxticket.identity.CustomerIdentity;
 import com.voxticket.identity.InsufficientAssuranceException;
 import com.voxticket.identity.ResourceNotFoundForAccountException;
@@ -27,15 +29,17 @@ public class CustomerReadTools {
     private final ConversationSession session;
     private final TurnMetrics turnMetrics;
     private final ConversationAuditService auditService;
+    private final TimeoutProperties timeouts;
 
     public CustomerReadTools(
             CustomerOrderQueryService queryService, CustomerIdentity identity, ConversationSession session,
-            TurnMetrics turnMetrics, ConversationAuditService auditService) {
+            TurnMetrics turnMetrics, ConversationAuditService auditService, TimeoutProperties timeouts) {
         this.queryService = queryService;
         this.identity = identity;
         this.session = session;
         this.turnMetrics = turnMetrics;
         this.auditService = auditService;
+        this.timeouts = timeouts;
     }
 
     @Tool(description = "List the current customer's recent orders, newest first. Use when the customer does not know "
@@ -69,7 +73,13 @@ public class CustomerReadTools {
         session.markToolInvoked();
         long start = System.nanoTime();
         try {
-            Object result = call.get();
+            // P0.1: the query itself is bounded - a stuck DB/HTTP call
+            // becomes a ToolTimeoutException, which the sanitized processor
+            // converts to the fixed TOOL_EXECUTION_FAILED payload.
+            // P1.2: the call also carries the turn's ownership handle (via
+            // TurnContext): a preempted turn's tool is deferred/cancelled via
+            // TurnAbortedException, never the sanitized path.
+            Object result = ToolCallTimeout.call(toolName, timeouts.toolTimeout(), call::get);
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             String resultCode = (result instanceof ToolError toolError) ? toolError.code() : "OK";
             log.info("event=tool_call tool={} reference={} durationMs={} result={}", toolName, safeReference(reference), durationMs, resultCode);
@@ -78,6 +88,13 @@ public class CustomerReadTools {
             auditService.recordEvent(session, session.getTurnCount(), ConversationEventType.TOOL_CALLED,
                     "tool=" + toolName + " result=" + resultCode + " durationMs=" + durationMs);
             return result;
+        } catch (TurnAbortedException aborted) {
+            // P1.2: preempted turn - mark the tool call cancelled and rethrow
+            // so the runtime drops the turn. Never the sanitized path: a dead
+            // turn must not keep talking to the model.
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+            traceToolCall(toolName, "CANCELLED", durationMs);
+            throw aborted;
         } catch (ResourceNotFoundForAccountException e) {
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             log.info("event=tool_call tool={} reference={} durationMs={} result=NOT_FOUND_FOR_ACCOUNT", toolName, safeReference(reference), durationMs);
@@ -106,7 +123,7 @@ public class CustomerReadTools {
     private void traceToolCall(String toolName, String resultCode, long durationMs) {
         TurnTrace.Builder builder = session.getActiveTraceBuilder();
         if (builder != null) {
-            builder.addToolCall(toolName, resultCode, (double) durationMs);
+            builder.addToolCall(toolName, resultCode, (double) durationMs, ToolSideEffect.READ_ONLY);
         }
     }
 

@@ -120,6 +120,7 @@ public sealed interface AuditEvent
             String ttsProvider,
             String ttsModel,
             String error,
+            boolean stalled,
             Instant occurredAt) implements AuditEvent {}
 
     /** Python voice worker liveness signal (upserted by worker id). */

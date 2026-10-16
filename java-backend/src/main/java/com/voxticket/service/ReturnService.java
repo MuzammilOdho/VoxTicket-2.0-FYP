@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  * without changing this service's shape.
  */
 @Service
-@Transactional
+@Transactional(timeout = 10)
 public class ReturnService {
 
     private final OrderRepository orderRepository;

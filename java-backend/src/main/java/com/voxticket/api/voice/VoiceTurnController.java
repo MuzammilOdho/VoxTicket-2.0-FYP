@@ -14,12 +14,13 @@ import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -36,7 +37,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  */
 @RestController
 @RequestMapping("/api/v1/voice")
-@Profile({"dev", "test"})
+// P1.5: voice endpoints are registered in every profile (no @Profile gate).
+// Authorization is the SAME as the rest of the public API:
+// AdminSecurityConfig.permitAll covers /api/v1/voice/turn,
+// /api/v1/voice/turn/stream, and /api/v1/voice/token, exactly like
+// /api/v1/chat. No new auth system is introduced here.
 public class VoiceTurnController {
 
     private static final Logger log = LoggerFactory.getLogger(VoiceTurnController.class);
@@ -50,9 +55,10 @@ public class VoiceTurnController {
     }
 
     @PostMapping("/turn")
-    public ChatResponse turn(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
+    public ChatResponse turn(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         UserTurn turn = new UserTurn(
-                request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId()));
+                request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId(), idempotencyKey));
         return ChatResponse.from(conversationRuntime.processTurn(turn));
     }
 
@@ -73,10 +79,11 @@ public class VoiceTurnController {
      * behind the obsolete turn; the voice worker retries on 429.
      */
     @PostMapping("/turn/stream")
-    public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
+    public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
         UserTurn turn = new UserTurn(
-                request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId()));
+                request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId(), idempotencyKey));
         try {
             conversationRuntime.processTurnStream(turn, delta -> {
                 try {
@@ -120,12 +127,21 @@ public class VoiceTurnController {
      * turn increments the session's generation, so the runtime can abort a
      * superseded turn cooperatively (releasing the session lock within one
      * token) instead of letting it run to completion behind the barge-in.
+     *
+     * <p>P0.6: carries the worker-minted {@code Idempotency-Key} header into
+     * the turn metadata when present (blank/absent = no idempotency). The key
+     * is opaque and never logged.
      */
-    private Map<String, String> turnMetadata(HttpServletRequest httpRequest, String sessionId) {
+    private Map<String, String> turnMetadata(HttpServletRequest httpRequest, String sessionId, String idempotencyKey) {
         Object attribute = httpRequest == null ? null : httpRequest.getAttribute(TraceIdFilter.REQUEST_ATTRIBUTE_TRACE_ID);
         String traceId = (attribute instanceof String s && !s.isBlank()) ? s : TraceIds.newTraceId();
         long generation = sessionStore.nextVoiceGeneration(sessionId);
-        return Map.of(TraceIds.METADATA_TRACE_ID, traceId,
-                ConversationRuntime.METADATA_VOICE_GENERATION, String.valueOf(generation));
+        Map<String, String> metadata = new LinkedHashMap<>();
+        metadata.put(TraceIds.METADATA_TRACE_ID, traceId);
+        metadata.put(ConversationRuntime.METADATA_VOICE_GENERATION, String.valueOf(generation));
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            metadata.put(ConversationRuntime.METADATA_IDEMPOTENCY_KEY, idempotencyKey.trim());
+        }
+        return Map.copyOf(metadata);
     }
 }

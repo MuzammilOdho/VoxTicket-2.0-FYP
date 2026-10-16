@@ -239,13 +239,17 @@ class ProcedureClaimIdempotencyTest {
         assertThat(queued.code()).isEqualTo("PROCEDURE_DEFERRED");
 
         // DAMAGED -> DEFECTIVE: the parsed reason changed, so this is not the
-        // queued request - the occupied slot refuses it instead of deduping.
+        // queued request - P2.2 stacks it as a second queued request instead
+        // of refusing.
         ProcedureOutcome differentReason = coordinator.startClaim(session, "ORD-10002", "Red Gadget",
                 "the gadget has a manufacturing defect");
 
         assertThat(differentReason.code()).isNotEqualTo("ALREADY_DEFERRED");
-        assertThat(differentReason.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
-        assertThat(session.getDeferredIntent().orElseThrow().reasonName()).isEqualTo("DAMAGED");
+        assertThat(differentReason.code()).isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(2);
+        // LIFO: the new intent is on top; the DAMAGED one is untouched below.
+        assertThat(session.getDeferredIntent().orElseThrow().reasonName()).isEqualTo("DEFECTIVE");
+        assertThat(session.getDialogueState().getPendingRequests().get(1).reasonName()).isEqualTo("DAMAGED");
     }
 
     @Test
@@ -260,7 +264,7 @@ class ProcedureClaimIdempotencyTest {
                 "the gizmo arrived damaged");
 
         assertThat(differentItem.code()).isNotEqualTo("ALREADY_DEFERRED");
-        assertThat(session.getDeferredIntent().orElseThrow().itemSku()).isEqualTo("SKU-10003");
+        assertThat(session.getDeferredIntent().orElseThrow().itemSku()).isEqualTo("SKU-10002");
     }
 
     // ---- explicit detail correction requires abandon/restart ----

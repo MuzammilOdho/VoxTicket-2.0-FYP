@@ -1,5 +1,5 @@
 import { QueryClient, useQuery } from '@tanstack/react-query';
-import { api } from './client';
+import { api, isNotFound } from './client';
 import type {
   AiCost,
   AiModels,
@@ -9,11 +9,13 @@ import type {
   ConversationDetail,
   ConversationSummary,
   EvaluationSummary,
+  LiveVoiceCall,
   OperationRow,
   Page,
   SummaryV2,
   SystemHealth,
   TurnTrace,
+  VoiceAnalyticsSummary,
   VoiceCall,
   VoiceCallDetail,
 } from './types';
@@ -122,6 +124,47 @@ export function useVoiceCallDetail(sessionId: string, enabled: boolean) {
     },
     enabled: enabled && sessionId.length > 0,
     staleTime: 60_000,
+  });
+}
+
+/* ---------------- P4: supervisor live monitor + analytics ---------------- */
+
+/**
+ * In-progress voice calls, auto-refreshed every 5s (read-only supervisor
+ * view). Returns null when the backend predates P4 (404) so the UI can say
+ * "requires backend P4" instead of crashing; other errors still surface.
+ */
+export function useLiveVoiceCalls() {
+  return useQuery({
+    queryKey: ['voice-live-calls'],
+    queryFn: async (): Promise<LiveVoiceCall[] | null> => {
+      try {
+        return await api.get<LiveVoiceCall[]>(`${ADMIN}/voice/live-calls`);
+      } catch (e) {
+        if (isNotFound(e)) return null;
+        throw e;
+      }
+    },
+    refetchInterval: 5_000,
+  });
+}
+
+/**
+ * Aggregate voice analytics summary. Returns null when the backend predates
+ * P4 (404); other errors still surface.
+ */
+export function useVoiceAnalyticsSummary() {
+  return useQuery({
+    queryKey: ['voice-analytics-summary'],
+    queryFn: async (): Promise<VoiceAnalyticsSummary | null> => {
+      try {
+        return await api.get<VoiceAnalyticsSummary>(`${ADMIN}/voice/analytics/summary`);
+      } catch (e) {
+        if (isNotFound(e)) return null;
+        throw e;
+      }
+    },
+    refetchInterval: 30_000,
   });
 }
 

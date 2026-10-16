@@ -49,7 +49,7 @@ import socket
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncIterator
+from typing import AsyncIterator, Callable
 
 # Windows-only: the soxr resampler bundled inside livekit_ffi.dll crashes with
 # "Assertion failed: LSX_FFT_BR_ == NULL" (soxr-sys fft4g_cache.h) when it
@@ -75,6 +75,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from livekit import agents, rtc
+from livekit import api as livekit_api
 from livekit.agents import Agent, AgentServer, AgentSession, llm
 from livekit.agents import stt as stt_api
 from livekit.agents import tts as tts_api
@@ -176,6 +177,39 @@ class Config:
     transcription_reprompt: str = (
         "Sorry, I didn't catch that. Could you please say it again?"
     )
+    # In-band filler spoken while the Java brain is thinking: when no brain
+    # content arrives within filler_after_s, llm_node yields the filler as
+    # the first chunk of the turn's own text stream (interruptible, never a
+    # separate say(), excluded from TTS voice-locking and TTFT telemetry).
+    # Picked by the STT final's detected language ("ur" prefix -> Urdu).
+    # 0 disables the filler.
+    filler_after_s: float = 1.5
+    filler_text_en: str = "One moment, let me check that for you. "
+    filler_text_ur: str = "ایک لمحہ، میں دیکھ رہا ہوں۔ "
+    # Mid-stream stall watchdog (P1.4): when brain deltas flow and then stop,
+    # the caller gets half a sentence + silence. If no brain delta arrives
+    # within stall_after_s of the previous one, llm_node yields the repair
+    # phrase below, closes the stream, and ends the turn (telemetry marks
+    # stalled=true). The timer only arms after the first brain delta -
+    # pre-first-delta slowness is the filler's domain. 0 disables.
+    stall_after_s: float = 8.0
+    stall_repair: str = (
+        "Sorry, I lost my train of thought — could you say that again?"
+    )
+    # --- P3.3: telephony (SIP) ---
+    # LiveKit SIP trunk id for PSTN calls (empty = disabled; the WebRTC demo
+    # path is then byte-for-byte unchanged). The dispatch rule name is
+    # informational: it is logged at startup and carried in the telephony
+    # metadata; the rule itself lives in the LiveKit dashboard / API - see
+    # docs/SIP_SETUP.md.
+    sip_trunk_id: str = ""
+    sip_dispatch_rule: str = ""
+    # --- P3.2: call recording ---
+    # Room-composite egress to S3, started per call when enabled. The egress
+    # destination URL is config; storage credentials are env-only
+    # (VOICE_RECORDING_S3_* - see .env.example). Never hardcode them.
+    recording_enabled: bool = False
+    recording_egress_url: str = ""
 
 
 def load_config(env: dict | None = None) -> Config:
@@ -201,6 +235,16 @@ def load_config(env: dict | None = None) -> Config:
             return float(raw)
         except ValueError:
             raise ConfigError(f"{key} must be a number, got {raw!r}")
+
+    def opt_bool(key: str, default: bool) -> bool:
+        raw = (env.get(key) or "").strip().lower()
+        if not raw:
+            return default
+        if raw in ("1", "true", "yes", "on"):
+            return True
+        if raw in ("0", "false", "no", "off"):
+            return False
+        raise ConfigError(f"{key} must be a boolean (true/false), got {raw!r}")
 
     def require_keys(provider_label: str, *keys: str) -> None:
         missing = [k for k in keys if not (env.get(k) or "").strip()]
@@ -235,7 +279,7 @@ def load_config(env: dict | None = None) -> Config:
     # (brand name, OTP spelling, support verbs). Max 2048 chars total.
     default_keyterms = "VoxTicket,OTP,order,refund,delivery,tracking,payment,verification code"
 
-    return Config(
+    cfg = Config(
         livekit_url=env["LIVEKIT_URL"].strip(),
         livekit_api_key=env["LIVEKIT_API_KEY"].strip(),
         livekit_api_secret=env["LIVEKIT_API_SECRET"].strip(),
@@ -276,7 +320,42 @@ def load_config(env: dict | None = None) -> Config:
             "TRANSCRIPTION_REPROMPT",
             "Sorry, I didn't catch that. Could you please say it again?",
         ),
+        filler_after_s=opt_float("VOICE_FILLER_AFTER_S", 1.5),
+        filler_text_en=opt(
+            "VOICE_FILLER_TEXT_EN",
+            "One moment, let me check that for you. ",
+        ),
+        filler_text_ur=opt(
+            "VOICE_FILLER_TEXT_UR",
+            "ایک لمحہ، میں دیکھ رہا ہوں۔ ",
+        ),
+        stall_after_s=opt_float("VOICE_STALL_AFTER_S", 8.0),
+        stall_repair=opt(
+            "VOICE_STALL_REPAIR",
+            "Sorry, I lost my train of thought — could you say that again?",
+        ),
+        sip_trunk_id=opt("SIP_TRUNK_ID", ""),
+        sip_dispatch_rule=opt("SIP_DISPATCH_RULE", ""),
+        recording_enabled=opt_bool("VOICE_RECORDING_ENABLED", False),
+        recording_egress_url=opt("VOICE_RECORDING_EGRESS_URL", ""),
     )
+
+    # P3.2: recording is fail-fast - a bad destination or missing storage
+    # credentials must break startup, not the first real customer call.
+    if cfg.recording_enabled:
+        _parse_s3_egress_url(cfg.recording_egress_url)  # raises ConfigError
+        missing = [k for k in ("VOICE_RECORDING_S3_REGION",
+                               "VOICE_RECORDING_S3_ACCESS_KEY",
+                               "VOICE_RECORDING_S3_SECRET_KEY")
+                   if not (env.get(k) or "").strip()]
+        if missing:
+            raise ConfigError(
+                "Missing required environment variables for "
+                "VOICE_RECORDING_ENABLED: " + ", ".join(missing)
+                + ". See worker/.env.example."
+            )
+
+    return cfg
 
 
 # --------------------------------------------------------------------------
@@ -362,6 +441,14 @@ class BrainError(Exception):
     """The VoxTicket Java brain could not produce a reply."""
 
 
+class BrainSessionBusyError(BrainError):
+    """The Java session stayed locked behind a previous turn through all
+    429 retries: the new utterance never reached the brain and is lost
+    unless the caller repeats it. Distinct from a generic BrainError so the
+    caller hears an honest "please repeat that" instead of a service
+    apology."""
+
+
 # HTTP 429 ("session busy") from the Java brain means the previous
 # (barge-in-aborted) turn is still unwinding and holds the session lock;
 # the new turn retries rather than speaking an apology to the caller.
@@ -382,6 +469,21 @@ class VoxTicketBrain:
     - POST /api/v1/voice/turn/stream (SSE: data: {"delta": "..."} ... data: {"done": true})
     """
 
+    @staticmethod
+    def _headers(traceparent: str | None,
+                 idempotency_key: str | None) -> dict[str, str] | None:
+        """Headers shared by turn() and turn_stream(). traceparent is a
+        best-effort W3C correlation header; Idempotency-Key identifies the
+        LOGICAL turn (one key per turn, not per POST attempt) so the Java
+        side can dedupe a retried turn that already committed. A
+        missing/invalid value never fails the call (headers=None)."""
+        headers: dict[str, str] = {}
+        if traceparent:
+            headers["traceparent"] = traceparent
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        return headers or None
+
     def __init__(self, turn_url: str, timeout_s: float = 25.0,
                  client: httpx.AsyncClient | None = None,
                  stream_url: str | None = None):
@@ -395,12 +497,14 @@ class VoxTicketBrain:
 
     async def turn(self, session_id: str, text: str,
                    *, traceparent: str | None = None,
-                   customer_phone: str | None = None) -> str:
+                   customer_phone: str | None = None,
+                   idempotency_key: str | None = None) -> str:
         """Blocking turn. traceparent is a best-effort W3C correlation header;
         a missing/invalid value never fails the call (headers=None).
         customer_phone is the caller's backend-minted identity (E.164), read
-        back from the LiveKit room; omitted when unknown (anonymous turn)."""
-        headers = {"traceparent": traceparent} if traceparent else None
+        back from the LiveKit room; omitted when unknown (anonymous turn).
+        idempotency_key identifies the logical turn for Java-side dedupe."""
+        headers = self._headers(traceparent, idempotency_key)
         payload = {"sessionId": session_id, "message": text}
         if customer_phone:
             payload["customerPhone"] = customer_phone
@@ -424,24 +528,32 @@ class VoxTicketBrain:
 
     async def turn_stream(self, session_id: str, text: str,
                           *, traceparent: str | None = None,
-                          customer_phone: str | None = None) -> AsyncIterator[str]:
+                          customer_phone: str | None = None,
+                          idempotency_key: str | None = None,
+                          on_429: Callable[[int], None] | None = None,
+                          ) -> AsyncIterator[str]:
         """Yield reply deltas from the SSE stream endpoint.
 
         Falls back to the blocking endpoint (yielded as one chunk) when the
         Java side predates the stream endpoint (404/405). Retries up to
         _BRAIN_429_MAX_ATTEMPTS times on HTTP 429 (session busy: the previous
-        barge-in-aborted turn is still unwinding on the Java side). Raises
-        BrainError on other failures; cancelling the consumer (barge-in)
-        closes the stream, which lets the Java side abort the turn and
-        release its session lock.
+        barge-in-aborted turn is still unwinding on the Java side); when the
+        retries are exhausted it raises BrainSessionBusyError (a BrainError
+        subclass) so the caller can speak an honest "please repeat that".
+        Raises BrainError on other failures; cancelling the consumer
+        (barge-in) closes the stream, which lets the Java side abort the
+        turn and release its session lock.
 
         traceparent is forwarded on both the stream and the fallback call so
         the Java side can correlate the whole turn. customer_phone (the
         caller's backend-minted E.164 identity) is forwarded the same way;
-        omitted when unknown.
+        omitted when unknown. idempotency_key identifies the logical turn
+        for Java-side dedupe. on_429, when given, is called with the attempt
+        number on every 429 retry (telemetry hook; never raises into the
+        stream loop).
         """
         url = self._stream_url
-        headers = {"traceparent": traceparent} if traceparent else None
+        headers = self._headers(traceparent, idempotency_key)
         attempt = 0
         while True:
             attempt += 1
@@ -457,7 +569,8 @@ class VoxTicketBrain:
                         logger.info("brain stream endpoint unavailable (HTTP %s); falling back to blocking turn",
                                     resp.status_code)
                         yield await self.turn(session_id, text, traceparent=traceparent,
-                                                customer_phone=customer_phone)
+                                                customer_phone=customer_phone,
+                                                idempotency_key=idempotency_key)
                         return
                     if resp.status_code == 429 and attempt < _BRAIN_429_MAX_ATTEMPTS:
                         # The previous turn still holds the Java session lock.
@@ -466,8 +579,17 @@ class VoxTicketBrain:
                         await resp.aread()  # release the connection
                         logger.info("brain session busy (HTTP 429); retrying turn in %.1fs (attempt %d of %d)",
                                     _BRAIN_429_RETRY_DELAY_S, attempt + 1, _BRAIN_429_MAX_ATTEMPTS)
+                        if on_429 is not None:
+                            try:
+                                on_429(attempt + 1)
+                            except Exception:
+                                logger.debug("on_429 hook raised; ignored", exc_info=True)
                         await asyncio.sleep(_BRAIN_429_RETRY_DELAY_S)
                         continue
+                    if resp.status_code == 429:
+                        body = await resp.aread()
+                        raise BrainSessionBusyError(
+                            f"brain session stayed busy (HTTP 429) after {attempt} attempts: {body[:200]!r}")
                     if resp.status_code != 200:
                         body = await resp.aread()
                         raise BrainError(f"brain stream returned HTTP {resp.status_code}: {body[:200]!r}")
@@ -602,6 +724,15 @@ class TurnTelemetry:
     aborted: bool = False
     error: str | None = None
     finalized: bool = False
+    # P0.5: failure-mode observability. brain_429_attempts counts the POST
+    # attempts for this turn (1 = first try succeeded, no retry);
+    # lost_utterance is True when 429s were exhausted and the caller's text
+    # never reached the Java brain (it must be repeated).
+    brain_429_attempts: int = 1
+    lost_utterance: bool = False
+    # P1.4: brain deltas stopped mid-stream and the stall watchdog ended the
+    # turn with the repair phrase.
+    stalled: bool = False
 
     def finalize(self) -> None:
         self.finalized = True
@@ -624,6 +755,7 @@ class TurnTelemetry:
             "room": self.room,
             "turnNumber": self.turn_number,
             "traceId": self.trace_id,
+            "spanId": self.span_id,
             "sttLatencyMs": self._ms(self.t_stt_event, self.t_stt_final),
             "brainTtftMs": self._ms(self.t_brain_start, self.t_brain_first_delta),
             "ttsFirstAudioMs": self._ms(self.t_brain_first_delta, self.t_tts_first_audio),
@@ -632,6 +764,9 @@ class TurnTelemetry:
                 self.t_turn_end),
             "aborted": self.aborted,
             "bargeIn": self.barge_in,
+            "brain429Attempts": self.brain_429_attempts,
+            "lostUtterance": self.lost_utterance,
+            "stalled": self.stalled,
             "sttLanguage": self.stt_language,
             "sttProvider": self.stt_provider,
             "sttModel": self.stt_model,
@@ -688,9 +823,86 @@ def _classify_close(ev) -> tuple[str, str | None]:
         return "ABORTED", "unknown"
 
 
+# --------------------------------------------------------------------------
+# P3.2: OTP redaction. Callers dictate OTP codes over voice, so any
+# free-text path that could carry a transcript (telemetry payloads, future
+# logging) must mask OTP-like spans first. The masking primitive is
+# redact_otp(); redact_telemetry_payload() is the choke point applied to
+# every flush payload in TelemetryBuffer._flush_once.
+#
+# By design the worker never logs transcript text today (llm_node logs
+# character counts, not content); if a text-carrying log is ever added it
+# must pass through redact_otp().
+# --------------------------------------------------------------------------
+
+_OTP_RE = re.compile(r"(?<!\d)\d{4,8}(?!\d)")
+
+
+def redact_otp(text: str | None) -> str | None:
+    """Mask 4-8 digit OTP-like spans in free text.
+
+    Every run of 4-8 digits (not part of a longer digit run) becomes "****".
+    3-digit and 9+-digit runs are left alone: masking longer runs would
+    hide order/tracking numbers the support flow legitimately needs, and
+    3-digit runs are too common (CVV-adjacent but also years, counts) to
+    blanket-mask without a transcript-aware classifier.
+    Never raises; returns the input unchanged on any error.
+    """
+    try:
+        if not text:
+            return text
+        return _OTP_RE.sub("****", text)
+    except Exception:
+        return text
+
+
+def redact_telemetry_payload(payload: dict) -> dict:
+    """Return a copy of a telemetry payload with OTP-like spans masked.
+
+    Applied to the full flush payload in _flush_once so that any free-text
+    field - present or future - leaves the worker OTP-masked. Only string
+    values under *unknown* keys are redacted: keys in _MACHINE_KEYS hold
+    machine-generated values (IDs, ISO timestamps, provider names, fixed
+    codes) that are never caller speech and must not be mangled (a hex
+    trace id or an ISO year like "2026" would otherwise match the OTP
+    pattern). A future free-text field uses a new key, so it is redacted
+    by default. Never raises.
+    """
+    try:
+        return _redact_value(payload, None)
+    except Exception:
+        return payload
+
+
+# Payload keys whose string values are machine-generated and therefore
+# never caller speech: worker/session identifiers, W3C trace ids, ISO-8601
+# timestamps, provider/model names, language codes, and fixed status
+# codes. Everything else (unknown keys, e.g. a future transcript note)
+# is treated as potentially caller-dictated and redacted.
+_MACHINE_KEYS = frozenset({
+    "workerId", "room", "turnNumber", "traceId", "spanId",
+    "sttLatencyMs", "brainTtftMs", "ttsFirstAudioMs", "e2eMs",
+    "aborted", "bargeIn", "brain429Attempts", "lostUtterance", "stalled",
+    "sttLanguage", "sttProvider", "sttModel", "ttsProvider", "ttsModel",
+    "error", "outcome", "bargeInCount", "disconnectReason",
+    "startedAt", "endedAt",
+})
+
+
+def _redact_value(value, key):
+    if isinstance(value, str):
+        if key in _MACHINE_KEYS:
+            return value
+        return redact_otp(value)
+    if isinstance(value, dict):
+        return {k: _redact_value(v, k) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact_value(v, key) for v in value]
+    return value
+
+
 class TelemetryBuffer:
     """Bounded in-memory telemetry buffer with background flush.
-
     record_turn/record_call only append to in-memory lists (bounded,
     drop-oldest with a counter): no I/O, safe to call from the audio
     pipeline. A background task POSTs the accumulated batch every
@@ -852,6 +1064,8 @@ class TelemetryBuffer:
             "turns": [t.to_dict() for t in turns],
             "calls": calls,
         }
+        # P3.2: mask OTP-like spans before anything leaves the worker.
+        payload = redact_telemetry_payload(payload)
         try:
             resp = await self._client.post(
                 self._telemetry_url, json=payload, headers=self._secret_headers())
@@ -1010,6 +1224,18 @@ _NETWORK_ENDPOINTING: dict[str, tuple[float, float]] = {
 }
 
 
+# Turn-state broadcasts for the demo UI's "thinking" indicator. Published
+# by the worker on the 'voxticket.turn' data topic (reliable, same
+# data-channel mechanism as 'voxticket.network'): the frontend shows
+# "Thinking…" while the state is "thinking" and no agent audio has started,
+# instead of a frozen "Listening…". States: thinking (turn committed, brain
+# pending), first_audio (first brain delta; TTS about to start),
+# done / aborted (turn finished).
+_TURN_TOPIC = "voxticket.turn"
+_TURN_TOPIC_VERSION = 1
+_TURN_STATES = ("thinking", "first_audio", "done", "aborted")
+
+
 def decode_tier_broadcast(raw: bytes) -> dict | None:
     """Parse a 'voxticket.network' data-channel payload.
 
@@ -1030,6 +1256,41 @@ def decode_tier_broadcast(raw: bytes) -> dict | None:
     return payload
 
 
+# --------------------------------------------------------------------------
+# P3.3: E.164 caller identity. On SIP/PSTN calls the LiveKit SIP service
+# mints the participant identity from the caller's phone number; on the
+# WebRTC demo path the backend mints it into the JWT. Either way the worker
+# must verify before trusting it: strip formatting, ensure a leading +,
+# and accept only +\d{7,15}. Anything else is logged once and treated as
+# unknown (the turn continues anonymously - identity is never required to
+# take the call).
+# --------------------------------------------------------------------------
+
+def normalize_e164(raw: str | None) -> str | None:
+    """Normalize a candidate caller identity to E.164, or None.
+
+    Strips whitespace and dashes, prepends + when missing, and validates
+    the E.164 shape (+ followed by 7-15 digits). Returns None for anything
+    else - with a clear warning - and never raises. The raw value is
+    truncated in the log so a malformed identity can't dump an unbounded
+    string.
+    """
+    try:
+        if not raw or not raw.strip():
+            return None
+        cleaned = re.sub(r"[\s\-()]", "", raw.strip())
+        if cleaned and not cleaned.startswith("+"):
+            cleaned = "+" + cleaned
+        if re.fullmatch(r"\+\d{7,15}", cleaned):
+            return cleaned
+        logger.warning("rejecting non-E.164 caller identity %r; continuing as unknown",
+                       raw[:32])
+        return None
+    except Exception:
+        logger.debug("E.164 normalization failed", exc_info=True)
+        return None
+
+
 class VoxTicketAgent(Agent):
     def __init__(self, *, brain: VoxTicketBrain, session_id: str,
                  tts: tts_api.TTS, voices: VoiceControl,
@@ -1038,7 +1299,15 @@ class VoxTicketAgent(Agent):
                  telemetry: TelemetryBuffer | None = None,
                  stt_final: SttFinalTracker | None = None,
                  stt_provider: str = "", stt_model: str = "",
-                 tts_provider: str = "", tts_model: str = ""):
+                 tts_provider: str = "", tts_model: str = "",
+                 filler_after_s: float = 1.5,
+                 filler_text_en: str = "One moment, let me check that for you. ",
+                 filler_text_ur: str = "ایک لمحہ، میں دیکھ رہا ہوں۔ ",
+                 stall_after_s: float = 8.0,
+                 stall_repair: str = (
+                     "Sorry, I lost my train of thought — could you say that again?"
+                 ),
+                 outbound_reason: str | None = None):
         # instructions are unused (no LLM provider) but the base class takes them.
         super().__init__(instructions="You are the voice interface for VoxTicket customer support.")
         self._brain = brain
@@ -1048,6 +1317,10 @@ class VoxTicketAgent(Agent):
         self._voice_en = voice_en
         self._voice_ur = voice_ur
         self._greeting = greeting
+        # P4.1: outbound dial-out. When set, on_enter waits for the callee to
+        # join before speaking (never greet an empty room), and the greeting
+        # carries the outbound reason context instead of the default.
+        self._outbound_reason = outbound_reason
         self._next_voice: tuple[str, str] | None = None  # (voice_id, language) stashed by llm_node
         # P3 telemetry (all optional: the agent works identically with none).
         # trace_id is per call (= room), minted in entrypoint.
@@ -1066,6 +1339,18 @@ class VoxTicketAgent(Agent):
         # (None until the first broadcast arrives; the frontend starts at
         # 'low' and heartbeats it, so this converges within seconds).
         self._network_tier: str | None = None
+        # In-band filler while the Java brain thinks (P0.4): yielded as the
+        # first chunk of the turn's own text stream when no brain content
+        # arrives within filler_after_s. Never a separate say(); excluded
+        # from TTS voice-locking and TTFT telemetry.
+        self._filler_after_s = filler_after_s
+        self._filler_text_en = filler_text_en
+        self._filler_text_ur = filler_text_ur
+        # Mid-stream stall watchdog (P1.4): armed after the first brain
+        # delta, reset on every delta; fires the repair phrase when deltas
+        # stop mid-sentence.
+        self._stall_after_s = stall_after_s
+        self._stall_repair = stall_repair
 
     @property
     def barge_in_count(self) -> int:
@@ -1121,11 +1406,15 @@ class VoxTicketAgent(Agent):
         except Exception:
             return None
         for participant in participants.values():
-            identity = (participant.identity or "").strip()
-            if re.fullmatch(r"\+\d{7,15}", identity):
-                self._caller_phone_cache = identity
-                logger.info("resolved caller phone from LiveKit room (identity=%s)", identity)
-                return identity
+            # P3.3: verify/normalize before trusting - a SIP participant
+            # identity is caller-supplied (Twilio passes the PSTN number
+            # through), and garbage must degrade to "unknown", not to a
+            # malformed customerPhone.
+            normalized = normalize_e164(participant.identity)
+            if normalized is not None:
+                self._caller_phone_cache = normalized
+                logger.info("resolved caller phone from LiveKit room (identity=%s)", normalized)
+                return normalized
         return None
 
     def _record_turn_timing(self, timing: TurnTelemetry) -> None:
@@ -1137,10 +1426,54 @@ class VoxTicketAgent(Agent):
         except Exception:
             logger.debug("telemetry record_turn failed", exc_info=True)
 
+    def _publish_turn_state(self, turn_number: int, state: str) -> None:
+        """Broadcast the turn state for the demo UI's "thinking" indicator.
+
+        Publishes {"v":1,"turn":N,"state":...} on the 'voxticket.turn' data
+        topic (reliable). Best-effort: never raises into the audio pipeline;
+        a UI that never listens is unaffected."""
+        if state not in _TURN_STATES:
+            return
+        try:
+            payload = json.dumps(
+                {"v": _TURN_TOPIC_VERSION, "turn": turn_number, "state": state}
+            ).encode("utf-8")
+            self.session.room_io.room.local_participant.publish_data(
+                payload, reliable=True, topic=_TURN_TOPIC)
+        except Exception:
+            logger.debug("turn-state broadcast failed", exc_info=True)
+
+    def _filler_text(self, stt_language: str | None) -> str:
+        """The in-band filler for this turn, picked by the STT final's
+        detected language ("ur" prefix -> Urdu). Empty string disables."""
+        if (stt_language or "").lower().startswith("ur"):
+            return self._filler_text_ur
+        return self._filler_text_en
+
     async def on_enter(self) -> None:
         # Greet directly: this must NOT go through llm_node, or the Java
         # brain would record a phantom turn before the caller says anything.
+        if self._outbound_reason:
+            # P4.1: outbound call - the callee may still be joining when the
+            # session starts. Greeting an empty room means nobody hears it,
+            # so wait (bounded) for the first remote participant.
+            await self._wait_for_callee()
         self.session.say(self._greeting)
+
+    async def _wait_for_callee(self, timeout_s: float = 45.0) -> None:
+        """P4.1: wait for the dialed party to join the room.
+
+        Bounded poll on remote_participants; on timeout the greeting plays
+        anyway (voicemail / late-join edge) rather than leaving dead air.
+        Never raises.
+        """
+        try:
+            room = self.session.room_io.room
+            deadline = time.monotonic() + timeout_s
+            while not room.remote_participants and time.monotonic() < deadline:
+                await asyncio.sleep(0.5)
+        except Exception:
+            logger.debug("outbound callee wait failed; greeting anyway", exc_info=True)
 
     @staticmethod
     def _user_text(chat_ctx: llm.ChatContext) -> str:
@@ -1207,31 +1540,141 @@ class VoxTicketAgent(Agent):
             self._session_id, len(user_text),
         )
         voice_locked = False
-        yielded_any = False
+        yielded_any = False        # any chunk at all (filler or brain): tts_node will run
+        brain_yielded_any = False  # brain content: drives apology + voice-lock source + TTFT
+        filler_yielded = False
         timing.t_brain_start = time.perf_counter()
+        # P0.6: one idempotency key per LOGICAL turn (not per POST attempt),
+        # so the Java side can dedupe a retried turn that already committed.
+        idempotency_key = uuid.uuid4().hex
+        self._publish_turn_state(self._turn_seq, "thinking")
+        stream = self._brain.turn_stream(
+            self._session_id, user_text, traceparent=traceparent,
+            customer_phone=self._caller_phone(),
+            idempotency_key=idempotency_key,
+            on_429=lambda attempt: setattr(timing, "brain_429_attempts", attempt),
+        )
+        # P0.3: hold the generator so cancellation can close it
+        # deterministically (aclose) instead of leaving it to the event
+        # loop's asyncgen GC finalizer.
+        next_chunk = asyncio.ensure_future(stream.__anext__())
+        # P0.4: the filler timer races the first brain content. It fires at
+        # most once; brain content arriving first leaves it unheard.
+        filler_timer: asyncio.Future | None = None
+        if self._filler_after_s and self._filler_after_s > 0:
+            filler_timer = asyncio.ensure_future(asyncio.sleep(self._filler_after_s))
+        # P1.4: mid-stream stall watchdog. Armed after the first brain delta
+        # and reset on every delta; fires when deltas stop mid-sentence.
+        stall_timer: asyncio.Future | None = None
+
+        async def _abort_stream(chunk_task: asyncio.Task, brain_stream) -> None:
+            """Deterministically tear down the brain stream (P0.3/P1.4).
+
+            Cancel the in-flight __anext__ and WAIT for the generator to
+            unwind (its `async with` closes the HTTP stream), then aclose()
+            as a no-op safeguard. Never raises.
+
+            NOTE: aclose() must run AFTER the pending __anext__ finishes -
+            calling it while the generator is already running raises
+            RuntimeError, and merely cancelling without awaiting leaves the
+            unwind to a later event-loop tick (nondeterministic).
+            """
+            chunk_task.cancel()
+            try:
+                await chunk_task
+            except asyncio.CancelledError:
+                pass  # expected: the in-flight chunk was aborted
+            except Exception:
+                pass  # generator already finished (StopAsyncIteration/BrainError)
+            try:
+                await brain_stream.aclose()
+            except Exception:
+                logger.debug("stream aclose failed", exc_info=True)
         try:
             try:
-                async for delta in self._brain.turn_stream(
-                        self._session_id, user_text, traceparent=traceparent,
-                        customer_phone=self._caller_phone()):
-                    if timing.t_brain_first_delta is None and delta and delta.strip():
-                        # Java brain TTFT: first text out of the SSE stream.
-                        timing.t_brain_first_delta = time.perf_counter()
-                    if not voice_locked and delta.strip():
-                        # First real content decides the turn's TTS voice.
-                        self._next_voice = (self._voice_ur, "ur") if is_urdu(delta) else (self._voice_en, "en")
-                        voice_locked = True
-                        logger.info("llm_node: TTS voice locked voice_id=%s language=%s (first delta %r)",
-                                    self._next_voice[0], self._next_voice[1], delta[:60])
-                    yielded_any = True
-                    yield delta
+                while True:
+                    wait_for = {next_chunk}
+                    if filler_timer is not None:
+                        wait_for.add(filler_timer)
+                    if stall_timer is not None:
+                        wait_for.add(stall_timer)
+                    done, _ = await asyncio.wait(wait_for, return_when=asyncio.FIRST_COMPLETED)
+                    if filler_timer is not None and filler_timer in done:
+                        filler_timer = None
+                        if not brain_yielded_any and not filler_yielded:
+                            filler_text = self._filler_text(stt_language)
+                            if filler_text and filler_text.strip():
+                                filler_yielded = True
+                                yielded_any = True
+                                logger.info("llm_node: no brain content in %.1fs; yielding filler",
+                                            self._filler_after_s)
+                                # Exactly one separating space: env values are
+                                # stripped by load_config, and brain deltas
+                                # must not glue onto the filler's last word.
+                                yield filler_text.rstrip() + " "
+                    if next_chunk in done:
+                        try:
+                            delta = next_chunk.result()
+                        except StopAsyncIteration:
+                            break
+                        if timing.t_brain_first_delta is None and delta and delta.strip():
+                            # Java brain TTFT: first text out of the SSE stream.
+                            # (The filler never counts: it is worker speech, not
+                            # brain output.)
+                            timing.t_brain_first_delta = time.perf_counter()
+                            self._publish_turn_state(self._turn_seq, "first_audio")
+                        if not voice_locked and delta.strip():
+                            # First real content decides the turn's TTS voice.
+                            # (The filler never locks the voice: it is always
+                            # superseded by the brain's language choice.)
+                            self._next_voice = (self._voice_ur, "ur") if is_urdu(delta) else (self._voice_en, "en")
+                            voice_locked = True
+                            logger.info("llm_node: TTS voice locked voice_id=%s language=%s (first delta %r)",
+                                        self._next_voice[0], self._next_voice[1], delta[:60])
+                        brain_yielded_any = True
+                        yielded_any = True
+                        # P1.4: (re)arm the stall watchdog on every brain delta.
+                        if self._stall_after_s and self._stall_after_s > 0:
+                            if stall_timer is not None and not stall_timer.done():
+                                stall_timer.cancel()
+                            stall_timer = asyncio.ensure_future(asyncio.sleep(self._stall_after_s))
+                        yield delta
+                        next_chunk = asyncio.ensure_future(stream.__anext__())
+                        continue
+                    if stall_timer is not None and stall_timer in done:
+                        stall_timer = None
+                        # P1.4: deltas stopped mid-stream. Say so honestly and
+                        # end the turn - the partial reply plus the repair
+                        # phrase is the turn's output. The stream is closed
+                        # deterministically, like the cancel path.
+                        timing.stalled = True
+                        timing.aborted = True
+                        logger.warning("llm_node: brain stalled mid-stream; yielding repair")
+                        await _abort_stream(next_chunk, stream)
+                        yield self._stall_repair
+                        break
+            except BrainSessionBusyError as exc:
+                # P0.5: the 429s were exhausted - the utterance never reached
+                # Java. Say so honestly and ask for a repeat; never the
+                # generic service apology.
+                timing.aborted = True
+                timing.lost_utterance = True
+                timing.error = f"{type(exc).__name__}: {str(exc)[:120]}"
+                logger.error("Java brain session stayed busy; utterance lost: %s", exc)
+                if not brain_yielded_any:
+                    yield (
+                        "I missed that while finishing your previous request. "
+                        "Could you please say it again?"
+                    )
             except BrainError as exc:
                 timing.aborted = True
                 timing.error = f"{type(exc).__name__}: {str(exc)[:120]}"
                 logger.error("Java brain turn failed: %s", exc)
-                if not yielded_any:
+                if not brain_yielded_any:
                     # Nothing spoken yet: the apology can still take the turn.
                     # After speech started, partial audio can't be unsaid.
+                    # (A filler already spoken does not suppress this: the
+                    # caller heard "one moment…" and deserves the failure.)
                     yield (
                         "Sorry, I'm having trouble reaching the service right now. "
                         "Please try again in a moment."
@@ -1244,8 +1687,21 @@ class VoxTicketAgent(Agent):
             timing.aborted = True
             self._barge_in_count += 1
             logger.info("llm_node: turn cancelled (barge-in), partial turn recorded")
+            # P0.3: deterministic teardown - abort the in-flight chunk, wait
+            # for the stream generator to unwind, then close it explicitly.
+            if filler_timer is not None:
+                filler_timer.cancel()
+            if stall_timer is not None:
+                stall_timer.cancel()
+            await _abort_stream(next_chunk, stream)
             raise
         finally:
+            if filler_timer is not None and not filler_timer.done():
+                filler_timer.cancel()
+            if stall_timer is not None and not stall_timer.done():
+                stall_timer.cancel()
+            self._publish_turn_state(
+                self._turn_seq, "aborted" if (timing.barge_in or timing.aborted) else "done")
             timing.t_turn_end = time.perf_counter()
             if not voice_locked:
                 self._next_voice = (self._voice_en, "en")
@@ -1262,7 +1718,8 @@ class VoxTicketAgent(Agent):
             # the NEXT turn's sttLatencyMs.
             if self._stt_final is not None:
                 self._stt_final.take()
-            logger.info("llm_node: brain stream ended (yielded_any=%s)", yielded_any)
+            logger.info("llm_node: brain stream ended (yielded_any=%s, brain_yielded_any=%s)",
+                        yielded_any, brain_yielded_any)
 
     async def tts_node(self, text, model_settings):
         """Apply the voice stashed by llm_node, then run the default node.
@@ -1338,6 +1795,128 @@ def _tts_model_name(cfg: Config) -> str:
 
 
 # --------------------------------------------------------------------------
+# P3.3: telephony (SIP) + P3.2: call recording. Both are strictly opt-in:
+# with empty SIP_TRUNK_ID and VOICE_RECORDING_ENABLED unset, these
+# functions do nothing and the WebRTC demo path is untouched.
+# --------------------------------------------------------------------------
+
+def telephony_metadata(cfg: Config) -> dict:
+    """Telephony metadata to attach to the room when SIP is configured.
+
+    Returns {} when SIP_TRUNK_ID is empty (disabled): fully inert - no
+    logging beyond debug, no room metadata, no behavioral difference
+    anywhere. When a trunk is configured, returns the metadata the agent
+    publishes on its participant so the demo/admin UI can tell a PSTN
+    call from a WebRTC one.
+    """
+    trunk = (cfg.sip_trunk_id or "").strip()
+    if not trunk:
+        return {}
+    return {
+        "telephony": "sip",
+        "sip_trunk_id": trunk,
+        "sip_dispatch_rule": (cfg.sip_dispatch_rule or "").strip(),
+    }
+
+
+# --------------------------------------------------------------------------
+# P4.1: outbound dial-out context. outbound.py mints a room whose metadata
+# carries {"voxticket_outbound": {"reason", "to", "greeting"}}; the entrypoint
+# reads it here so the agent greets with the reason context and waits for
+# the callee before speaking. Returns None for anything else (inbound
+# WebRTC/SIP calls, garbage metadata) - never raises.
+# --------------------------------------------------------------------------
+
+OUTBOUND_METADATA_KEY = "voxticket_outbound"
+
+
+def parse_outbound_context(metadata: str | None) -> dict | None:
+    try:
+        if not metadata:
+            return None
+        payload = json.loads(metadata)
+        if not isinstance(payload, dict):
+            return None
+        ctx = payload.get(OUTBOUND_METADATA_KEY)
+        if not isinstance(ctx, dict):
+            return None
+        reason = str(ctx.get("reason") or "").strip()
+        greeting = str(ctx.get("greeting") or "").strip()
+        if not reason or not greeting:
+            return None
+        return {"reason": reason, "to": str(ctx.get("to") or ""), "greeting": greeting}
+    except Exception:
+        logger.debug("outbound context parse failed", exc_info=True)
+        return None
+
+
+def _parse_s3_egress_url(url: str) -> tuple[str, str]:
+    """Parse VOICE_RECORDING_EGRESS_URL (s3://bucket/optional/prefix).
+
+    Returns (bucket, prefix). Raises ConfigError naming the variable when
+    the URL is missing or not an s3:// URL - recording is fail-fast at
+    startup, never mid-call.
+    """
+    dest = (url or "").strip()
+    if not dest.lower().startswith("s3://"):
+        raise ConfigError(
+            "VOICE_RECORDING_EGRESS_URL must be an s3:// URL "
+            f"(e.g. s3://my-bucket/voxticket-recordings), got {dest!r}"
+        )
+    rest = dest[5:].strip("/")
+    bucket, _, prefix = rest.partition("/")
+    if not bucket:
+        raise ConfigError(
+            f"VOICE_RECORDING_EGRESS_URL has no bucket: {dest!r}"
+        )
+    return bucket, prefix
+
+
+async def _start_call_recording(cfg: Config, room_name: str) -> None:
+    """Start LiveKit room-composite egress for this call (P3.2).
+
+    Called once per call from entrypoint, after session.start. Inert when
+    VOICE_RECORDING_ENABLED is false (the default): no API call, no log.
+    Best-effort otherwise: any failure is logged and the call continues
+    unrecorded - recording must never fail a customer call. The recording
+    is audio-only (voice calls carry no video) and lands in the S3
+    destination from VOICE_RECORDING_EGRESS_URL; storage credentials come
+    from VOICE_RECORDING_S3_* env vars (validated fail-fast in
+    load_config) and are never hardcoded or logged.
+    """
+    if not cfg.recording_enabled:
+        return
+    try:
+        bucket, prefix = _parse_s3_egress_url(cfg.recording_egress_url)
+        region = (os.environ.get("VOICE_RECORDING_S3_REGION") or "").strip()
+        access_key = (os.environ.get("VOICE_RECORDING_S3_ACCESS_KEY") or "").strip()
+        secret_key = (os.environ.get("VOICE_RECORDING_S3_SECRET_KEY") or "").strip()
+        # Positional (url, api key, api secret) matching LiveKitAPI's
+        # signature order.
+        lkapi = livekit_api.LiveKitAPI(
+            cfg.livekit_url, cfg.livekit_api_key, cfg.livekit_api_secret
+        )
+        try:
+            s3 = livekit_api.S3Upload(
+                bucket=bucket, region=region,
+                access_key=access_key, secret=secret_key,
+            )
+            filepath = f"{prefix}/voxticket-{{room_name}}-{{time}}.ogg".lstrip("/")
+            output = livekit_api.EncodedFileOutput(filepath=filepath, s3=s3)
+            request = livekit_api.RoomCompositeEgressRequest(
+                room_name=room_name, audio_only=True, file_outputs=[output],
+            )
+            await lkapi.egress.start_room_composite_egress(request)
+            logger.info("call recording started: room=%s dest=s3://%s/%s",
+                        room_name, bucket, filepath)
+        finally:
+            await lkapi.aclose()
+    except Exception:
+        logger.warning("call recording failed to start; continuing unrecorded",
+                       exc_info=True)
+
+
+# --------------------------------------------------------------------------
 # Entrypoint
 # --------------------------------------------------------------------------
 
@@ -1379,10 +1958,28 @@ async def entrypoint(ctx: agents.JobContext):
     room_name = ctx.room.name
     call_started_at = datetime.now(timezone.utc).isoformat()
 
+    # P3.3: SIP telephony. Empty trunk id = disabled: nothing is logged here
+    # and every line below behaves exactly as the WebRTC demo path. When a
+    # trunk is configured, the trunk is logged at startup (per call) and
+    # the telephony metadata is published on the agent's participant after
+    # session.start so the demo/admin UI can tell a PSTN call from WebRTC.
+    # Live verification needs a Twilio account - see docs/SIP_SETUP.md.
+    telephony = telephony_metadata(cfg)
+    if telephony:
+        logger.info("SIP telephony enabled: trunk_id=%s dispatch_rule=%s",
+                    cfg.sip_trunk_id,
+                    cfg.sip_dispatch_rule or "(none configured)")
+
     stt_final = SttFinalTracker()
 
     brain = VoxTicketBrain(cfg.voxticket_turn_url, cfg.brain_timeout_s,
                            stream_url=cfg.voxticket_turn_stream_url)
+    # P4.1: outbound dial-out context from the room metadata (minted by
+    # outbound.py). Overrides the greeting and makes the agent wait for the
+    # callee before speaking; inbound calls are unaffected (None here).
+    outbound_ctx = parse_outbound_context(getattr(ctx.room, "metadata", None))
+    greeting = outbound_ctx["greeting"] if outbound_ctx else cfg.greeting
+    outbound_reason = outbound_ctx["reason"] if outbound_ctx else None
     # Urdu-aware sentence chunking: the stock tokenizers don't split on
     # ۔/؟, which would delay all Urdu audio until the full reply arrives.
     # Passed to providers that accept a tokenizer hook (Cartesia,
@@ -1395,7 +1992,8 @@ async def entrypoint(ctx: agents.JobContext):
         voices=tts_setup.voices,
         voice_en=tts_setup.voice_en,
         voice_ur=tts_setup.voice_ur,
-        greeting=cfg.greeting,
+        greeting=greeting,
+        outbound_reason=outbound_reason,
         trace_id=trace_id,
         telemetry=telemetry,
         stt_final=stt_final,
@@ -1403,6 +2001,11 @@ async def entrypoint(ctx: agents.JobContext):
         stt_model=_stt_model_name(cfg),
         tts_provider=cfg.tts_provider,
         tts_model=_tts_model_name(cfg),
+        filler_after_s=cfg.filler_after_s,
+        filler_text_en=cfg.filler_text_en,
+        filler_text_ur=cfg.filler_text_ur,
+        stall_after_s=cfg.stall_after_s,
+        stall_repair=cfg.stall_repair,
     )
 
     session = AgentSession(
@@ -1527,6 +2130,22 @@ async def entrypoint(ctx: agents.JobContext):
             ),
         ),
     )
+
+    # P3.3: the agent's room options carry the telephony metadata - best
+    # effort, SIP calls only. A WebRTC call never reaches this branch.
+    if telephony:
+        try:
+            await session.room_io.room.local_participant.set_metadata(
+                json.dumps(telephony))
+            logger.debug("telephony metadata published on room %s", room_name)
+        except Exception:
+            logger.warning("telephony metadata publish failed; continuing",
+                           exc_info=True)
+
+    # P3.2: call recording via LiveKit room-composite egress. The hook is
+    # inert unless VOICE_RECORDING_ENABLED=true, and best-effort: a failed
+    # start logs and the call continues unrecorded.
+    await _start_call_recording(cfg, room_name)
 
 
 if __name__ == "__main__":

@@ -68,7 +68,8 @@ public class TurnTraceAdminService {
                 .map(m -> new TurnTraceDto.ToolCall(
                         str(m.get("name")),
                         str(m.get("result")),
-                        num(m.get("durationMs"))))
+                        num(m.get("durationMs")),
+                        str(m.get("sideEffect"))))
                 .toList();
         return new TurnTraceDto(
                 sessionId,
@@ -80,6 +81,7 @@ public class TurnTraceAdminService {
                 t.getEndedAt(),
                 t.getOutcome(),
                 t.isAborted(),
+                t.getAbortReason(),
                 t.getNormalizeMs(),
                 t.getGuardMs(),
                 t.getRoutingMs(),
@@ -102,7 +104,9 @@ public class TurnTraceAdminService {
                 t.getModel(),
                 t.getPromptTokens(),
                 t.getCompletionTokens(),
+                t.getPromptVersion(),
                 t.getRagCacheHit(),
+                t.getRagSkipped(),
                 ragDocs,
                 tools,
                 t.getProcedureType(),

@@ -126,6 +126,7 @@ public class VoiceTelemetryController {
                 turn.ttsProvider(),
                 turn.ttsModel(),
                 turn.error(),
+                turn.stalled(),
                 Instant.now()));
     }
 }

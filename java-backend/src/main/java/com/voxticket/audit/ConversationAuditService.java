@@ -4,6 +4,7 @@ import com.voxticket.conversation.ConversationSession;
 import com.voxticket.conversation.MessageRole;
 import com.voxticket.observability.TraceIds;
 import com.voxticket.observability.TurnTrace;
+import com.voxticket.observability.OtpRedactor;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import java.time.Instant;
 import java.util.function.Supplier;
@@ -92,14 +93,20 @@ public class ConversationAuditService {
 
     /** Enqueues one conversation message (full text; the TEXT column is not truncated). */
     public void recordMessage(ConversationSession session, int turnNumber, MessageRole role, String text) {
+        // P3.2: OTP digits must never land in recorded transcripts - mask
+        // OTP-like spans at the audit boundary, following the existing
+        // redact-before-persist pattern.
+        String safeText = OtpRedactor.mask(text);
         publish(() -> new AuditEvent.MessageRecord(
-                session.getSessionId(), turnNumber, role.name(), text, currentTraceId(), Instant.now()));
+                session.getSessionId(), turnNumber, role.name(), safeText, currentTraceId(), Instant.now()));
     }
 
     /** Enqueues one typed audit event; detail is truncated to 500 chars (existing contract). */
     public void recordEvent(ConversationSession session, Integer turnNumber, ConversationEventType type, String detail) {
+        // P3.2: tool params/results flow through event details - mask
+        // OTP-like spans here as well.
         publish(() -> new AuditEvent.EventRecord(
-                session.getSessionId(), turnNumber, type.name(), truncate(detail), currentTraceId(), Instant.now()));
+                session.getSessionId(), turnNumber, type.name(), truncate(OtpRedactor.mask(detail)), currentTraceId(), Instant.now()));
     }
 
     private void publish(Supplier<AuditEvent> eventSupplier) {

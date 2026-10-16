@@ -55,6 +55,14 @@ public class VoiceCallTurnMetricEntity {
     @Column(name = "error")
     private String error;
 
+    /**
+     * P1.4: the worker's mid-stream stall watchdog fired on this turn (the
+     * caller heard the repair phrase). Nullable for rows written before the
+     * V13 column existed; analytics treat null as false.
+     */
+    @Column(name = "stalled")
+    private Boolean stalled;
+
     @Column(name = "created_at")
     private Instant createdAt;
 
@@ -107,6 +115,10 @@ public class VoiceCallTurnMetricEntity {
 
     public String getError() {
         return error;
+    }
+
+    public Boolean getStalled() {
+        return stalled;
     }
 
     public Instant getCreatedAt() {

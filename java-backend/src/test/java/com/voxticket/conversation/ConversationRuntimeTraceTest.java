@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.when;
+import com.voxticket.agent.PromptVersion;
 
 import com.voxticket.agent.AgentResponse;
 import com.voxticket.agent.AiProvider;
@@ -17,12 +19,15 @@ import com.voxticket.agent.ModelTier;
 import com.voxticket.agent.ProviderChatModelFactory;
 import com.voxticket.agent.ProviderProperties;
 import com.voxticket.agent.SanitizedToolExecutionExceptionProcessor;
+import com.voxticket.agent.PromptTemplateService;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.agent.TierChatClientRegistry;
 import com.voxticket.agent.TierChatProperties;
 import com.voxticket.agent.ToolCallLimitsProperties;
 import com.voxticket.audit.AuditEventBus;
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.PromptProperties;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ExplicitConfirmationParser;
@@ -91,6 +96,13 @@ class ConversationRuntimeTraceTest {
     private JdbcTemplate jdbc;
 
     private ConversationRuntime runtimeWith(SupportAgent supportAgent) {
+        if (supportAgent != null && mockingDetails(supportAgent).isMock()) {
+            // P3.1: the runtime pins the prompt-template identity on every
+            // trace; stub it for mock agents (the real agent serves it from
+            // its PromptTemplateService).
+            when(supportAgent.currentPromptVersion())
+                    .thenReturn(new PromptVersion("v1", "system", "test-content-hash"));
+        }
         return new ConversationRuntime(
                 new InMemorySessionStore(),
                 mock(IdentityService.class),
@@ -141,7 +153,7 @@ class ConversationRuntimeTraceTest {
         return new SupportAgent(registry, contextBuilder, modelSelector,
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
                 mock(ProcedureCoordinator.class), turnMetrics, auditService,
-                new ConversationLanguageResolver());
+                new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
     }
 
     private Map<String, Object> traceRow(String sessionId) {
@@ -150,7 +162,8 @@ class ConversationRuntimeTraceTest {
                         + " t.normalize_ms, t.guard_ms, t.routing_ms, t.llm_ttft_ms, t.llm_total_ms,"
                         + " t.guard_suspicious, t.guard_category, t.guard_implementation, t.guard_fallback,"
                         + " t.language, t.intent, t.routing_strategy, t.tier, t.routing_reason,"
-                        + " t.provider, t.model, t.prompt_tokens, t.completion_tokens, t.error_code"
+                        + " t.provider, t.model, t.prompt_tokens, t.completion_tokens, t.error_code,"
+                        + " t.prompt_version, t.prompt_content_hash"
                         + " FROM conversation_turn_traces t"
                         + " JOIN conversation_sessions s ON s.id = t.session_id"
                         + " WHERE s.session_id = ?",
@@ -214,5 +227,26 @@ class ConversationRuntimeTraceTest {
         assertThat(row.get("llm_total_ms")).isNotNull();
         assertThat(row.get("intent")).isEqualTo("general_query");
         assertThat(row.get("trace_id")).isNotNull();
+    }
+
+    /**
+     * P3.1: every turn trace pins the prompt-template identity (version +
+     * content hash), so a trace identifies the system prompt byte-for-byte.
+     */
+    @Test
+    void tracePersistsPromptVersionAndContentHash() {
+        String sessionId = "trace-prompt-" + UUID.randomUUID();
+        var agent = mock(SupportAgent.class);
+        when(agent.respond(any(), any()))
+                .thenReturn(new AgentResponse("ok", AgentResponse.Outcome.SUCCESS));
+        var runtime = runtimeWith(agent);
+
+        runtime.processTurn(new UserTurn(sessionId, Channel.CHAT,
+                "Where is my order?", null, Instant.now(), Map.of()));
+        bus.flush();
+
+        Map<String, Object> row = traceRow(sessionId);
+        assertThat(row.get("prompt_version")).isEqualTo("v1");
+        assertThat(row.get("prompt_content_hash")).isEqualTo("test-content-hash");
     }
 }

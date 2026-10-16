@@ -172,6 +172,33 @@ export interface VoiceCallDetail {
   turns: VoiceTurnMetric[];
 }
 
+/* ---------------- P4: supervisor live monitor + analytics ---------------- */
+
+/** One in-progress voice call. All fields optional: the backend P4 shape may
+ *  evolve; the UI renders '—' for anything missing instead of crashing. */
+export interface LiveVoiceCall {
+  sessionId: string;
+  room?: string | null;
+  channel?: string | null;
+  turnCount?: number | null;
+  procedure?: string | null;
+  pendingStackDepth?: number | null;
+  lastInterruption?: string | null;
+  startedAt?: string | null;
+}
+
+/** Aggregate voice analytics summary. Rates are 0..1 fractions. */
+export interface VoiceAnalyticsSummary {
+  calls?: number | null;
+  completionRate?: number | null;
+  bargeInRate?: number | null;
+  stallRate?: number | null;
+  clarificationRate?: number | null;
+  handoffRate?: number | null;
+  avgTurns?: number | null;
+  topIntents?: { intent: string; count: number }[] | null;
+}
+
 /* ---------------- audit ---------------- */
 
 export interface AuditEvent {

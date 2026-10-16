@@ -48,6 +48,9 @@ public class TurnTraceRecordEntity extends BaseEntity {
     @Column(name = "aborted", nullable = false)
     private boolean aborted;
 
+    @Column(name = "abort_reason", length = 30)
+    private String abortReason;
+
     @Column(name = "normalize_ms")
     private Double normalizeMs;
 
@@ -117,6 +120,15 @@ public class TurnTraceRecordEntity extends BaseEntity {
     @Column(name = "rag_cache_hit")
     private Boolean ragCacheHit;
 
+    @Column(name = "rag_skipped")
+    private Boolean ragSkipped;
+
+    @Column(name = "prompt_version", length = 20)
+    private String promptVersion;
+
+    @Column(name = "prompt_content_hash", length = 64)
+    private String promptContentHash;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "rag_docs", columnDefinition = "jsonb")
     private String ragDocs;
@@ -157,6 +169,7 @@ public class TurnTraceRecordEntity extends BaseEntity {
     public Instant getEndedAt() { return endedAt; }
     public String getOutcome() { return outcome; }
     public boolean isAborted() { return aborted; }
+    public String getAbortReason() { return abortReason; }
     public Double getNormalizeMs() { return normalizeMs; }
     public Double getGuardMs() { return guardMs; }
     public Double getRoutingMs() { return routingMs; }
@@ -180,6 +193,9 @@ public class TurnTraceRecordEntity extends BaseEntity {
     public Integer getPromptTokens() { return promptTokens; }
     public Integer getCompletionTokens() { return completionTokens; }
     public Boolean getRagCacheHit() { return ragCacheHit; }
+    public Boolean getRagSkipped() { return ragSkipped; }
+    public String getPromptVersion() { return promptVersion; }
+    public String getPromptContentHash() { return promptContentHash; }
     public String getRagDocs() { return ragDocs; }
     public String getTools() { return tools; }
     public String getProcedureType() { return procedureType; }

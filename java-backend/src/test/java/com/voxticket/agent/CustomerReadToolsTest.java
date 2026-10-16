@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import com.voxticket.identity.CustomerIdentity;
@@ -35,7 +36,8 @@ class CustomerReadToolsTest {
     private final CustomerOrderQueryService queryService = mock(CustomerOrderQueryService.class);
     private final CustomerIdentity identity = new CustomerIdentity(UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, "+923001234567");
     private final ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
-    private final CustomerReadTools tools = new CustomerReadTools(queryService, identity, session, mock(TurnMetrics.class), mock(ConversationAuditService.class));
+    private final CustomerReadTools tools = new CustomerReadTools(queryService, identity, session, mock(TurnMetrics.class), mock(ConversationAuditService.class),
+            new TimeoutProperties(10, 8, 10));
 
     private OrderSupportContext sampleContext() {
         CancellationCapabilityView cancellation = new CancellationCapabilityView(true, null, "REFUND_REQUIRED");

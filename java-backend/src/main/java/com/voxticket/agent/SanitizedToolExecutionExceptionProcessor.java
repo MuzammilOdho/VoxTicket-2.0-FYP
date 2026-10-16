@@ -1,5 +1,6 @@
 package com.voxticket.agent;
 
+import com.voxticket.conversation.TurnAbortedException;
 import com.voxticket.observability.TurnMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,12 @@ public class SanitizedToolExecutionExceptionProcessor implements ToolExecutionEx
     public String process(ToolExecutionException exception) {
         String toolName = exception.getToolDefinition() != null ? exception.getToolDefinition().name() : "unknown";
         Throwable cause = exception.getCause();
+        // P1.2: a preempted turn's abort must never become a sanitized tool
+        // result - unwrap and rethrow so the runtime drops the turn instead
+        // of letting a dead turn keep talking to the model.
+        if (cause instanceof TurnAbortedException aborted) {
+            throw aborted;
+        }
         // Server-side only: the model never sees this.
         log.warn("event=tool_execution_failed tool={} errorType={}", toolName,
                 cause != null ? cause.getClass().getSimpleName() : exception.getClass().getSimpleName());

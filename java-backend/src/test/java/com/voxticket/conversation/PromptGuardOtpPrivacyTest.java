@@ -13,6 +13,7 @@ import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.agent.AgentResponse;
+import com.voxticket.agent.PromptVersion;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ExplicitConfirmationParser;
@@ -79,6 +80,7 @@ class PromptGuardOtpPrivacyTest {
                 new ConversationLanguageResolver(), new DirectProcedureResponseRenderer());
         when(supportAgent.respond(any(), any()))
                 .thenReturn(new AgentResponse("stubbed agent response", AgentResponse.Outcome.SUCCESS));
+        when(supportAgent.currentPromptVersion()).thenReturn(new PromptVersion("v1", "system", "test-content-hash"));
         when(supportAgent.respondGuarded(any(), any()))
                 .thenReturn(new AgentResponse("stubbed guarded agent response", AgentResponse.Outcome.SUCCESS));
         when(identityService.resolveByPhone(any()))
@@ -100,7 +102,7 @@ class PromptGuardOtpPrivacyTest {
     @Test
     void promptGuardNeverReceivesOtpPlaintextWhileAwaitingVerification() {
         startAwaitingVerification("otp-privacy-1");
-        when(procedureCoordinator.submitVerificationCode(any(), eq(OTP)))
+        when(procedureCoordinator.submitVerificationCode(any(), eq(OTP), any()))
                 .thenReturn(ProcedureOutcome.ok("CANCELLED", "ok", Map.of("orderReference", "ORD-10001")));
 
         AssistantTurn response = runtime.processTurn(
@@ -113,7 +115,7 @@ class PromptGuardOtpPrivacyTest {
         assertThat(guard.seen).anySatisfy(input -> assertThat(input).contains("[verification code provided]"));
 
         // The OTP plaintext still reached the local verification logic.
-        verify(procedureCoordinator).submitVerificationCode(any(), eq(OTP));
+        verify(procedureCoordinator).submitVerificationCode(any(), eq(OTP), any());
         assertThat(response.metadata()).containsEntry("orderReference", "ORD-10001");
     }
 

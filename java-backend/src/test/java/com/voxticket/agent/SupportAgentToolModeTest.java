@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.PromptProperties;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.DialogueStateTools;
 import com.voxticket.observability.TurnMetrics;
 import com.voxticket.procedure.ProcedureControlTools;
 import com.voxticket.procedure.ProcedureCoordinator;
@@ -37,7 +40,7 @@ class SupportAgentToolModeTest {
             mock(ProcedureCoordinator.class),
             mock(TurnMetrics.class),
             mock(ConversationAuditService.class),
-            new ConversationLanguageResolver());
+            new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
 
     private final ConversationSession session = ConversationSession.newSession("tool-mode", Channel.CHAT);
 
@@ -68,34 +71,37 @@ class SupportAgentToolModeTest {
     }
 
     @Test
-    void guardedModeRegistersTheExactFourToolGroups() {
+    void guardedModeRegistersTheExactFiveToolGroups() {
         Object[] tools = supportAgent.toolObjectsForMode(ToolAccessMode.GUARDED, session);
 
-        assertThat(tools).hasSize(4);
+        assertThat(tools).hasSize(5);
         assertThat(tools).anyMatch(t -> t instanceof CustomerReadTools);
         assertThat(tools).anyMatch(t -> t instanceof PolicyKnowledgeTools);
+        assertThat(tools).anyMatch(t -> t instanceof DialogueStateTools);
         assertThat(tools).anyMatch(t -> t instanceof ProcedureRequestTools);
         assertThat(tools).anyMatch(t -> t instanceof ProcedureControlTools);
     }
 
     @Test
-    void fullModeRegistersExactlyThreeToolGroups() {
+    void fullModeRegistersExactlyFourToolGroups() {
         Object[] tools = supportAgent.toolObjectsForMode(ToolAccessMode.FULL, session);
 
-        assertThat(tools).hasSize(3);
+        assertThat(tools).hasSize(4);
         assertThat(tools).anyMatch(t -> t instanceof CustomerReadTools);
         assertThat(tools).anyMatch(t -> t instanceof PolicyKnowledgeTools);
+        assertThat(tools).anyMatch(t -> t instanceof DialogueStateTools);
         assertThat(tools).anyMatch(t -> t instanceof ProcedureRequestTools);
         assertThat(tools).noneMatch(t -> t instanceof ProcedureControlTools);
     }
 
     @Test
-    void readOnlyModeRegistersExactlyTwoToolGroups() {
+    void readOnlyModeRegistersExactlyThreeToolGroups() {
         Object[] tools = supportAgent.toolObjectsForMode(ToolAccessMode.READ_ONLY, session);
 
-        assertThat(tools).hasSize(2);
+        assertThat(tools).hasSize(3);
         assertThat(tools).anyMatch(t -> t instanceof CustomerReadTools);
         assertThat(tools).anyMatch(t -> t instanceof PolicyKnowledgeTools);
+        assertThat(tools).anyMatch(t -> t instanceof DialogueStateTools);
         assertThat(tools).noneMatch(t -> t instanceof ProcedureRequestTools);
         assertThat(tools).noneMatch(t -> t instanceof ProcedureControlTools);
     }

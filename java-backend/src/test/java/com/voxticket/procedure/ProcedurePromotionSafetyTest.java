@@ -577,14 +577,17 @@ class ProcedurePromotionSafetyTest {
                 .when(ownedOrderItemResolver).resolve(any(), any());
         ProcedureOutcome first = coordinator.startReturn(session, "ORD-10002", "red gadget", null, null);
         assertThat(first.code()).isEqualTo("PROCEDURE_DEFERRED");
-        // A different raw item on the same order is a different queued request.
+        // A different raw item on the same order is a different queued request -
+        // P2.2 stacks it instead of refusing.
         ProcedureOutcome second = coordinator.startReturn(session, "ORD-10002", "blue widget", null, null);
-        assertThat(second.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
+        assertThat(second.code()).isEqualTo("PROCEDURE_DEFERRED");
         // The identical raw request repeated is already deferred.
         ProcedureOutcome repeat = coordinator.startReturn(session, "ORD-10002", "red gadget", null, null);
         assertThat(repeat.code()).isEqualTo("ALREADY_DEFERRED");
-        // The first queued request was never overwritten.
-        assertThat(session.getDeferredIntent().orElseThrow().itemDisplayName()).isEqualTo("red gadget");
+        // Neither queued request was overwritten - LIFO order, newest on top.
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(2);
+        assertThat(session.getDeferredIntent().orElseThrow().itemDisplayName()).isEqualTo("blue widget");
+        assertThat(session.getDialogueState().getPendingRequests().get(1).itemDisplayName()).isEqualTo("red gadget");
     }
 
     @Test
@@ -862,5 +865,56 @@ class ProcedurePromotionSafetyTest {
         assertThat(coordinator.startClaim(claimSession, "ORD-10001", "Blue Widget", null).code())
                 .isEqualTo("ALREADY_PENDING");
         assertThat(coordinator.confirmActive(claimSession).code()).isEqualTo("CLAIM_FILED");
+    }
+
+    // ---- P2.2: the pending-request stack promotes LIFO ----
+
+    @Test
+    void stackedRequestsPromoteLifoWithObligationsTracked() {
+        addOrder("ORD-10003", "Green Gizmo", "SKU-10003");
+        ConversationSession session = session();
+        ProcedureOutcome claimStart = coordinator.startClaim(session, "ORD-10001", "Blue Widget", "I haven't received it");
+        assertThat(claimStart.code()).isEqualTo("CONFIRMATION_REQUIRED");
+        // Queue two requests behind the active claim: cancellation B, then
+        // return C on top.
+        assertThat(coordinator.startCancellation(session, "ORD-10002").code()).isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(coordinator.startReturn(session, "ORD-10003", "Green Gizmo", "damaged", "1").code())
+                .isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(2);
+        assertThat(session.getDialogueState().getObligations()).hasSize(2);
+
+        // Complete the active claim; promotion pops the TOP of the stack
+        // (the return on ORD-10003), not the first-queued cancellation.
+        assertThat(coordinator.confirmActive(session).code()).isEqualTo("CLAIM_FILED");
+        Optional<ProcedureOutcome> promoted = coordinator.promoteDeferredIntent(session);
+
+        assertThat(promoted).isPresent();
+        ProcedureState promotedActive = session.getActiveProcedure().orElseThrow();
+        assertThat(promotedActive.getType()).isEqualTo(ProcedureType.RETURN);
+        assertThat(promotedActive.getVerifiedTarget().orderNumber()).isEqualTo("ORD-10003");
+        // One request left underneath: the cancellation on ORD-10002.
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(1);
+        assertThat(session.getDeferredIntent().orElseThrow().type()).isEqualTo(ProcedureType.CANCELLATION);
+        // The resume obligation for the promoted request was discharged.
+        assertThat(session.getDialogueState().getObligations()).hasSize(1);
+    }
+
+    @Test
+    void withdrawalPopsTheTopAndDischargesItsObligation() {
+        addOrder("ORD-10003", "Green Gizmo", "SKU-10003");
+        ConversationSession session = session();
+        ProcedureOutcome claimStart = coordinator.startClaim(session, "ORD-10001", "Blue Widget", "I haven't received it");
+        assertThat(claimStart.code()).isEqualTo("CONFIRMATION_REQUIRED");
+        assertThat(coordinator.startCancellation(session, "ORD-10002").code()).isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(coordinator.startReturn(session, "ORD-10003", "Green Gizmo", "damaged", "1").code())
+                .isEqualTo("PROCEDURE_DEFERRED");
+
+        // "Never mind" withdraws the top of the stack only.
+        ProcedureOutcome withdrawn = coordinator.discardDeferredIntent(session);
+
+        assertThat(withdrawn.code()).isEqualTo("DEFERRED_INTENT_DISCARDED");
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(1);
+        assertThat(session.getDeferredIntent().orElseThrow().type()).isEqualTo(ProcedureType.CANCELLATION);
+        assertThat(session.getDialogueState().getObligations()).hasSize(1);
     }
 }

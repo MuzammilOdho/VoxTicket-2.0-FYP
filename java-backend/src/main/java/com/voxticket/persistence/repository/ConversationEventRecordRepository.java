@@ -34,4 +34,16 @@ public interface ConversationEventRecordRepository extends JpaRepository<Convers
             @Param("from") Instant from,
             @Param("to") Instant to,
             Pageable pageable);
+
+    /**
+     * P4.3: count of one event type in a window (clarification and
+     * handoff-offer rates). Read-only aggregate source; never used by
+     * business logic.
+     */
+    @Query("select count(e) from ConversationEventRecord e "
+            + "where e.eventType = :type and e.createdAt >= :from and e.createdAt < :to")
+    long countByTypeInWindow(
+            @Param("type") ConversationEventType type,
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }

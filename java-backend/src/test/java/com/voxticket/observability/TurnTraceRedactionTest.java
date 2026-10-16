@@ -2,6 +2,7 @@ package com.voxticket.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.voxticket.agent.ToolSideEffect;
 import java.time.Instant;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class TurnTraceRedactionTest {
                 .llmTotalMs(850.0)
                 .ragCacheHit(false)
                 .addRagDoc("policy-doc-1", "cancellation", 0.82)
-                .addToolCall("searchPolicy", "OK", 42.0)
+                .addToolCall("searchPolicy", "OK", 42.0, ToolSideEffect.READ_ONLY)
                 .procedureType("CANCELLATION")
                 .procedureStatus("AWAITING_VERIFICATION")
                 .procedureOutcomeCode("VERIFICATION_REQUIRED")

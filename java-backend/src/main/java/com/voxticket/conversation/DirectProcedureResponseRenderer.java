@@ -64,6 +64,10 @@ public class DirectProcedureResponseRenderer {
             case "REASON_REQUIRED" -> reasonRequired(lang, metadata);
             case "PROBLEM_REQUIRED" -> problemRequired(lang, metadata);
             case "QUANTITY_REQUIRED" -> quantityRequired(lang, metadata);
+            // P2.4: the model's own dialogue state flagged the reference as
+            // too shaky to act on. The clarification copy was authored
+            // deterministically at the gate and travels in metadata.
+            case "SLOT_CLARIFICATION_REQUIRED" -> slotClarificationRequired(lang, metadata);
             case "PROMOTION_FAILED" -> promotionFailed(lang);
             default -> {
                 log.warn("event=direct_response_unknown_code code={} language={}", outcome.code(), lang);
@@ -458,8 +462,20 @@ public class DirectProcedureResponseRenderer {
         };
     }
 
-    private String itemRequired(ConversationLanguage lang, Map<String, String> metadata) {
-        String orderRef = metadata.getOrDefault("orderReference", "").strip();
+    /**
+     * P2.4: renders the deterministic clarification copy authored at the
+     * mutation gate. The copy travels in metadata so the exact wording the
+     * policy chose is what the caller hears.
+     */
+    private String slotClarificationRequired(ConversationLanguage lang, Map<String, String> metadata) {
+        String copy = metadata.get("clarificationCopy");
+        if (copy != null && !copy.isBlank()) {
+            return copy;
+        }
+        return fallback(lang);
+    }
+
+    private String itemRequired(ConversationLanguage lang, Map<String, String> metadata) {        String orderRef = metadata.getOrDefault("orderReference", "").strip();
         StringBuilder candidates = new StringBuilder();
         for (int i = 1; i <= 5; i++) {
             String candidate = metadata.get("candidateItem." + i);

@@ -124,7 +124,7 @@ class ConversationSessionTest {
     }
 
     @Test
-    void deferredIntentSlotHoldsAtMostOneAndNeverOverwrites() {
+    void deferredIntentStackHoldsThreeLifoAndNeverOverwrites() {
         ConversationSession session = ConversationSession.newSession("s1", Channel.CHAT);
         var first = new com.voxticket.procedure.ProcedureState(
                 com.voxticket.procedure.ProcedureType.CLAIM, dummyRef(), java.util.Map.of(), IdentityAssurance.PHONE_MATCHED);
@@ -136,11 +136,23 @@ class ConversationSessionTest {
         var secondIntent = new com.voxticket.procedure.DeferredProcedureIntent(
                 com.voxticket.procedure.ProcedureType.RETURN, "ORD-10003", UUID.randomUUID(),
                 null, null, null, "1", null, Instant.now());
+        var thirdIntent = new com.voxticket.procedure.DeferredProcedureIntent(
+                com.voxticket.procedure.ProcedureType.CLAIM, "ORD-10004", UUID.randomUUID(),
+                null, null, null, "1", null, Instant.now());
+        var fourthIntent = new com.voxticket.procedure.DeferredProcedureIntent(
+                com.voxticket.procedure.ProcedureType.CANCELLATION, "ORD-10005", UUID.randomUUID(),
+                null, null, null, "1", null, Instant.now());
 
+        // P2.2: the stack holds 3 - pushes stack LIFO instead of refusing.
         session.setDeferredIntent(firstIntent);
+        session.setDeferredIntent(secondIntent);
+        session.setDeferredIntent(thirdIntent);
 
-        assertThatThrownBy(() -> session.setDeferredIntent(secondIntent)).isInstanceOf(IllegalStateException.class);
-        assertThat(session.getDeferredIntent()).contains(firstIntent);
+        // The fourth push refuses: max depth reached, nothing overwritten.
+        assertThatThrownBy(() -> session.setDeferredIntent(fourthIntent)).isInstanceOf(IllegalStateException.class);
+        assertThat(session.getDeferredIntent()).contains(thirdIntent);
+        assertThat(session.getDialogueState().getPendingRequests())
+                .containsExactly(thirdIntent, secondIntent, firstIntent);
         assertThat(session.getActiveProcedure()).contains(first);
     }
 

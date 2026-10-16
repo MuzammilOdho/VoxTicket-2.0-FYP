@@ -98,12 +98,12 @@ class VoiceTelemetrySecretTest {
                            "sttLatencyMs":120.5,"brainTtftMs":800.0,"ttsFirstAudioMs":300.25,"e2eMs":1500.0,
                            "aborted":false,"bargeIn":true,"sttLanguage":"en",
                            "sttProvider":"assemblyai","sttModel":"universal-3.6",
-                           "ttsProvider":"cartesia","ttsModel":"sonic-3.6","error":null},
+                           "ttsProvider":"cartesia","ttsModel":"sonic-3.6","error":null,"stalled":false},
                           {"room":"%s","turnNumber":2,"traceId":"trace-2",
                            "sttLatencyMs":null,"brainTtftMs":null,"ttsFirstAudioMs":null,"e2eMs":null,
                            "aborted":true,"bargeIn":false,"sttLanguage":"ur",
                            "sttProvider":null,"sttModel":null,"ttsProvider":null,"ttsModel":null,
-                           "error":"brain unreachable"}]}"""
+                           "error":"brain unreachable","stalled":false}]}"""
                 .formatted(room, room, room);
 
         mockMvc.perform(post("/api/v1/voice/telemetry")

@@ -40,7 +40,8 @@ public final class VoiceTelemetryDtos {
             String sttModel,
             String ttsProvider,
             String ttsModel,
-            String error) {
+            String error,
+            boolean stalled) {
     }
 
     public record VoiceCallDto(

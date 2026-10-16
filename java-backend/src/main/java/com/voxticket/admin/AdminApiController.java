@@ -20,6 +20,8 @@ import com.voxticket.admin.dto.PageDto;
 import com.voxticket.admin.dto.TurnTraceDto;
 import com.voxticket.admin.dto.VoiceDtos.VoiceCallDetailDto;
 import com.voxticket.admin.dto.VoiceDtos.VoiceCallSummaryDto;
+import com.voxticket.admin.dto.VoiceAnalyticsSummaryDtos.VoiceAnalyticsSummaryDto;
+import com.voxticket.admin.dto.VoiceLiveMonitorDtos.LiveCallDto;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
@@ -55,6 +57,8 @@ public class AdminApiController {
     private final AiAnalyticsService aiAnalyticsService;
     private final EvaluationService evaluationService;
     private final SystemHealthService healthService;
+    private final VoiceLiveMonitorService liveMonitorService;
+    private final VoiceAggregateAnalyticsService aggregateAnalyticsService;
 
     public AdminApiController(
             AdminSummaryService summaryService,
@@ -65,7 +69,9 @@ public class AdminApiController {
             AuditAdminService auditService,
             AiAnalyticsService aiAnalyticsService,
             EvaluationService evaluationService,
-            SystemHealthService healthService) {
+            SystemHealthService healthService,
+            VoiceLiveMonitorService liveMonitorService,
+            VoiceAggregateAnalyticsService aggregateAnalyticsService) {
         this.summaryService = summaryService;
         this.conversationService = conversationService;
         this.turnTraceService = turnTraceService;
@@ -75,6 +81,8 @@ public class AdminApiController {
         this.aiAnalyticsService = aiAnalyticsService;
         this.evaluationService = evaluationService;
         this.healthService = healthService;
+        this.liveMonitorService = liveMonitorService;
+        this.aggregateAnalyticsService = aggregateAnalyticsService;
     }
 
     // ---- Dashboard ----
@@ -207,6 +215,31 @@ public class AdminApiController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    // ---- Voice live monitor (P4.2, read-only) ----
+
+    /**
+     * P4.2: currently live voice sessions for the supervisor dashboard.
+     * Snapshots of in-memory state; read-only - no whisper, no barge-in,
+     * no hang-up in P4.
+     */
+    @GetMapping("/voice/live-calls")
+    public List<LiveCallDto> voiceLiveCalls() {
+        return liveMonitorService.liveCalls();
+    }
+
+    // ---- Voice aggregate analytics (P4.3, read-only) ----
+
+    /**
+     * P4.3: aggregate voice analytics over the trailing {@code days}
+     * (default 7, clamped to 1..90). Computed from the turn-trace, audit
+     * event, and voice telemetry tables.
+     */
+    @GetMapping("/voice/analytics/summary")
+    public VoiceAnalyticsSummaryDto voiceAnalyticsSummary(
+            @RequestParam(defaultValue = "7") int days) {
+        return aggregateAnalyticsService.summary(days);
     }
 
     // ---- Audit log ----

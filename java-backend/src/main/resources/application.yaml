@@ -55,6 +55,14 @@ management:
         include: health, info, prometheus
 
 voxticket:
+  # P3.1: versioned system-prompt template. Selects
+  # src/main/resources/prompts/system-v{version}.txt; the version and the
+  # template's SHA-256 are recorded on every turn trace. To change the
+  # prompt in production, add the new template file and bump this value -
+  # never edit a versioned file in place.
+  prompt:
+    version: v1
+
   commerce:
     returns:
       window-days: 30
@@ -197,6 +205,20 @@ voxticket:
     #                       to be included in the prompt context.
     top-k: 3
     similarity-threshold: 0.35
+  # P0.1: bounds every blocking phase of a turn (seconds).
+  # tool-seconds: per tool-call timeout; on expiry the model gets the
+  #               sanitized TOOL_EXECUTION_FAILED envelope and the turn
+  #               continues.
+  # rag-seconds:  total RAG round-trip budget (embedding + vector search);
+  #               on expiry the search is skipped and the turn continues
+  #               without policy context (recorded as ragSkipped on the trace).
+  # jpa-seconds:  JDBC statement timeout, applied as
+  #               @Transactional(timeout = 10) on the voice turn path - the
+  #               annotation value is a literal kept in sync with this.
+  timeouts:
+    tool-seconds: 10
+    rag-seconds: 8
+    jpa-seconds: 10
   safety:
     prompt-guard:
       # provider:   ml | heuristic - ML classifier with heuristic fallback.

@@ -66,7 +66,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional(readOnly = true)
+@Transactional(readOnly = true, timeout = 10)
 public class CustomerOrderQueryService {
 
     private static final IdentityAssurance MIN_READ_ASSURANCE = IdentityAssurance.PHONE_MATCHED;

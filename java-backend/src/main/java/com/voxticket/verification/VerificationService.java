@@ -65,7 +65,7 @@ public class VerificationService {
         this.maxChallengesPerSession = maxChallengesPerSession;
     }
 
-    @Transactional
+    @Transactional(timeout = 10)
     public VerificationOutcome issueChallenge(ConversationSession session, VerificationPurpose purpose, UUID procedureId, String orderNumber) {
         UUID customerId = session.getCustomerIdentity().requireCustomerId();
         Customer customer = customerRepository.findById(customerId).orElseThrow();
@@ -123,7 +123,7 @@ public class VerificationService {
                 "I've sent a 6-digit verification code to " + maskedDestination + ". Could you read that back to me once you receive it?", metadata);
     }
 
-    @Transactional
+    @Transactional(timeout = 10)
     public VerificationResult verify(ConversationSession session, String submittedCode, UUID expectedProcedureId, String expectedOrderNumber) {
         UUID challengeId = session.getPendingVerificationChallengeId().orElse(null);
         if (challengeId == null) {
@@ -184,7 +184,7 @@ public class VerificationService {
      * <p>OTP semantics are untouched: length, hashing, expiry, attempt
      * limits, resend cooldown, and rate limits are not changed here.
      */
-    @Transactional
+    @Transactional(timeout = 10)
     public void invalidatePendingChallenge(ConversationSession session) {
         session.getPendingVerificationChallengeId().ifPresent(challengeId -> {
             repository.findById(challengeId).ifPresent(challenge -> {

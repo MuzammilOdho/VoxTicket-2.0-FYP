@@ -1,6 +1,7 @@
 package com.voxticket.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.voxticket.agent.AgentResponse;
+import com.voxticket.agent.PromptVersion;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
@@ -19,6 +21,7 @@ import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.identity.VerifiedOrderRef;
 import com.voxticket.observability.TurnMetrics;
+import com.voxticket.observability.TurnTrace;
 import com.voxticket.persistence.entity.enums.ConversationEventType;
 import com.voxticket.procedure.DeferredProcedureIntent;
 import com.voxticket.procedure.ExplicitConfirmationParser;
@@ -31,12 +34,14 @@ import com.voxticket.safety.HeuristicPromptGuard;
 import com.voxticket.safety.InputNormalizer;
 import com.voxticket.safety.PromptGuard;
 import com.voxticket.verification.SensitiveTurnParser;
+import java.io.IOException;
 import java.time.Instant;
 import org.mockito.ArgumentCaptor;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +66,7 @@ class ConversationRuntimeTest {
     void stubSupportAgent() {
         when(supportAgent.respond(any(), any()))
                 .thenReturn(new AgentResponse("stubbed agent response", AgentResponse.Outcome.SUCCESS));
+        when(supportAgent.currentPromptVersion()).thenReturn(new PromptVersion("v1", "system", "test-content-hash"));
         when(supportAgent.respondGuarded(any(), any()))
                 .thenReturn(new AgentResponse("stubbed guarded agent response", AgentResponse.Outcome.SUCCESS));
         when(supportAgent.respondGuarded(any(), any()))
@@ -126,13 +132,13 @@ class ConversationRuntimeTest {
     void standaloneYesWhilePendingCallsCoordinatorNotSupportAgent() {
         String sessionId = "s8";
         seedAwaitingConfirmation(sessionId);
-        when(procedureCoordinator.confirmActive(any())).thenReturn(ProcedureOutcome.ok("CANCELLED",
+        when(procedureCoordinator.confirmActive(any(), any())).thenReturn(ProcedureOutcome.ok("CANCELLED",
                 "stale English message that must never reach the customer",
                 Map.of("orderReference", "ORD-TEST", "paymentConsequence", "NO_REFUND_REQUIRED")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "yes", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).confirmActive(any());
+        verify(procedureCoordinator).confirmActive(any(), any());
         verify(supportAgent, never()).respond(any(), any());
         assertThat(response.text()).isEqualTo("Order ORD-TEST has been cancelled. No payment was collected, so there's nothing to refund.");
     }
@@ -195,7 +201,7 @@ class ConversationRuntimeTest {
     void verificationExecutionFailureIsCaughtAndReturnsASafeGenericMessage() {
         String sessionId = "s13";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), any())).thenThrow(new RuntimeException("db error"));
+        when(procedureCoordinator.submitVerificationCode(any(), any(), any())).thenThrow(new RuntimeException("db error"));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "123456", null, Instant.now(), Map.of()));
 
@@ -221,7 +227,7 @@ class ConversationRuntimeTest {
     void otpCodeInputNeverReachesSupportAgentAndRendersDirectly() {
         String sessionId = "s20";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
                 "stale English message that must never reach the customer",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
 
@@ -237,13 +243,13 @@ class ConversationRuntimeTest {
     void resendRequestNeverReachesSupportAgent() {
         String sessionId = "s21";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.resendVerificationCode(any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+        when(procedureCoordinator.resendVerificationCode(any(), any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
                 "stale English message that must never reach the customer",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "please resend the code", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).resendVerificationCode(any());
+        verify(procedureCoordinator).resendVerificationCode(any(), any());
         verify(supportAgent, never()).respond(any(), any());
         verify(supportAgent, never()).respondGuarded(any(), any());
         assertThat(response.text()).contains("********4567");
@@ -256,7 +262,7 @@ class ConversationRuntimeTest {
     void resendTurnMetadataNeverExposesDevOtpOrInternalIds() {
         String sessionId = "s60";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.resendVerificationCode(any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+        when(procedureCoordinator.resendVerificationCode(any(), any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
                 "stale English message that must never reach the customer",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED",
                         "maskedDestination", "********4567",
@@ -269,7 +275,7 @@ class ConversationRuntimeTest {
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "please resend the code", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).resendVerificationCode(any());
+        verify(procedureCoordinator).resendVerificationCode(any(), any());
         verify(supportAgent, never()).respond(any(), any());
 
         // Customer-visible text: masked destination shown, plaintext OTP never.
@@ -291,7 +297,7 @@ class ConversationRuntimeTest {
     void verificationFailedTurnMetadataKeepsOnlySafeFields() {
         String sessionId = "s61";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED",
                 "stale English message that must never reach the customer",
                 Map.of("verificationReason", "WRONG_CODE", "orderReference", "ORD-10001", "devOtp", "482916")));
 
@@ -313,13 +319,13 @@ class ConversationRuntimeTest {
     void otpPlaintextNeverEntersHistoryAuditOrModelInput() {
         String sessionId = "s70";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916")))
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any()))
                 .thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED", "stale English message",
                         Map.of("verificationReason", "WRONG_CODE")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "482916", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).submitVerificationCode(any(), eq("482916"));
+        verify(procedureCoordinator).submitVerificationCode(any(), eq("482916"), any());
 
         // Conversation history: redacted placeholder stored, plaintext gone.
         List<ConversationMessage> history = sessionStore.withSession(sessionId, Channel.CHAT, ConversationSession::getRecentMessages);
@@ -343,7 +349,7 @@ class ConversationRuntimeTest {
         String sessionId = "s71";
         seedAwaitingVerification(sessionId);
         // The real coordinator clears the procedure on successful execution; the mock mirrors that.
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any())).thenAnswer(inv -> {
             ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
             return ProcedureOutcome.ok("CANCELLED", "stale English message",
                     Map.of("orderReference", "ORD-10001", "paymentConsequence", "NO_REFUND_REQUIRED"));
@@ -355,7 +361,7 @@ class ConversationRuntimeTest {
                 new UserTurn(sessionId, Channel.CHAT, "482916 and where is ORD-10002?", null, Instant.now(), Map.of()));
 
         // The OTP went to verification exactly once, as the raw code.
-        verify(procedureCoordinator, times(1)).submitVerificationCode(any(), eq("482916"));
+        verify(procedureCoordinator, times(1)).submitVerificationCode(any(), eq("482916"), any());
 
         // The residual reached the agent with the OTP removed - normal tool surface after success.
         ArgumentCaptor<String> agentInput = ArgumentCaptor.forClass(String.class);
@@ -382,7 +388,7 @@ class ConversationRuntimeTest {
     void otpPlusMutationResidualCannotReuseTheFirstOtpForANewProcedure() {
         String sessionId = "s72";
         seedAwaitingVerificationOfType(sessionId, ProcedureType.RETURN);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any())).thenAnswer(inv -> {
             ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
             return ProcedureOutcome.ok("RETURN_STARTED", "stale English message",
                     Map.of("orderReference", "ORD-10006", "returnNumber", "RET-00042"));
@@ -394,8 +400,8 @@ class ConversationRuntimeTest {
                 new UserTurn(sessionId, Channel.CHAT, "482916 and cancel ORD-10002", null, Instant.now(), Map.of()));
 
         // The first OTP authorized exactly one verification - never anything else.
-        verify(procedureCoordinator, times(1)).submitVerificationCode(any(), eq("482916"));
-        verify(procedureCoordinator, never()).submitVerificationCode(any(), eq("cancel ORD-10002"));
+        verify(procedureCoordinator, times(1)).submitVerificationCode(any(), eq("482916"), any());
+        verify(procedureCoordinator, never()).submitVerificationCode(any(), eq("cancel ORD-10002"), any());
 
         // The mutation request reached the agent as plain residual text, without the OTP.
         ArgumentCaptor<String> agentInput = ArgumentCaptor.forClass(String.class);
@@ -409,7 +415,7 @@ class ConversationRuntimeTest {
     void failedOtpWithReadResidualAnswersGuardedWhileVerificationStaysPending() {
         String sessionId = "s73";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("000000")))
+        when(procedureCoordinator.submitVerificationCode(any(), eq("000000"), any()))
                 .thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED", "stale English message",
                         Map.of("verificationReason", "WRONG_CODE")));
 
@@ -431,14 +437,14 @@ class ConversationRuntimeTest {
     void resendWithReadResidualResendsAndAnswersGuarded() {
         String sessionId = "s74";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.resendVerificationCode(any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+        when(procedureCoordinator.resendVerificationCode(any(), any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
                 "stale English message",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
 
         AssistantTurn response = runtime.processTurn(
                 new UserTurn(sessionId, Channel.CHAT, "resend the code and where is ORD-10002?", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).resendVerificationCode(any());
+        verify(procedureCoordinator).resendVerificationCode(any(), any());
         verify(supportAgent, never()).respond(any(), any());
         verify(supportAgent).respondGuarded(any(), eq("where is ORD-10002?"));
 
@@ -454,7 +460,7 @@ class ConversationRuntimeTest {
         AssistantTurn response = runtime.processTurn(
                 new UserTurn(sessionId, Channel.CHAT, "482916 or 123456", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator, never()).submitVerificationCode(any(), any());
+        verify(procedureCoordinator, never()).submitVerificationCode(any(), any(), any());
         verify(procedureCoordinator, never()).resendVerificationCode(any());
         verify(supportAgent, never()).respond(any(), any());
         verify(supportAgent, never()).respondGuarded(any(), any());
@@ -469,13 +475,13 @@ class ConversationRuntimeTest {
         String sessionId = "s76";
         seedUserMessage(sessionId, "mera claim file kar do");
         seedAwaitingConfirmation(sessionId);
-        when(procedureCoordinator.confirmActive(any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
+        when(procedureCoordinator.confirmActive(any(), any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
                 "stale English message", Map.of("orderReference", "ORD-10001", "claimNumber", "CLM-00007")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "ha", null, Instant.now(), Map.of()));
 
         // The live duplicate-claim bug: "ha" was missed, the model called requestClaim again.
-        verify(procedureCoordinator, times(1)).confirmActive(any());
+        verify(procedureCoordinator, times(1)).confirmActive(any(), any());
         verify(supportAgent, never()).respond(any(), any());
         verify(supportAgent, never()).respondGuarded(any(), any());
         assertThat(response.text()).contains("CLM-00007");
@@ -521,7 +527,7 @@ class ConversationRuntimeTest {
     void cancelledSuccessTurnMetadataKeepsOnlySafeFields() {
         String sessionId = "s62";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(ProcedureOutcome.ok("CANCELLED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(ProcedureOutcome.ok("CANCELLED",
                 "stale English message that must never reach the customer",
                 Map.of("orderReference", "ORD-10001", "paymentConsequence", "NO_REFUND_REQUIRED", "devOtp", "482916")));
 
@@ -542,13 +548,13 @@ class ConversationRuntimeTest {
         String sessionId = "s22";
         seedUserMessage(sessionId, "mera claim file kar do");
         seedAwaitingConfirmation(sessionId);
-        when(procedureCoordinator.confirmActive(any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
+        when(procedureCoordinator.confirmActive(any(), any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
                 "stale English message that must never reach the customer",
                 Map.of("orderReference", "ORD-TEST", "claimNumber", "CLM-00042")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "yes", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).confirmActive(any());
+        verify(procedureCoordinator).confirmActive(any(), any());
         verify(supportAgent, never()).respond(any(), any());
         assertThat(response.text()).contains("CLM-00042");
         assertThat(response.text()).contains("ke liye");
@@ -560,7 +566,7 @@ class ConversationRuntimeTest {
         String sessionId = "s23";
         seedUserMessage(sessionId, "میرا آرڈر کینسل کر دیں");
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(new ProcedureOutcome(false, "VERIFICATION_FAILED",
                 "stale English message that must never reach the customer", Map.of("verificationReason", "WRONG_CODE")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "123456", null, Instant.now(), Map.of()));
@@ -574,7 +580,7 @@ class ConversationRuntimeTest {
         String sessionId = "s24";
         seedUserMessage(sessionId, "mujhe isay cancel karna hai");
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
                 "stale English message that must never reach the customer",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
 
@@ -590,7 +596,7 @@ class ConversationRuntimeTest {
         String sessionId = "s25";
         seedUserMessage(sessionId, "mera order cancel kar do please");
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(ProcedureOutcome.ok("VERIFICATION_REQUIRED",
                 "stale English message that must never reach the customer",
                 Map.of("verificationIssue", "CHALLENGE_ISSUED", "maskedDestination", "********4567")));
 
@@ -606,13 +612,13 @@ class ConversationRuntimeTest {
         String sessionId = "s26";
         seedUserMessage(sessionId, "Please cancel my order");
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(ProcedureOutcome.ok("CANCELLED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(ProcedureOutcome.ok("CANCELLED",
                 "stale English message that must never reach the customer",
                 Map.of("orderReference", "ORD-TEST", "paymentConsequence", "NO_REFUND_REQUIRED")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "123456", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).submitVerificationCode(any(), eq("123456"));
+        verify(procedureCoordinator).submitVerificationCode(any(), eq("123456"), any());
         verify(procedureCoordinator, never()).confirmActive(any());
         verify(procedureCoordinator, never()).declineActive(any());
         verify(supportAgent, never()).respond(any(), any());
@@ -627,7 +633,7 @@ class ConversationRuntimeTest {
     void successfulReturnExecutesImmediatelyAfterValidOtpAndRendersDirectly() {
         String sessionId = "s27";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"))).thenReturn(ProcedureOutcome.ok("RETURN_STARTED",
+        when(procedureCoordinator.submitVerificationCode(any(), eq("123456"), any())).thenReturn(ProcedureOutcome.ok("RETURN_STARTED",
                 "stale English message that must never reach the customer",
                 Map.of("orderReference", "ORD-TEST", "returnNumber", "RET-00077")));
 
@@ -642,7 +648,7 @@ class ConversationRuntimeTest {
     void confirmationExceptionRendersASafeLocalizedResponse() {
         String sessionId = "s28";
         seedAwaitingConfirmation(sessionId);
-        when(procedureCoordinator.confirmActive(any())).thenThrow(new RuntimeException("db error"));
+        when(procedureCoordinator.confirmActive(any(), any())).thenThrow(new RuntimeException("db error"));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "yes", null, Instant.now(), Map.of()));
 
@@ -661,13 +667,13 @@ class ConversationRuntimeTest {
             session.recordUserMessage("mera claim file kar do");
             return null;
         });
-        when(procedureCoordinator.confirmActive(any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
+        when(procedureCoordinator.confirmActive(any(), any())).thenReturn(ProcedureOutcome.ok("CLAIM_FILED",
                 "stale English message that must never reach the customer",
                 Map.of("orderReference", "ORD-20002", "claimNumber", "CLM-9090")));
 
         AssistantTurn response = runtime.processTurn(new UserTurn(sessionId, Channel.CHAT, "haan", null, Instant.now(), Map.of()));
 
-        verify(procedureCoordinator).confirmActive(any());
+        verify(procedureCoordinator).confirmActive(any(), any());
         verify(supportAgent, never()).respond(any(), any());
         assertThat(response.text()).contains("CLM-9090");
         assertThat(response.text()).contains("darj kar diya gaya hai");
@@ -718,7 +724,7 @@ class ConversationRuntimeTest {
         // No ordinary text may reach full agent tools while verification is pending.
         verify(supportAgent, never()).respond(any(), any());
         verify(supportAgent).respondGuarded(any(), eq("cancel ORD-10002"));
-        verify(procedureCoordinator, never()).submitVerificationCode(any(), any());
+        verify(procedureCoordinator, never()).submitVerificationCode(any(), any(), any());
         verify(procedureCoordinator, never()).resendVerificationCode(any());
 
         // The original guarded procedure is unchanged; no deferred intent was created.
@@ -769,7 +775,7 @@ class ConversationRuntimeTest {
         });
         // The real coordinator promotes the deferred intent when the active
         // procedure clears on terminal execution; the mock mirrors that.
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any())).thenAnswer(inv -> {
             ConversationSession session = inv.getArgument(0);
             session.clearActiveProcedure();
             return ProcedureOutcome.ok("CANCELLED", "stale English message",
@@ -808,7 +814,7 @@ class ConversationRuntimeTest {
     void residualTurnAuditAndHistoryKeepTheRedactedFullText() {
         String sessionId = "s83";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any())).thenAnswer(inv -> {
             ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
             return ProcedureOutcome.ok("CANCELLED", "stale English message",
                     Map.of("orderReference", "ORD-10001"));
@@ -839,7 +845,7 @@ class ConversationRuntimeTest {
         // replaces it with a generic failure message.
         String sessionId = "s84";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any())).thenAnswer(inv -> {
             ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
             return ProcedureOutcome.ok("CANCELLED", "stale English message",
                     Map.of("orderReference", "ORD-TEST", "paymentConsequence", "NO_REFUND_REQUIRED"));
@@ -862,7 +868,7 @@ class ConversationRuntimeTest {
         // global failure; the turn still completes as one AssistantTurn.
         String sessionId = "s85";
         seedAwaitingVerification(sessionId);
-        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"))).thenAnswer(inv -> {
+        when(procedureCoordinator.submitVerificationCode(any(), eq("482916"), any())).thenAnswer(inv -> {
             ((ConversationSession) inv.getArgument(0)).clearActiveProcedure();
             return ProcedureOutcome.ok("CANCELLED", "stale English message",
                     Map.of("orderReference", "ORD-TEST", "paymentConsequence", "NO_REFUND_REQUIRED"));
@@ -1051,4 +1057,48 @@ class ConversationRuntimeTest {
         verify(turnMetrics).recordTurn(any(), eq("CHAT"), eq("blank_fallback"));
     }
 
+    // ---- P0.5: abort classification on the turn trace ----
+
+    @Test
+    void abortedSupersededTurnRecordsSupersededAbortReason() {
+        long staleGeneration = sessionStore.nextVoiceGeneration("s-abort-1");
+        // A newer turn started (barge-in) before this one reached its first delta.
+        sessionStore.nextVoiceGeneration("s-abort-1");
+        Map<String, String> metadata = Map.of(
+                ConversationRuntime.METADATA_VOICE_GENERATION, String.valueOf(staleGeneration));
+        UserTurn turn = new UserTurn("s-abort-1", Channel.PHONE, "hello", null, Instant.now(), metadata);
+
+        assertThatThrownBy(() -> runtime.processTurnStream(turn, delta -> {}))
+                .isInstanceOf(TurnAbortedException.class);
+
+        ArgumentCaptor<TurnTrace> captor = ArgumentCaptor.forClass(TurnTrace.class);
+        verify(auditService).recordTurnTrace(captor.capture());
+        assertThat(captor.getValue().aborted()).isTrue();
+        assertThat(captor.getValue().abortReason()).isEqualTo("superseded");
+    }
+
+    @Test
+    void abortedCurrentTurnRecordsClientDisconnectAbortReason() {
+        long currentGeneration = sessionStore.nextVoiceGeneration("s-abort-2");
+        Map<String, String> metadata = Map.of(
+                ConversationRuntime.METADATA_VOICE_GENERATION, String.valueOf(currentGeneration));
+        UserTurn turn = new UserTurn("s-abort-2", Channel.PHONE, "hello", null, Instant.now(), metadata);
+        // The client went away mid-stream: the generation-checked sink throws like a dead SSE client.
+        Consumer<String> deadSink = delta -> {
+            throw new TurnAbortedException(new IOException("client disconnected"));
+        };
+        when(supportAgent.respondStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            Consumer<String> sink = invocation.getArgument(3);
+            sink.accept("partial");
+            return new AgentResponse("partial", AgentResponse.Outcome.SUCCESS);
+        });
+
+        assertThatThrownBy(() -> runtime.processTurnStream(turn, deadSink))
+                .isInstanceOf(TurnAbortedException.class);
+
+        ArgumentCaptor<TurnTrace> captor = ArgumentCaptor.forClass(TurnTrace.class);
+        verify(auditService).recordTurnTrace(captor.capture());
+        assertThat(captor.getValue().aborted()).isTrue();
+        assertThat(captor.getValue().abortReason()).isEqualTo("client_disconnect");
+    }
 }

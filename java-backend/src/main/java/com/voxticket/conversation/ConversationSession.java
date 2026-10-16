@@ -46,12 +46,13 @@ public class ConversationSession {
     private Instant lastActivityAt;
     private ProcedureState activeProcedure;
     /**
-     * Pass 2D-B: at most ONE deferred customer mutation intent, and it is
-     * not a {@link ProcedureState} - it carries no OTP, no challenge, no
-     * confirmation authority, and no execution permission. See
-     * {@link DeferredProcedureIntent}.
+     * P2.1: the explicit dialogue state for this session - pending-request
+     * stack (P2.2, replaces the old single deferredIntent slot), slots,
+     * obligations, correction antecedents, and the interruption signal.
+     * The LLM proposes through the {@code updateDialogueState} tool;
+     * deterministic code validates and applies.
      */
-    private DeferredProcedureIntent deferredIntent;
+    private final DialogueState dialogueState = new DialogueState();
     private boolean escalated;
     private UUID pendingVerificationChallengeId;
     private ConversationFocus focus;
@@ -67,6 +68,16 @@ public class ConversationSession {
      * within one turn is thread-safe. Never persisted as session state.
      */
     private volatile TurnTrace.Builder activeTraceBuilder;
+    /**
+     * P1.1: the current turn's ownership handle, installed by
+     * {@code SessionStore} right after ownership acquisition and cleared
+     * (identity-checked) when the turn ends. Volatile because preemption
+     * transfers ownership on another thread; readers must still treat the
+     * value as "the handle installed most recently", not "my handle" - a
+     * turn's own handle travels through its call chain, never via this
+     * field after a phase gate.
+     */
+    private volatile TurnHandle activeTurnHandle;
 
 
     private ConversationSession(String sessionId, Channel channel) {
@@ -89,6 +100,39 @@ public class ConversationSession {
 
     public void recordAssistantMessage(String text) {
         addMessage(new ConversationMessage(MessageRole.ASSISTANT, text, turnCount, Instant.now()));
+    }
+
+    /**
+     * P1.3 (history repair): records a partial assistant message - the exact
+     * deltas the caller actually heard before the turn aborted. The
+     * {@code partial} flag is stored metadata only: it is never spoken, and
+     * the next turn's prompt sees the faithful partial transcript.
+     */
+    public void recordPartialAssistantMessage(String text) {
+        addMessage(new ConversationMessage(MessageRole.ASSISTANT, text, turnCount, Instant.now(), true));
+    }
+
+    /**
+     * P1.1: installs the current turn's ownership handle. Called by the
+     * session store immediately after ownership acquisition.
+     */
+    public void setActiveTurnHandle(TurnHandle handle) {
+        this.activeTurnHandle = handle;
+    }
+
+    /** The most recently installed turn handle, or null outside a turn. */
+    public TurnHandle getActiveTurnHandle() {
+        return activeTurnHandle;
+    }
+
+    /**
+     * P1.1: clears the turn handle only when it is still the expected one -
+     * a preempted holder's cleanup must never clear the new owner's handle.
+     */
+    public void clearActiveTurnHandle(TurnHandle expected) {
+        if (this.activeTurnHandle == expected) {
+            this.activeTurnHandle = null;
+        }
     }
 
     private void addMessage(ConversationMessage message) {
@@ -156,29 +200,35 @@ public class ConversationSession {
     }
 
     /**
-     * Pass 2D-B: the single deferred customer intent, if one was queued
-     * while another procedure was active. Never a live procedure.
+     * P2.2: the top of the pending-request stack - the single deferred
+     * customer intent when exactly one is queued. Kept for callers that only
+     * ever need the top (prompt rendering, contested-slot checks); the stack
+     * itself is on {@link #getDialogueState()}.
      */
     public Optional<DeferredProcedureIntent> getDeferredIntent() {
-        return Optional.ofNullable(deferredIntent);
+        return dialogueState.peekPendingRequest();
     }
 
     /**
-     * Queues the deferred intent. Refuses to overwrite an occupied slot -
-     * the coordinator returns {@code PENDING_REQUEST_LIMIT_REACHED} instead.
+     * P2.2: pushes onto the pending-request stack (max depth
+     * {@link DialogueState#MAX_PENDING_REQUESTS}).
      *
-     * @throws IllegalStateException if a deferred intent is already queued
+     * @throws IllegalStateException if the stack is full - callers that queue
+     *         on the caller's behalf (ProcedureCoordinator) check depth first
+     *         and return PENDING_REQUEST_LIMIT_REACHED instead
      */
     public void setDeferredIntent(DeferredProcedureIntent intent) {
-        Objects.requireNonNull(intent, "intent");
-        if (deferredIntent != null) {
-            throw new IllegalStateException("A deferred intent is already queued; discard it first");
-        }
-        deferredIntent = intent;
+        dialogueState.pushPendingRequest(Objects.requireNonNull(intent, "intent"));
     }
 
+    /** P2.2: pops the top of the pending-request stack, if any. */
     public void clearDeferredIntent() {
-        deferredIntent = null;
+        dialogueState.popPendingRequest();
+    }
+
+    /** P2.1: the session's explicit dialogue state. */
+    public DialogueState getDialogueState() {
+        return dialogueState;
     }
 
     public void markEscalated() {

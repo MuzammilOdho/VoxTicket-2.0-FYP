@@ -34,7 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
  * records the resolution rather than driving any shipping/inventory action.
  */
 @Service
-@Transactional
+@Transactional(timeout = 10)
 public class ClaimService {
 
     private final OrderRepository orderRepository;

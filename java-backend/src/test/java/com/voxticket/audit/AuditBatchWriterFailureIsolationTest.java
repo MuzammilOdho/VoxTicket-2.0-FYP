@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import tools.jackson.databind.ObjectMapper;
 import com.voxticket.agent.AgentResponse;
+import com.voxticket.agent.PromptVersion;
 import com.voxticket.agent.SupportAgent;
 import com.voxticket.conversation.AssistantTurn;
 import com.voxticket.conversation.Channel;
@@ -108,6 +109,7 @@ class AuditBatchWriterFailureIsolationTest {
         SupportAgent supportAgent = mock(SupportAgent.class);
         when(supportAgent.respond(any(ConversationSession.class), anyString()))
                 .thenReturn(new AgentResponse("stubbed reply", AgentResponse.Outcome.SUCCESS));
+        when(supportAgent.currentPromptVersion()).thenReturn(new PromptVersion("v1", "system", "test-content-hash"));
         PromptGuard promptGuard = mock(PromptGuard.class);
         when(promptGuard.evaluate(anyString())).thenReturn(PromptGuardVerdict.allow());
 

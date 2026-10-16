@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.config.PromptProperties;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationLanguageResolver;
 import com.voxticket.conversation.ConversationSession;
@@ -16,6 +18,7 @@ import com.voxticket.rag.RagService;
 import com.voxticket.service.CustomerOrderQueryService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,7 +73,7 @@ class SupportAgentErrorMetricsTest {
         agent = new SupportAgent(registry, contextBuilder, modelSelector,
                 mock(CustomerOrderQueryService.class), mock(RagService.class),
                 mock(ProcedureCoordinator.class), turnMetrics, mock(ConversationAuditService.class),
-                new ConversationLanguageResolver());
+                new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
     }
 
     private static ChatResponse textResponse(String text) {
@@ -135,6 +138,46 @@ class SupportAgentErrorMetricsTest {
         assertThat(llmCallCount("blank_fallback")).isEqualTo(1);
         assertThat(llmCallCount("success")).isZero();
         assertThat(llmCallCount("model_error")).isZero();
+    }
+
+    @Test
+    void modelErrorInStreamingModeEmitsTheSafeTextExactlyOnce() {
+        // P0.2: a provider failure in streaming mode must speak the safe fallback,
+        // exactly like the blank-output fallback does, instead of returning silently.
+        when(chatModel.stream(any(Prompt.class))).thenThrow(new RuntimeException("provider exploded"));
+        var contextBuilder = mock(ContextBuilder.class);
+        when(contextBuilder.buildHistory(any(), any())).thenReturn(List.of());
+        var modelSelector = mock(ModelSelector.class);
+        when(modelSelector.selectDetailed(any(), any())).thenReturn(new ModelSelectionResult(ModelTier.TIER_1, "test"));
+        var factory = mock(ProviderChatModelFactory.class);
+        when(factory.chatModelFor(any(), any(), any(), any(), any())).thenReturn(chatModel);
+        var turnMetrics = new TurnMetrics(meterRegistry);
+        var streamingAgent = new SupportAgent(
+                new TierChatClientRegistry(
+                        new AiProvidersProperties(
+                                new ProviderProperties(true, "google-key", null),
+                                new ProviderProperties(true, "groq-key", "https://api.groq.com/openai/v1"),
+                                new ProviderProperties(true, "cerebras-key", "https://api.cerebras.ai/v1")),
+                        new AiTiersProperties(
+                                new TierChatProperties(AiProvider.GOOGLE, "gemini-3.6-flash", 0.3, 1024, "none", 20, 0),
+                                new TierChatProperties(AiProvider.GROQ, "openai/gpt-oss-20b", 0.3, 1024, "none", 20, 0)),
+                        factory,
+                        ObservationRegistry.NOOP, meterRegistry,
+                        new SanitizedToolExecutionExceptionProcessor(turnMetrics),
+                        new ToolCallLimitsProperties(5, 10, ToolCallLimitBehavior.THROW)),
+                contextBuilder, modelSelector,
+                mock(CustomerOrderQueryService.class), mock(RagService.class),
+                mock(ProcedureCoordinator.class), turnMetrics, mock(ConversationAuditService.class),
+                new ConversationLanguageResolver(), new TimeoutProperties(10, 8, 10), new PromptTemplateService(new PromptProperties("v1")));
+        var session = ConversationSession.newSession("s5", Channel.CHAT);
+        List<String> emitted = new ArrayList<>();
+
+        AgentResponse response = streamingAgent.respondStream(session, "hello", ToolAccessMode.FULL, emitted::add);
+
+        assertThat(response.outcome()).isEqualTo(AgentResponse.Outcome.MODEL_ERROR);
+        assertThat(emitted).containsExactly("I'm having trouble processing that right now - please try again in a moment.");
+        assertThat(response.text()).isEqualTo(emitted.get(0));
+        assertThat(llmCallCount("model_error")).isEqualTo(1);
     }
 
     @Test

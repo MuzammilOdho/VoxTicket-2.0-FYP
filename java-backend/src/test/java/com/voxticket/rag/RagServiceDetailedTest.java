@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.observability.TurnMetrics;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 class RagServiceDetailedTest {
 
     private final VectorStore vectorStore = mock(VectorStore.class);
-    private final RagService ragService = new RagService(vectorStore, new RagProperties(3, 0.5), mock(TurnMetrics.class));
+    private final RagService ragService = new RagService(vectorStore, new RagProperties(3, 0.5), mock(TurnMetrics.class), new TimeoutProperties(10, 8, 10));
 
     private static Document scoredDoc(String id, String category, double score) {
         return Document.builder().id(id).text("text for " + id).metadata("category", category).score(score).build();

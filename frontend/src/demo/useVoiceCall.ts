@@ -6,6 +6,9 @@
  *   - state: idle | mic | connecting | live | error
  *   - agentPresent: the Python voice worker has joined the room
  *   - speaking: 'you' | 'agent' | null via ActiveSpeakersChanged
+ *   - agentThinking: worker committed a turn and the brain hasn't produced
+ *     audio yet (from the worker's 'voxticket.turn' data topic) — drives the
+ *     "Thinking…" indicator so the thinking gap reads differently from idle
  *   - elapsedSec: live call timer
  *   - networkTier: 'full' | 'low' | 'survival' (adaptive audio, see below)
  *
@@ -65,6 +68,11 @@ interface TokenResponse {
 const STATS_POLL_MS = 5000;
 /** Tier broadcasts are heartbeated so a worker that joins late still learns it. */
 const TIER_BROADCAST_MS = 30000;
+/** Turn-state broadcasts from the worker ('voxticket.turn', v1, reliable)
+ *  drive the "Thinking…" indicator so the thinking gap is visually distinct
+ *  from idle. States: thinking | first_audio | done | aborted. */
+const TURN_TOPIC = 'voxticket.turn';
+const TURN_TOPIC_VERSION = 1;
 
 export function useVoiceCall() {
   const [state, setState] = useState<VoiceCallState>('idle');
@@ -75,6 +83,10 @@ export function useVoiceCall() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [lastCallSec, setLastCallSec] = useState(0);
   const [networkTier, setNetworkTier] = useState<AudioTier>('low');
+  /** True while the worker has committed a turn and the Java brain hasn't
+   *  produced audio yet (drives the "Thinking…" indicator). Set from the
+   *  worker's 'voxticket.turn' data-topic broadcasts; fail-open. */
+  const [agentThinking, setAgentThinking] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -121,6 +133,7 @@ export function useVoiceCall() {
     if (room) room.disconnect();
     setAgentPresent(false);
     setSpeaking(null);
+    setAgentThinking(false);
     setMuted(false);
     mutedRef.current = false;
     setNetworkTier('low');
@@ -262,6 +275,25 @@ export function useVoiceCall() {
       });
       room.on(RoomEvent.ParticipantDisconnected, refreshAgent);
       room.on(RoomEvent.ActiveSpeakersChanged, refreshSpeaking);
+      // Turn-state broadcasts from the worker ('voxticket.turn'): the brain
+      // thinking gap becomes a visible "Thinking…" state instead of a frozen
+      // "Listening…". Fail-open: malformed or unknown payloads are ignored.
+      room.on(
+        RoomEvent.DataReceived,
+        (payload: Uint8Array, _participant?: unknown, _kind?: unknown, topic?: string) => {
+          try {
+            if (topic !== TURN_TOPIC) return;
+            const msg = JSON.parse(new TextDecoder().decode(payload)) as {
+              v?: number;
+              state?: string;
+            };
+            if (msg.v !== TURN_TOPIC_VERSION) return;
+            setAgentThinking(msg.state === 'thinking');
+          } catch {
+            /* ignore malformed broadcasts */
+          }
+        },
+      );
       room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Audio && audioRef.current) track.attach(audioRef.current);
         refreshAgent();
@@ -365,7 +397,7 @@ export function useVoiceCall() {
   }, []);
 
   return {
-    state, detail, agentPresent, speaking, muted, elapsedSec, lastCallSec,
+    state, detail, agentPresent, speaking, agentThinking, muted, elapsedSec, lastCallSec,
     networkTier, networkBadge: tierBadge(networkTier),
     start, hangup, toggleMute, dismissError, audioRef,
     active: state === 'live' || state === 'mic' || state === 'connecting',

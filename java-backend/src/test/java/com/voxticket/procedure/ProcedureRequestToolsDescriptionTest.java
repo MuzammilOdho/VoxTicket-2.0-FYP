@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.conversation.Channel;
 import com.voxticket.conversation.ConversationSession;
 import java.lang.reflect.Method;
@@ -94,7 +95,8 @@ class ProcedureRequestToolsDescriptionTest {
 
     private List<String> requiredSchemaParams(String toolName) throws Exception {
         var tools = new ProcedureRequestTools(
-                mock(ProcedureCoordinator.class), ConversationSession.newSession("schema-test", Channel.CHAT));
+                mock(ProcedureCoordinator.class), ConversationSession.newSession("schema-test", Channel.CHAT),
+                new TimeoutProperties(10, 8, 10));
         ToolCallback[] callbacks = MethodToolCallbackProvider.builder().toolObjects(tools).build().getToolCallbacks();
         for (ToolCallback callback : callbacks) {
             if (callback.getToolDefinition().name().equals(toolName)) {

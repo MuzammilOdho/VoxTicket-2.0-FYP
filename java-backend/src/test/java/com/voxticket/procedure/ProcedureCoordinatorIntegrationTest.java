@@ -231,13 +231,18 @@ class ProcedureCoordinatorIntegrationTest {
     }
 
     @Test
-    void aThirdDistinctProcedureIsRefusedWithActiveAndDeferredUntouched() {
+    void aFifthDistinctProcedureIsRefusedWithActiveAndStackUntouched() {
         Order orderA = newOrder(BigDecimal.valueOf(500));
         Order orderB = newOrder(BigDecimal.valueOf(600));
         Order orderC = newOrder(BigDecimal.valueOf(700));
         paymentRepository.save(new Payment(orderA, PaymentMethod.CARD, orderA.getTotalAmount(), "PKR", PaymentStatus.PAID));
         paymentRepository.save(new Payment(orderB, PaymentMethod.CARD, orderB.getTotalAmount(), "PKR", PaymentStatus.PAID));
         paymentRepository.save(new Payment(orderC, PaymentMethod.CARD, orderC.getTotalAmount(), "PKR", PaymentStatus.PAID));
+        for (Order order : java.util.List.of(orderA, orderB, orderC)) {
+            Shipment shipment = new Shipment(order, "TCS", "TCS-" + order.getId(), ShipmentStatus.DELIVERED);
+            shipment.setDeliveredAt(Instant.now());
+            shipmentRepository.save(shipment);
+        }
         ConversationSession session = sessionAt(IdentityAssurance.PHONE_MATCHED);
 
         procedureCoordinator.startClaim(session, orderA.getOrderNumber(), orderA.getItems().get(0).getSku(), "damaged");
@@ -245,14 +250,23 @@ class ProcedureCoordinatorIntegrationTest {
         assertThat(second.code()).isEqualTo("PROCEDURE_DEFERRED");
         assertThat(session.getDeferredIntent()).isPresent();
 
+        // P2.2: the pending-request stack holds 3 - the third and fourth
+        // distinct procedures stack instead of refusing.
         ProcedureOutcome third = procedureCoordinator.startClaim(session, orderC.getOrderNumber(), orderC.getItems().get(0).getSku(), "missing item");
+        assertThat(third.code()).isEqualTo("PROCEDURE_DEFERRED");
+        ProcedureOutcome fourth = procedureCoordinator.startReturn(session, orderC.getOrderNumber(), orderC.getItems().get(0).getSku(), "damaged", "1");
+        assertThat(fourth.code()).isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(3);
 
-        assertThat(third.success()).isFalse();
-        assertThat(third.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
-        // Neither the active procedure nor the queued intent was overwritten or dropped:
+        ProcedureOutcome fifth = procedureCoordinator.startClaim(session, orderB.getOrderNumber(), orderB.getItems().get(0).getSku(), "arrived broken");
+
+        assertThat(fifth.success()).isFalse();
+        assertThat(fifth.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
+        // Neither the active procedure nor the queued intents were overwritten or dropped:
         assertThat(session.getActiveProcedure()).isPresent();
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(3);
         assertThat(session.getDeferredIntent()).isPresent();
-        assertThat(session.getDeferredIntent().orElseThrow().orderNumber()).isEqualTo(orderB.getOrderNumber());
+        assertThat(session.getDeferredIntent().orElseThrow().orderNumber()).isEqualTo(orderC.getOrderNumber());
     }
 
     @Test

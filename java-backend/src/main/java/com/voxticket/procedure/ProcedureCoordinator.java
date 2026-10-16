@@ -1,8 +1,14 @@
 package com.voxticket.procedure;
 
 import com.voxticket.audit.ConversationAuditService;
+import com.voxticket.conversation.ClarificationPolicy;
 import com.voxticket.conversation.ConversationFocus;
 import com.voxticket.conversation.ConversationSession;
+import com.voxticket.conversation.DialogueSlotNames;
+import com.voxticket.conversation.DialogueState;
+import com.voxticket.conversation.ObligationType;
+import com.voxticket.conversation.Slot;
+import com.voxticket.conversation.SlotProvenance;
 import com.voxticket.conversation.RecentAction;
 import com.voxticket.conversation.RecentActionType;
 import com.voxticket.identity.AmbiguousItemException;
@@ -50,6 +56,7 @@ import com.voxticket.verification.VerificationService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +68,19 @@ public class ProcedureCoordinator {
     private static final Logger log = LoggerFactory.getLogger(ProcedureCoordinator.class);
     private static final Duration PENDING_ACTION_TTL = Duration.ofMinutes(5);
     private static final Set<String> STARTED_CODES = Set.of("CONFIRMATION_REQUIRED", "VERIFICATION_REQUIRED", "ALREADY_ESCALATED");
+
+    /**
+     * P0.6: idempotency keys per session. The voice worker mints one opaque
+     * key per logical turn (never derived from caller input, never logged)
+     * and the mutating methods below replay the stored outcome for a repeated
+     * key instead of re-executing - so a transport retry after a
+     * commit-then-stream-break can never double-execute (or double-count OTP
+     * attempts). Bounded to the last 20 keys per session, oldest evicted
+     * first. All coordinator calls run under the session lock, so the plain
+     * access-ordered LinkedHashMap needs no extra synchronization.
+     */
+    private static final int IDEMPOTENCY_KEYS_PER_SESSION = 20;
+    private final Map<String, LinkedHashMap<String, ProcedureOutcome>> idempotencyOutcomes = new ConcurrentHashMap<>();
 
     private final OwnedOrderResolver ownedOrderResolver;
     private final OwnedOrderItemResolver ownedOrderItemResolver;
@@ -118,6 +138,15 @@ public class ProcedureCoordinator {
 
     public ProcedureOutcome startCancellation(ConversationSession session, String orderReference) {
         long startNanos = System.nanoTime();
+        // P2.4: the model's own dialogue state flagged this reference as too
+        // shaky to act on - clarify deterministically instead of proceeding.
+        Optional<String> blocked = ClarificationPolicy.checkMutationBlocked(
+                session.getDialogueState(), DialogueSlotNames.ORDER_REFERENCE, orderReference);
+        if (blocked.isPresent()) {
+            return withMetadata(recordOutcome(session, ProcedureType.CANCELLATION,
+                    ProcedureOutcome.ok("SLOT_CLARIFICATION_REQUIRED", blocked.get()), orderReference, startNanos),
+                    Map.of("orderReference", orderReference, "clarificationCopy", blocked.get()));
+        }
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
             return withMetadata(recordOutcome(session, ProcedureType.CANCELLATION,
@@ -147,6 +176,14 @@ public class ProcedureCoordinator {
 
     public ProcedureOutcome startReturn(ConversationSession session, String orderReference, String itemReference, String reasonText, String quantityText) {
         long startNanos = System.nanoTime();
+        // P2.4: same deterministic clarification gate as startCancellation.
+        Optional<String> blocked = ClarificationPolicy.checkMutationBlocked(
+                session.getDialogueState(), DialogueSlotNames.ORDER_REFERENCE, orderReference);
+        if (blocked.isPresent()) {
+            return withMetadata(recordOutcome(session, ProcedureType.RETURN,
+                    ProcedureOutcome.ok("SLOT_CLARIFICATION_REQUIRED", blocked.get()), orderReference, startNanos),
+                    Map.of("orderReference", orderReference, "clarificationCopy", blocked.get()));
+        }
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
             return withMetadata(recordOutcome(session, ProcedureType.RETURN,
@@ -267,6 +304,14 @@ public class ProcedureCoordinator {
 
     public ProcedureOutcome startClaim(ConversationSession session, String orderReference, String itemReference, String problemText) {
         long startNanos = System.nanoTime();
+        // P2.4: same deterministic clarification gate as startCancellation.
+        Optional<String> blocked = ClarificationPolicy.checkMutationBlocked(
+                session.getDialogueState(), DialogueSlotNames.ORDER_REFERENCE, orderReference);
+        if (blocked.isPresent()) {
+            return withMetadata(recordOutcome(session, ProcedureType.CLAIM,
+                    ProcedureOutcome.ok("SLOT_CLARIFICATION_REQUIRED", blocked.get()), orderReference, startNanos),
+                    Map.of("orderReference", orderReference, "clarificationCopy", blocked.get()));
+        }
         VerifiedOrderRef ref = resolveOrder(session, orderReference);
         if (ref == null) {
             return withMetadata(recordOutcome(session, ProcedureType.CLAIM,
@@ -404,11 +449,71 @@ public class ProcedureCoordinator {
 
     // ---- Verification (called ONLY from ConversationRuntime, never from a tool) ----
 
+    /**
+     * P0.6: replays the stored outcome for a repeated idempotency key without
+     * re-executing. Returns null when the key is absent (no idempotency) or
+     * unseen. Never throws; never logs the key itself.
+     */
+    private ProcedureOutcome idempotentReplay(ConversationSession session, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+        LinkedHashMap<String, ProcedureOutcome> seen = idempotencyOutcomes.get(session.getSessionId());
+        ProcedureOutcome stored = seen == null ? null : seen.get(idempotencyKey);
+        if (stored != null) {
+            log.info("event=procedure_idempotent_replay sessionId={} outcomeCode={}", session.getSessionId(), stored.code());
+        }
+        return stored;
+    }
+
+    /**
+     * P0.6: records a mutating method's outcome under its idempotency key.
+     * Nothing is recorded when the key is absent or the outcome is null
+     * (e.g. the method threw - a retry must re-execute then).
+     */
+    private void idempotentRecord(ConversationSession session, String idempotencyKey, ProcedureOutcome outcome) {
+        if (idempotencyKey == null || idempotencyKey.isBlank() || outcome == null) {
+            return;
+        }
+        idempotencyOutcomes
+                .computeIfAbsent(session.getSessionId(), key -> newIdempotencyMap())
+                .put(idempotencyKey, outcome);
+    }
+
+    private static LinkedHashMap<String, ProcedureOutcome> newIdempotencyMap() {
+        return new LinkedHashMap<>(32, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, ProcedureOutcome> eldest) {
+                return size() > IDEMPOTENCY_KEYS_PER_SESSION;
+            }
+        };
+    }
+
     // No outer transaction here either: verificationService.verify() and the
     // domain service inside execute() each commit on return; the
     // EXECUTION_SUCCEEDED audit and session updates below therefore always
     // run after the domain state is durable.
     public ProcedureOutcome submitVerificationCode(ConversationSession session, String code) {
+        return submitVerificationCode(session, code, null);
+    }
+
+    /**
+     * P0.6: idempotent OTP submission. A repeated {@code idempotencyKey}
+     * replays the stored outcome (the procedure is already gone precisely
+     * because it executed) instead of re-verifying - so a transport retry
+     * can neither double-execute nor double-count attempts.
+     */
+    public ProcedureOutcome submitVerificationCode(ConversationSession session, String code, String idempotencyKey) {
+        ProcedureOutcome replay = idempotentReplay(session, idempotencyKey);
+        if (replay != null) {
+            return replay;
+        }
+        ProcedureOutcome outcome = submitVerificationCodeInternal(session, code);
+        idempotentRecord(session, idempotencyKey, outcome);
+        return outcome;
+    }
+
+    private ProcedureOutcome submitVerificationCodeInternal(ConversationSession session, String code) {
         long startNanos = System.nanoTime();
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
         if (procedure == null) {
@@ -450,6 +555,25 @@ public class ProcedureCoordinator {
     }
 
     public ProcedureOutcome resendVerificationCode(ConversationSession session) {
+        return resendVerificationCode(session, null);
+    }
+
+    /**
+     * P0.6: idempotent resend. A repeated key replays the stored outcome
+     * instead of issuing another challenge - a transport retry can never
+     * burn the resend cooldown or double-issue.
+     */
+    public ProcedureOutcome resendVerificationCode(ConversationSession session, String idempotencyKey) {
+        ProcedureOutcome replay = idempotentReplay(session, idempotencyKey);
+        if (replay != null) {
+            return replay;
+        }
+        ProcedureOutcome outcome = resendVerificationCodeInternal(session);
+        idempotentRecord(session, idempotencyKey, outcome);
+        return outcome;
+    }
+
+    private ProcedureOutcome resendVerificationCodeInternal(ConversationSession session) {
         ProcedureState procedure = session.getActiveProcedure().filter(p -> p.getStatus() == ProcedureStatus.AWAITING_VERIFICATION).orElse(null);
         if (procedure == null) {
             return ProcedureOutcome.error("NO_PENDING_VERIFICATION", "There's no verification in progress right now.");
@@ -480,6 +604,25 @@ public class ProcedureCoordinator {
      * transaction committed, leaving a false success trail on rollback.
      */
     public ProcedureOutcome confirmActive(ConversationSession session) {
+        return confirmActive(session, null);
+    }
+
+    /**
+     * P0.6: idempotent confirmation. A repeated key replays the stored
+     * outcome instead of re-executing - a transport retry after a
+     * commit-then-stream-break can never double-execute the mutation.
+     */
+    public ProcedureOutcome confirmActive(ConversationSession session, String idempotencyKey) {
+        ProcedureOutcome replay = idempotentReplay(session, idempotencyKey);
+        if (replay != null) {
+            return replay;
+        }
+        ProcedureOutcome outcome = confirmActiveInternal(session);
+        idempotentRecord(session, idempotencyKey, outcome);
+        return outcome;
+    }
+
+    private ProcedureOutcome confirmActiveInternal(ConversationSession session) {
         long startNanos = System.nanoTime();
         ProcedureState procedure = session.getActiveProcedure().orElse(null);
         if (procedure == null || procedure.getStatus() != ProcedureStatus.AWAITING_CONFIRMATION) {
@@ -660,7 +803,12 @@ public class ProcedureCoordinator {
 
     private VerifiedOrderRef resolveOrder(ConversationSession session, String orderReference) {
         try {
-            return ownedOrderResolver.resolve(session.getCustomerIdentity(), orderReference);
+            VerifiedOrderRef ref = ownedOrderResolver.resolve(session.getCustomerIdentity(), orderReference);
+            // P2.1: an authoritative lookup establishes a tool-read slot -
+            // it always wins over model proposals and is certain (P2.4).
+            session.getDialogueState().setSlot(new Slot(DialogueSlotNames.ORDER_REFERENCE,
+                    ref.orderNumber(), 1.0, SlotProvenance.TOOL_READ, session.getTurnCount()));
+            return ref;
         } catch (ResourceNotFoundForAccountException e) {
             return null;
         }
@@ -702,7 +850,8 @@ public class ProcedureCoordinator {
         // itself a second time would double-file it on promotion. So a
         // different request is refused without mutation and the customer
         // chooses, while the queued request itself is consumed and started
-        // fresh right now.
+        // fresh right now. Skipped during promotion: the promoted request
+        // is explicitly being started from the queue.
         Optional<DeferredProcedureIntent> deferred = session.getDeferredIntent();
         if (deferred.isPresent()) {
             DeferredProcedureIntent queued = deferred.get();
@@ -755,7 +904,7 @@ public class ProcedureCoordinator {
                     target.orderNumber(), startNanos);
         }
 
-        return recordOutcome(session, type, moveToConfirmation(procedure), target.orderNumber(), startNanos);
+        return recordOutcome(session, type, moveToConfirmation(session, procedure), target.orderNumber(), startNanos);
     }
 
     /**
@@ -838,37 +987,83 @@ public class ProcedureCoordinator {
     }
 
     /**
-     * Pass 2D-B: stores the candidate as the single deferred intent, with
-     * duplicate detection against the already-queued intent. A repeat of the
-     * queued request is {@code ALREADY_DEFERRED}; a genuinely different
-     * request while the slot is occupied is
-     * {@code PENDING_REQUEST_LIMIT_REACHED} - the queued request is never
-     * overwritten or silently dropped.
+     * P2.2: pushes the candidate onto the pending-request stack, with
+     * duplicate detection against every queued intent. A repeat of a queued
+     * request is {@code ALREADY_DEFERRED}; when the stack is at max depth
+     * the request is refused with {@code PENDING_REQUEST_LIMIT_REACHED} and
+     * a pick-one clarification - queued requests are never overwritten or
+     * silently dropped.
      */
     private ProcedureOutcome deferIntent(ConversationSession session, DeferredProcedureIntent candidate) {
-        Optional<DeferredProcedureIntent> existing = session.getDeferredIntent();
-        if (existing.isPresent()) {
+        DialogueState state = session.getDialogueState();
+        for (DeferredProcedureIntent existing : state.getPendingRequests()) {
             // Pass 2D-B dedupe fix: asymmetric compatibility, not strict
-            // fingerprint equality. An incomplete repeat of the queued
+            // fingerprint equality. An incomplete repeat of a queued
             // request is the same queued request.
-            if (isCompatibleRepeat(existing.get(), candidate)) {
+            if (isCompatibleRepeat(existing, candidate)) {
                 log.info("event=procedure_duplicate_deferred type={} orderNumber={}", candidate.type(), candidate.orderNumber());
                 return withMetadata(ProcedureOutcome.ok("ALREADY_DEFERRED", alreadyQueuedMessage(session)),
                         Map.of("orderReference", candidate.orderNumber()));
             }
-            String activeDesc = session.getActiveProcedure().map(this::describe).orElse("one request");
+        }
+        if (state.pendingRequestCount() >= DialogueState.MAX_PENDING_REQUESTS) {
             log.info("event=procedure_queue_full type={} orderNumber={}", candidate.type(), candidate.orderNumber());
-            return withMetadata(ProcedureOutcome.error("PENDING_REQUEST_LIMIT_REACHED",
-                            "There's already a " + activeDesc + " in progress and a " + describeIntent(existing.get())
-                                    + " queued behind it. Which one would you like to keep?"),
+            return withMetadata(ProcedureOutcome.error("PENDING_REQUEST_LIMIT_REACHED", queueFullMessage(session)),
                     Map.of("orderReference", candidate.orderNumber()));
         }
-        session.setDeferredIntent(candidate);
+        state.pushPendingRequest(candidate);
+        state.addObligation(ObligationType.RESUME_DEFERRED, describeIntent(candidate), session.getTurnCount());
         String activeDesc = session.getActiveProcedure().map(this::describe).orElse("one request");
         log.info("event=procedure_deferred type={} orderNumber={}", candidate.type(), candidate.orderNumber());
         return withMetadata(ProcedureOutcome.ok("PROCEDURE_DEFERRED",
                         "Noted - I'll take care of that right after the current " + activeDesc + "."),
                 Map.of("orderReference", candidate.orderNumber()));
+    }
+
+    /**
+     * P2.2: deterministic clarification when the pending-request stack is
+     * full - the caller picks one instead of the system silently stacking.
+     */
+    private String queueFullMessage(ConversationSession session) {
+        List<DeferredProcedureIntent> queued = session.getDialogueState().getPendingRequests();
+        StringBuilder sb = new StringBuilder("I have three open requests - ");
+        for (int i = 0; i < queued.size(); i++) {
+            if (i > 0) {
+                sb.append(i == queued.size() - 1 ? ", and " : ", ");
+            }
+            sb.append(describeIntent(queued.get(i)));
+        }
+        sb.append(". Which one should we finish first?");
+        return sb.toString();
+    }
+
+    /**
+     * P2.1: queues a procedure request from the {@code updateDialogueState}
+     * tool (PUSH_REQUEST). The order is resolved with the normal ownership
+     * check first - an order the caller does not own is reported, never
+     * queued. Dedupe and max-depth rules match {@link #deferIntent}.
+     * Returns the customer-safe result message.
+     */
+    public String queuePendingRequest(ConversationSession session, ProcedureType type, String orderNumber) {
+        DialogueState state = session.getDialogueState();
+        VerifiedOrderRef target = resolveOrder(session, orderNumber);
+        if (target == null) {
+            return "I couldn't find order " + orderNumber + " among your orders, so I didn't queue anything.";
+        }
+        DeferredProcedureIntent candidate =
+                DeferredProcedureIntent.incomplete(type, target, null, null, null, null, null);
+        for (DeferredProcedureIntent existing : state.getPendingRequests()) {
+            if (isCompatibleRepeat(existing, candidate)) {
+                return "That " + describeIntent(candidate) + " is already queued.";
+            }
+        }
+        if (state.pendingRequestCount() >= DialogueState.MAX_PENDING_REQUESTS) {
+            return queueFullMessage(session);
+        }
+        state.pushPendingRequest(candidate);
+        state.addObligation(ObligationType.RESUME_DEFERRED, describeIntent(candidate), session.getTurnCount());
+        log.info("event=procedure_queued_via_state_tool type={} orderNumber={}", type, target.orderNumber());
+        return "Queued: " + describeIntent(candidate) + ". I'll start it when the current work finishes.";
     }
 
     /**
@@ -1054,17 +1249,28 @@ public class ProcedureCoordinator {
         if (session.getActiveProcedure().isPresent()) {
             return Optional.empty();
         }
-        DeferredProcedureIntent intent = session.getDeferredIntent().orElse(null);
+        // P2.2: pop the top of the pending-request stack. Popping (not
+        // peeking) before the attempt keeps the Pass 2D-B final-cleanup
+        // guarantee: clearing first is safe because the catch below restores
+        // the original intent on ANY unexpected failure - a technical failure
+        // can never silently destroy the queued customer request. It also
+        // lets the normal start path consume the slot through beginProcedure
+        // for fully and partially captured intents alike.
+        DialogueState state = session.getDialogueState();
+        DeferredProcedureIntent intent = state.popPendingRequest().orElse(null);
         if (intent == null) {
             return Optional.empty();
         }
-        // Pass 2D-B final cleanup: the intent is cleared before the attempt.
-        // Clearing first is safe because the catch below restores the
-        // original intent on ANY unexpected failure - a technical failure can
-        // never silently destroy the queued customer request. It also lets
-        // the normal start path consume the slot through beginProcedure for
-        // fully and partially captured intents alike.
-        session.clearDeferredIntent();
+        // P2.2: stash the remaining queued intents during promotion. The
+        // promotion path (beginProcedure) refuses to start when a deferred
+        // intent is queued ("contested slot") - but that refusal is for NEW
+        // user requests, not for the promotion itself. The stashed intents
+        // stay queued for later LIFO promotion; they are restored below.
+        List<DeferredProcedureIntent> stashed = new ArrayList<>();
+        Optional<DeferredProcedureIntent> next;
+        while ((next = state.popPendingRequest()).isPresent()) {
+            stashed.add(next.get());
+        }
         ProcedureOutcome outcome;
         try {
             outcome = switch (intent.type()) {
@@ -1100,10 +1306,14 @@ public class ProcedureCoordinator {
                 session.clearActiveProcedure();
             }
             // The queued customer request must never be lost to a technical
-            // failure: restore the original intent. It is structurally
-            // incapable of carrying authorization, so the retry still gets a
-            // fresh OTP / fresh confirmation.
-            session.setDeferredIntent(intent);
+            // failure: restore the original intent on top of the stack. It is
+            // structurally incapable of carrying authorization, so the retry
+            // still gets a fresh OTP / fresh confirmation.
+            // Restore stashed intents first (reverse order), then the intent on top.
+            for (int i = stashed.size() - 1; i >= 0; i--) {
+                state.pushPendingRequest(stashed.get(i));
+            }
+            session.getDialogueState().pushPendingRequest(intent);
             try {
                 auditService.recordEvent(session, session.getTurnCount(),
                         ConversationEventType.DEFERRED_PROMOTION_FAILED,
@@ -1119,6 +1329,13 @@ public class ProcedureCoordinator {
         }
         log.info("event=deferred_intent_promoted type={} orderNumber={} outcome={}",
                 intent.type(), intent.orderNumber(), outcome.code());
+        // P2.1: the resume obligation is fulfilled - the queued request is
+        // now starting.
+        session.getDialogueState().dischargeObligation(ObligationType.RESUME_DEFERRED, intent.orderNumber());
+        // Restore the stashed intents (reverse order to preserve LIFO stack).
+        for (int i = stashed.size() - 1; i >= 0; i--) {
+            state.pushPendingRequest(stashed.get(i));
+        }
         return Optional.of(outcome);
     }
 
@@ -1248,10 +1465,22 @@ public class ProcedureCoordinator {
         // it is still there, otherwise the queue goes silent and the request
         // is effectively lost to them.
         String message = "The pending request has been dropped - nothing was executed.";
-        Optional<DeferredProcedureIntent> queued = session.getDeferredIntent();
-        if (queued.isPresent()) {
-            message += " Your " + describeIntent(queued.get())
-                    + " is still queued - just say the word and I'll start it, or I can drop it too.";
+        // P2.2: every queued request survives abandonment - list them all so
+        // none goes silent.
+        List<DeferredProcedureIntent> queued = session.getDialogueState().getPendingRequests();
+        if (!queued.isEmpty()) {
+            StringBuilder stillQueued = new StringBuilder(" Your ");
+            for (int i = 0; i < queued.size(); i++) {
+                if (i > 0) {
+                    stillQueued.append(i == queued.size() - 1 ? ", and your " : ", your ");
+                }
+                stillQueued.append(describeIntent(queued.get(i)));
+            }
+            stillQueued.append(queued.size() == 1 ? " is" : " are");
+            stillQueued.append(" still queued - just say the word and I'll start ");
+            stillQueued.append(queued.size() == 1 ? "it" : "them");
+            stillQueued.append(", or I can drop them too.");
+            message += stillQueued.toString();
         }
         return recordOutcome(session, active.getType(), withMetadata(
                 ProcedureOutcome.ok("ACTIVE_PROCEDURE_ABANDONED", message),
@@ -1259,28 +1488,33 @@ public class ProcedureCoordinator {
     }
 
     /**
-     * Pass 2D-B: discards only the queued deferred intent. Never touches the
-     * active procedure, never executes anything, never issues OTP.
+     * Pass 2D-B: discards only the top queued deferred intent (P2.2 stack).
+     * Never touches the active procedure, never executes anything, never
+     * issues OTP.
      */
     public ProcedureOutcome discardDeferredIntent(ConversationSession session) {
         long startNanos = System.nanoTime();
-        DeferredProcedureIntent intent = session.getDeferredIntent().orElse(null);
+        DialogueState state = session.getDialogueState();
+        DeferredProcedureIntent intent = state.popPendingRequest().orElse(null);
         if (intent == null) {
             return ProcedureOutcome.error("NO_DEFERRED_INTENT", "There's no queued request to discard.");
         }
-        session.clearDeferredIntent();
+        state.dischargeObligation(ObligationType.RESUME_DEFERRED, intent.orderNumber());
         log.info("event=deferred_intent_discarded type={} orderNumber={}", intent.type(), intent.orderNumber());
         return recordOutcome(session, intent.type(), withMetadata(
                 ProcedureOutcome.ok("DEFERRED_INTENT_DISCARDED", "The queued request has been discarded."),
                 Map.of("orderReference", intent.orderNumber())), intent.orderNumber(), startNanos);
     }
 
-    private ProcedureOutcome moveToConfirmation(ProcedureState procedure) {
+    private ProcedureOutcome moveToConfirmation(ConversationSession session, ProcedureState procedure) {
         PendingAction pendingAction = new PendingAction(
                 UUID.randomUUID(), procedure.getType(), procedure.getVerifiedTarget(), procedure.getCollectedData(),
                 Instant.now(), Instant.now().plus(PENDING_ACTION_TTL), UUID.randomUUID().toString());
         procedure.setPendingAction(pendingAction);
         procedure.setStatus(ProcedureStatus.AWAITING_CONFIRMATION);
+        // P2.4: the value-naming confirmation is being issued now - the
+        // CONFIRM_BEFORE_MUTATE obligation (if any) is fulfilled by it.
+        session.getDialogueState().dischargeObligation(ObligationType.CONFIRM_BEFORE_MUTATE);
         return ProcedureOutcome.ok("CONFIRMATION_REQUIRED", "Just to confirm - you'd like to " + procedure.getPendingDescription() + "?");
     }
 

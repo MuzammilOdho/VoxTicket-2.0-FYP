@@ -275,21 +275,34 @@ class ProcedurePass2DBRegressionTest {
     }
 
     @Test
-    void thirdDistinctRequestRefusesWithBothSlotsUntouched() {
+    void fourthStacksAndFifthDistinctRequestRefusesWithStackUntouched() {
         ConversationSession session = session();
 
         coordinator.startCancellation(session, "ORD-10001");
-        coordinator.startReturn(session, "ORD-10002", itemName("ORD-10002"), "damaged", "2");
-        DeferredProcedureIntent deferredBefore = session.getDeferredIntent().orElseThrow();
-
+        ProcedureOutcome second = coordinator.startReturn(session, "ORD-10002", itemName("ORD-10002"), "damaged", "2");
+        assertThat(second.code()).isEqualTo("PROCEDURE_DEFERRED");
+        // P2.2: the pending-request stack holds 3 - the third and fourth
+        // distinct requests stack instead of refusing.
         ProcedureOutcome third = coordinator.startClaim(session, "ORD-10003", itemName("ORD-10003"), "missing item");
+        assertThat(third.code()).isEqualTo("PROCEDURE_DEFERRED");
+        ProcedureOutcome fourth =
+                coordinator.startReturn(session, "ORD-10003", itemName("ORD-10003"), "wrong size", "1");
+        assertThat(fourth.code()).isEqualTo("PROCEDURE_DEFERRED");
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(3);
+        DeferredProcedureIntent topBefore = session.getDeferredIntent().orElseThrow();
 
-        assertThat(third.success()).isFalse();
-        assertThat(third.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
+        // A fifth distinct request refuses: the stack is at max depth and
+        // the caller picks one instead of the system silently stacking.
+        ProcedureOutcome fifth = coordinator.startClaim(session, "ORD-10002", itemName("ORD-10002"), "arrived broken");
+
+        assertThat(fifth.success()).isFalse();
+        assertThat(fifth.code()).isEqualTo("PENDING_REQUEST_LIMIT_REACHED");
+        assertThat(fifth.message()).contains("Which one should we finish first?");
         assertThat(session.getActiveProcedure()).isPresent();
         assertThat(session.getActiveProcedure().get().getType()).isEqualTo(ProcedureType.CANCELLATION);
+        assertThat(session.getDialogueState().pendingRequestCount()).isEqualTo(3);
         assertThat(session.getDeferredIntent()).isPresent();
-        assertThat(session.getDeferredIntent().get().orderNumber()).isEqualTo(deferredBefore.orderNumber());
+        assertThat(session.getDeferredIntent().get().orderNumber()).isEqualTo(topBefore.orderNumber());
         verify(verificationService, times(1)).issueChallenge(any(), any(), any(), any());
     }
 

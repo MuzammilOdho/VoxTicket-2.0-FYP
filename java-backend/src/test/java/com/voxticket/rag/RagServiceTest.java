@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.voxticket.config.TimeoutProperties;
 import com.voxticket.observability.TurnMetrics;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +17,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 class RagServiceTest {
 
     private final VectorStore vectorStore = mock(VectorStore.class);
-    private final RagService ragService = new RagService(vectorStore, new RagProperties(3, 0.5), mock(TurnMetrics.class));
+    private final RagService ragService = new RagService(vectorStore, new RagProperties(3, 0.5), mock(TurnMetrics.class), new TimeoutProperties(10, 8, 10));
 
     @Test
     void mapsRetrievedDocumentsToPolicySnippetsWithCategoryAndText() {
@@ -58,7 +59,7 @@ class RagServiceTest {
     }
 
     @Test
-    void differentTopKAndThresholdConfigurationChangesTheSearchRequestWithoutCodeChanges() {        RagService tunedService = new RagService(vectorStore, new RagProperties(10, 0.9), mock(TurnMetrics.class));
+    void differentTopKAndThresholdConfigurationChangesTheSearchRequestWithoutCodeChanges() {        RagService tunedService = new RagService(vectorStore, new RagProperties(10, 0.9), mock(TurnMetrics.class), new TimeoutProperties(10, 8, 10));
         when(vectorStore.similaritySearch(any(SearchRequest.class))).thenReturn(List.of());
 
         tunedService.searchPolicy("test");
@@ -68,4 +69,22 @@ class RagServiceTest {
         assertThat(captor.getValue().getTopK()).isEqualTo(10);
         assertThat(captor.getValue().getSimilarityThreshold()).isEqualTo(0.9);
     }
-}   
+
+    @Test
+    void expiredBudgetSkipsSearchAndMarksTheResultSkipped() throws Exception {
+        // Simulate a provider hang longer than the configured budget: the answer must
+        // degrade (empty + skipped) instead of blocking the turn.
+        when(vectorStore.similaritySearch(any(SearchRequest.class))).thenAnswer(invocation -> {
+            Thread.sleep(30_000);
+            return List.of();
+        });
+        RagService impatient = new RagService(vectorStore, new RagProperties(3, 0.5),
+                mock(TurnMetrics.class), new TimeoutProperties(10, 0, 10));
+
+        RagService.RagSearchResult result = impatient.searchPolicyDetailed("late delivery");
+
+        assertThat(result.skipped()).isTrue();
+        assertThat(result.hits()).isEmpty();
+        assertThat(result.durationMs()).isGreaterThanOrEqualTo(0);
+    }
+}

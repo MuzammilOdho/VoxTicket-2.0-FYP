@@ -69,22 +69,24 @@ public class AuditBatchWriter {
     private static final String INSERT_TURN_TRACE_SQL = """
             INSERT INTO conversation_turn_traces (
                 id, session_id, turn_number, channel, trace_id, parent_trace_id,
-                started_at, ended_at, outcome, aborted,
+                started_at, ended_at, outcome, aborted, abort_reason,
                 normalize_ms, guard_ms, routing_ms, llm_ttft_ms, llm_total_ms, rag_ms, tool_ms,
                 guard_suspicious, guard_category, guard_implementation, guard_fallback,
                 language, intent, intent_signals, routing_strategy, tier, routing_reason, semantic_margin,
                 provider, model, prompt_tokens, completion_tokens,
-                rag_cache_hit, rag_docs, tools,
+                prompt_version, prompt_content_hash,
+                rag_cache_hit, rag_skipped, rag_docs, tools,
                 procedure_type, procedure_status, procedure_outcome_code,
                 error_code, decision
             ) VALUES (
                 ?,?,?,?,?,?,
-                ?,?,?,?,
+                ?,?,?,?,?,
                 ?,?,?,?,?,?,?,
                 ?,?,?,?,
                 ?,?,?,?,?,?,?,
                 ?,?,?,?,
-                ?,?::jsonb,?::jsonb,
+                ?,?,
+                ?,?,?::jsonb,?::jsonb,
                 ?,?,?,
                 ?,?::jsonb
             )
@@ -316,12 +318,13 @@ public class AuditBatchWriter {
         UUID sessionUuid = requireSessionUuid(t.sessionId());
         jdbc.update(INSERT_TURN_TRACE_SQL, (Object[]) new Object[]{
                 UUID.randomUUID(), sessionUuid, t.turnNumber(), t.channel(), t.traceId(), t.parentTraceId(),
-                ts(t.startedAt()), tsOrNull(t.endedAt()), t.outcome(), t.aborted(),
+                ts(t.startedAt()), tsOrNull(t.endedAt()), t.outcome(), t.aborted(), t.abortReason(),
                 t.normalizeMs(), t.guardMs(), t.routingMs(), t.llmTtftMs(), t.llmTotalMs(), t.ragMs(), t.toolMs(),
                 t.guardSuspicious(), t.guardCategory(), t.guardImplementation(), t.guardFallback(),
                 t.language(), t.intent(), t.intentSignals(), t.routingStrategy(), t.tier(), t.routingReason(), t.semanticMargin(),
                 t.provider(), t.model(), t.promptTokens(), t.completionTokens(),
-                t.ragCacheHit(), toJson(t.ragDocs()), toJson(t.tools()),
+                t.promptVersion(), t.promptContentHash(),
+                t.ragCacheHit(), t.ragSkipped(), toJson(t.ragDocs()), toJson(t.tools()),
                 t.procedureType(), t.procedureStatus(), t.procedureOutcomeCode(),
                 t.errorCode(), toJson(t.decision()),
         });
@@ -381,12 +384,13 @@ public class AuditBatchWriter {
         }
         jdbc.update("INSERT INTO voice_call_turn_metrics"
                         + " (id, call_id, turn_number, trace_id, stt_latency_ms, brain_ttft_ms, tts_first_audio_ms,"
-                        + " e2e_ms, aborted, barge_in, stt_language, error)"
-                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+                        + " e2e_ms, aborted, barge_in, stt_language, error, stalled)"
+                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
                         + " ON CONFLICT (call_id, turn_number) DO NOTHING",
                 UUID.randomUUID(), callId, metric.turnNumber(), metric.traceId(),
                 metric.sttLatencyMs(), metric.brainTtftMs(), metric.ttsFirstAudioMs(),
-                metric.e2eMs(), metric.aborted(), metric.bargeIn(), metric.sttLanguage(), metric.error());
+                metric.e2eMs(), metric.aborted(), metric.bargeIn(), metric.sttLanguage(), metric.error(),
+                metric.stalled());
         // The per-turn table carries no provider columns (schema design); fold
         // them into the parent call row when the worker reports them.
         if (metric.sttProvider() != null || metric.sttModel() != null
