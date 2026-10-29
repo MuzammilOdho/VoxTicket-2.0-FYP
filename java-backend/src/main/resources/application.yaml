@@ -2,6 +2,28 @@ spring:
   application:
     name: voxticket
 
+  # Virtual threads for blocking SSE / LLM / database turns.
+  threads:
+    virtual:
+      enabled: true
+
+  # Empty host = no SMTP. OTP delivery defaults to dev (no mail sent);
+  # set MAIL_* below and voxticket.otp.delivery=email for real mail.
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/voxticket2.0}
     username: ${DB_USERNAME:muzammil}
@@ -53,24 +75,24 @@ management:
     web:
       exposure:
         include: health, info, prometheus
+  # Mail is an optional OTP channel, not a core dependency: with no SMTP
+  # host configured, the mail indicator alone must not make /health 503.
+  health:
+    mail:
+      enabled: false
 
 voxticket:
   commerce:
     returns:
       window-days: 30
 
-  # Phase 12 (P4): admin API credentials. The ADMIN role (httpBasic) guards
-  # /api/v1/admin/**. Set ADMIN_USERNAME / ADMIN_PASSWORD in the environment;
-  # leaving the password at the default "admin" logs a loud startup warning.
+  # Admin console (/api/v1/admin/**, HTTP Basic). A default password
+  # logs a loud startup warning; change both for anything beyond local.
   admin:
     username: ${ADMIN_USERNAME:admin}
     password: ${ADMIN_PASSWORD:admin}
 
   voice:
-    # Shared secret the Python LiveKit worker sends as
-    # X-VoxTicket-Telemetry-Secret on /api/v1/voice/telemetry and
-    # /api/v1/voice/worker-heartbeat. Empty = telemetry endpoints accept
-    # without a secret (dev convenience; logs a WARN at startup).
     telemetry-secret: ${VOICE_TELEMETRY_SECRET:}
     livekit:
       url: ${LIVEKIT_URL:}
@@ -78,25 +100,16 @@ voxticket:
       api-secret: ${LIVEKIT_API_SECRET:}
 
   ai:
-    # Phase 12 (P4): estimated AI spend. USD per 1k tokens, keyed by model id
-    # as configured in voxticket.ai.tiers.*.model. Used by
-    # GET /api/v1/admin/ai/cost. Fill with current provider pricing; 0.0
-    # means "unknown - excluded from the estimate".
+    # 0.0 = unknown, excluded from the cost estimate.
     cost:
       per-1k-tokens:
         "gemini-3.5-flash-lite": 0.0
         "openai/gpt-oss-120b": 0.0
-    # Each tier independently names exactly one provider and one model.
-    # Switching either is a config-only change: no Java changes, no fallback
-    # and no cross-provider routing. ModelSelector decides ONLY the tier
-    # (TIER_1 / TIER_2); TierChatClientRegistry builds the matching client.
+
+    # Keys come from env only, never from this file. A tier referencing
+    # a provider with a blank key fails startup. Google uses the native
+    # GenAI SDK (no base-url); Groq and Cerebras are OpenAI-compatible.
     providers:
-      # enabled:  true | false - master switch for the provider block.
-      # api-key:  read ONLY from an environment variable, never paste a key
-      #           into this file. If a tier references a provider whose key is
-      #           missing or blank, the application fails fast at startup.
-      # base-url: OpenAI-compatible providers (Groq, Cerebras) only. Google
-      #           uses the native GenAI SDK - no base-url required or used.
       google:
         enabled: true
         api-key: ${GEMINI_API_KEY:}
@@ -109,35 +122,9 @@ voxticket:
         api-key: ${CEREBRAS_API_KEY:}
         base-url: https://api.cerebras.ai/v1
 
-    # Per-tier options:
-    #
-    #   provider:          GROQ | GOOGLE | CEREBRAS - must match a block above.
-    #   model:             Groq/Cerebras: provider model ID, e.g.
-    #                        openai/gpt-oss-120b, openai/gpt-oss-20b,
-    #                        qwen/qwen3.8-27b
-    #                      Google: enum name, e.g. gemini-3.5-flash-lite,
-    #                        gemini-2.5-flash, gemini-3.5-flash,
-    #                        gemini-3.6-flash, gemini-2.5-flash-lite
-    #                      (dashes or UPPER_SNAKE both work; unknown names fail
-    #                      fast at startup with the supported list).
-    #   temperature:       0.0 - 2.0. Lower = more deterministic. Not sent to
-    #                      Gemini 3.x models (their API deprecates it).
-    #   max-output-tokens: positive int. Output budget per turn, including
-    #                      hidden reasoning tokens on reasoning models.
-    #   reasoning-effort:  none | low | medium | high. Provider-specific:
-    #                        groq:     none -> reasoning_effort omitted
-    #                                  (include_reasoning=false always sent);
-    #                                  low|medium|high -> sent natively.
-    #                        cerebras: none -> omitted; low|medium|high -> sent.
-    #                        google:   none -> default thinking, thoughts
-    #                                  suppressed; low|medium|high -> native
-    #                                  thinking level, thoughts never returned.
-    #                      Reasoning is never shown to the customer.
-    #   timeout-seconds:   positive int. Per-request timeout.
-    #   max-retries:       0+. Automatic provider retries after the first
-    #                      attempt. Keep 0 - failures must surface immediately.
+    # Tier 1: simple turns. Tier 2: complex / multi-part turns.
+    # The router decides only the tier, never the provider or model.
     tiers:
-      # TIER_1: simple queries (policy questions, order status, escalation).
       tier1:
         provider: GOOGLE
         model: gemini-3.5-flash-lite
@@ -146,7 +133,6 @@ voxticket:
         reasoning-effort: low
         timeout-seconds: 20
         max-retries: 0
-      # TIER_2: complex / multi-part queries (comparisons, disputes, claims).
       tier2:
         provider: GROQ
         model: openai/gpt-oss-120b
@@ -157,70 +143,79 @@ voxticket:
         max-retries: 0
 
     selector:
-      # The router decides ONLY the tier (TIER_1/TIER_2) - never provider/model.
-      # HYBRID = structural strong signals, then local multilingual-e5 semantic
-      # scoring. Requires the routing model artifacts: set ROUTING_MODEL_PATH
-      # to a directory containing model.onnx + tokenizer.json (download once
-      # from https://huggingface.co/intfloat/multilingual-e5-small/tree/main/onnx).
-      # Startup fails fast with an actionable error if they are missing.
-      #
-      #   strategy:               HYBRID | ALWAYS_TIER_1 | ALWAYS_TIER_2 | RULE_ONLY
-      #   structural.long-message-threshold:      chars; longer messages -> TIER_2.
-      #   structural.min-order-references-for-tier2: order refs; at/above -> TIER_2.
-      #   semantic.enabled:       true | false - multilingual-e5 semantic scoring.
-      #   semantic.model:         embedding model id (informational).
-      #   semantic.model-path:    directory with model.onnx + tokenizer.json.
-      #   semantic.examples:      labeled example set for prototype scoring.
-      #   semantic.top-k-per-class: prototypes kept per class for scoring.
-      #   semantic.complex-margin: selects the TIER_2 reason label
-      #                            (SEMANTIC_COMPLEX vs SEMANTIC_AMBIGUOUS);
-      #                            never changes the tier.
-      #   semantic.simple-margin:  semantic score threshold separating
-      #                            SEMANTIC_SIMPLE (TIER_1) from the ambiguous
-      #                            band (TIER_2). Calibrated value - retune only
-      #                            with a labeled validation set.
       strategy: HYBRID
       structural:
         long-message-threshold: 300
         min-order-references-for-tier2: 2
       semantic:
         enabled: true
+        # Local ONNX settings. Ignored when voxticket.routing.provider
+        # is voyage. Directory must contain model.onnx + tokenizer.json
+        # (intfloat/multilingual-e5-small, ONNX).
         model: intfloat/multilingual-e5-small
         model-path: ${ROUTING_MODEL_PATH:}
         examples: classpath:routing/examples-v1.json
         top-k-per-class: 3
         complex-margin: 0.02
         simple-margin: 0.01135858377758675
+
   rag:
-    # top-k:                positive int. Knowledge chunks retrieved per turn.
-    # similarity-threshold: 0.0 - 1.0. Minimum cosine similarity for a chunk
-    #                       to be included in the prompt context.
     top-k: 3
     similarity-threshold: 0.35
+
   safety:
     prompt-guard:
-      # provider:   ml | heuristic - ML classifier with heuristic fallback.
-      # ml-model:   Groq classifier model id for prompt-injection scoring.
-      # ml-threshold: 0.0 - 1.0. Score at/above -> message flagged suspicious.
-      # ml-max-tokens: output cap for the classifier call (single score).
       provider: heuristic
       ml-model: meta-llama/llama-prompt-guard-2-86m
       ml-threshold: 0.5
       ml-max-tokens: 10
+
+  # Embedding models, set independently.
+  # embedding = RAG (pgvector). routing = tier-routing prototypes.
+  # Each provider is local or voyage. A voyage provider with a blank
+  # key fails startup; it never falls back silently to local, because
+  # that would mix vector spaces.
+  # Routing key / base-url / timeout fall back to the embedding values
+  # when not set separately, so one Voyage key normally covers both.
+  # voyage-4-lite: 1024 dims, $0.02/1M tokens, 200M free. voyage-4
+  # ($0.06) and voyage-4-large ($0.12) share 1024 dims; changing the
+  # embedding model re-embeds RAG automatically, routing prototypes
+  # are re-embedded at every startup.
+  embedding:
+    provider: ${VOXTICKET_EMBEDDING_PROVIDER:local}
+    voyage:
+      api-key: ${VOYAGE_API_KEY:}
+      model: ${VOYAGE_MODEL:voyage-4-lite}
+      base-url: ${VOYAGE_BASE_URL:https://api.voyageai.com/v1}
+      timeout-seconds: ${VOYAGE_TIMEOUT_SECONDS:5}
+  routing:
+    provider: ${VOXTICKET_ROUTING_PROVIDER:local}
+    voyage:
+      api-key: ${VOYAGE_ROUTING_API_KEY:${VOYAGE_API_KEY:}}
+      model: ${VOYAGE_ROUTING_MODEL:voyage-4-lite}
+      base-url: ${VOYAGE_ROUTING_BASE_URL:${VOYAGE_BASE_URL:https://api.voyageai.com/v1}}
+      timeout-seconds: ${VOYAGE_ROUTING_TIMEOUT_SECONDS:${VOYAGE_TIMEOUT_SECONDS:5}}
+
   otp:
     expiry-minutes: 5
     max-attempts: 3
     resend-cooldown-seconds: 60
     max-challenges-per-customer-per-hour: 5
     max-challenges-per-session: 5
-    email-from: no-reply@voxticket.example
-    # delivery: not set here on purpose - defaults to "dev" in dev/test profiles.
-    # Set to "email" (plus real spring.mail.* config) to switch delivery.
+    email-from: ${MAIL_FROM:no-reply@voxticket.example}
+    # dev = no mail sent. email = real mail via spring.mail above;
+    # requires MAIL_HOST / MAIL_USERNAME / MAIL_PASSWORD.
+    delivery: ${VOXTICKET_OTP_DELIVERY:dev}
 
-  # P1 (non-blocking audit): ConversationAuditService only enqueues into a
-  # bounded in-memory queue; AuditBatchWriter drains it on a dedicated thread.
-  # Overflow and write failures increment voxticket.telemetry.dropped
-  # (tags: reason=overflow|write_error) and never fail the turn.
+  # Procedure notification emails (cancellation, return, claim, refund).
+  # Independent of OTP delivery above: OTP can stay on dev while these
+  # go by email. The From address is voxticket.otp.email-from (MAIL_FROM).
+  # enabled=true with no SMTP host simply skips sending; a mail failure
+  # never fails the procedure itself.
+  notifications:
+    email:
+      enabled: true
+
   audit:
     queue-capacity: 8192
     batch-size: 200

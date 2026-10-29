@@ -367,8 +367,9 @@ class BrainError(Exception):
 # the new turn retries rather than speaking an apology to the caller.
 # Total worst-case added latency: 2 retries x 0.5s = 1s, on top of the
 # Java-side 2s lock-wait budget.
-_BRAIN_429_MAX_ATTEMPTS = 3  # total POST attempts, including the first
-_BRAIN_429_RETRY_DELAY_S = 0.5
+_BRAIN_429_MAX_ATTEMPTS = 8  # total POST attempts, including the first
+_BRAIN_429_BASE_RETRY_DELAY_S = 0.5  # first retry delay; doubles per attempt
+_BRAIN_429_MAX_RETRY_DELAY_S = 4.0  # cap: delays are 0.5, 1, 2, 4, 4, 4, 4s
 
 
 class VoxTicketBrain:
@@ -429,8 +430,8 @@ class VoxTicketBrain:
 
         Falls back to the blocking endpoint (yielded as one chunk) when the
         Java side predates the stream endpoint (404/405). Retries up to
-        _BRAIN_429_MAX_ATTEMPTS times on HTTP 429 (session busy: the previous
-        barge-in-aborted turn is still unwinding on the Java side). Raises
+        8 times on HTTP 429 with exponential backoff (session busy: the
+        previous barge-in-aborted turn is still unwinding on the Java side). Raises
         BrainError on other failures; cancelling the consumer (barge-in)
         closes the stream, which lets the Java side abort the turn and
         release its session lock.
@@ -462,11 +463,22 @@ class VoxTicketBrain:
                     if resp.status_code == 429 and attempt < _BRAIN_429_MAX_ATTEMPTS:
                         # The previous turn still holds the Java session lock.
                         # Retry the turn instead of failing: the abort is
-                        # landing and the lock is about to release.
+                        # landing and the lock is about to release. Backoff
+                        # matters for repeated barges: the old 3 x 0.5s budget
+                        # expired before a turn stuck in its first LLM call
+                        # (no text delta yet, so no generation abort) could
+                        # unwind, and the caller's latest transcript was lost.
+                        # A retry is harmless if the caller barged again in
+                        # the meantime: Java aborts it at turn start when a
+                        # newer generation exists, before any mutation.
+                        delay = min(
+                            _BRAIN_429_BASE_RETRY_DELAY_S * (2 ** (attempt - 1)),
+                            _BRAIN_429_MAX_RETRY_DELAY_S,
+                        )
                         await resp.aread()  # release the connection
                         logger.info("brain session busy (HTTP 429); retrying turn in %.1fs (attempt %d of %d)",
-                                    _BRAIN_429_RETRY_DELAY_S, attempt + 1, _BRAIN_429_MAX_ATTEMPTS)
-                        await asyncio.sleep(_BRAIN_429_RETRY_DELAY_S)
+                                    delay, attempt + 1, _BRAIN_429_MAX_ATTEMPTS)
+                        await asyncio.sleep(delay)
                         continue
                     if resp.status_code != 200:
                         body = await resp.aread()

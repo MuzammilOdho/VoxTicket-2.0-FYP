@@ -11,6 +11,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Phase 2: HYBRID initialization failures fail startup loudly - never a silent fallback to
  * RULE_ONLY, never a partially-initialized semantic stack.
+ *
+ * <p>RoutingConfiguration.routingEmbeddingService now also takes the routing
+ * provider (from voxticket.routing.provider) and the Voyage settings; these
+ * tests exercise the local path, so they pass "local" and null Voyage
+ * settings, which the local path never touches.
  */
 class RoutingStartupFailureTest {
 
@@ -27,11 +32,18 @@ class RoutingStartupFailureTest {
                 new StructuralRoutingProperties(300, 2), semantic(modelPath, enabled));
     }
 
+    private static RoutingEmbeddingService localService(RoutingConfiguration config, RoutingProperties props) {
+        // Null Voyage settings are safe here: the local path never touches
+        // them (they are only used on the voyage branch, which constructs
+        // its own client and fails fast on a blank key).
+        return config.routingEmbeddingService(props, "local", "voyage-4-lite", null, null, 5);
+    }
+
     @Test
     void missingModelDirectoryFailsFastWithActionableError() {
         var config = new RoutingConfiguration();
 
-        assertThatThrownBy(() -> config.routingEmbeddingService(
+        assertThatThrownBy(() -> localService(config,
                 routing(tempDir.resolve("no-such-dir").toString(), true)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("model.onnx");
@@ -41,7 +53,7 @@ class RoutingStartupFailureTest {
     void nullModelDirectoryFailsFastWithActionableError() {
         var config = new RoutingConfiguration();
 
-        assertThatThrownBy(() -> config.routingEmbeddingService(routing(null, true)))
+        assertThatThrownBy(() -> localService(config, routing(null, true)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ROUTING_MODEL_PATH");
     }
@@ -50,8 +62,7 @@ class RoutingStartupFailureTest {
     void hybridWithSemanticDisabledRefusesToSilentlyDegrade() {
         var config = new RoutingConfiguration();
 
-        assertThatThrownBy(() -> config.routingEmbeddingService(
-                routing(tempDir.toString(), false)))
+        assertThatThrownBy(() -> localService(config, routing(tempDir.toString(), false)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("silently fall back to RULE_ONLY");
     }
@@ -64,7 +75,7 @@ class RoutingStartupFailureTest {
                 new SemanticRoutingProperties(true, "some/other-model", tempDir.toString(),
                         "classpath:routing/examples-v1.json", 3, 0.02, 0.02));
 
-        assertThatThrownBy(() -> config.routingEmbeddingService(props))
+        assertThatThrownBy(() -> localService(config, props))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("intfloat/multilingual-e5-small");
     }

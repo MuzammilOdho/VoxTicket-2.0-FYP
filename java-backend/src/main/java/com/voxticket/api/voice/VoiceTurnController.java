@@ -75,6 +75,15 @@ public class VoiceTurnController {
     @PostMapping("/turn/stream")
     public SseEmitter turnStream(@Valid @RequestBody VoiceTurnRequest request, HttpServletRequest httpRequest) {
         SseEmitter emitter = new SseEmitter(Duration.ofMinutes(2).toMillis());
+        // Lifecycle handlers only: the turn thread still owns the abort
+        // (next emit fails -> TurnAbortedException -> lock release). These
+        // handlers exist so a timed-out or broken emitter is logged and
+        // never silently leaks, and so a SessionBusy rethrow below keeps
+        // its HTTP 429 mapping instead of orphaning the emitter.
+        emitter.onTimeout(() -> log.warn("voice turn stream emitter timed out sessionId={}", request.sessionId()));
+        emitter.onCompletion(() -> log.debug("voice turn stream emitter completed sessionId={}", request.sessionId()));
+        emitter.onError(e -> log.warn("voice turn stream emitter error sessionId={} errorType={}",
+                request.sessionId(), e == null ? "null" : e.getClass().getSimpleName()));
         UserTurn turn = new UserTurn(
                 request.sessionId(), Channel.PHONE, request.message(), request.customerPhone(), Instant.now(), turnMetadata(httpRequest, request.sessionId()));
         try {

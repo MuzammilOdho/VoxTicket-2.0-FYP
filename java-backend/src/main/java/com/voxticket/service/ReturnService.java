@@ -2,6 +2,7 @@ package com.voxticket.service;
 
 import com.voxticket.identity.OwnedOrderItemResolver;
 import com.voxticket.identity.VerifiedOrderRef;
+import com.voxticket.notification.ProcedureNotificationService;
 import com.voxticket.persistence.entity.Order;
 import com.voxticket.persistence.entity.OrderItem;
 import com.voxticket.persistence.entity.Payment;
@@ -47,6 +48,7 @@ public class ReturnService {
     private final PaymentRepository paymentRepository;
     private final ReferenceNumberGenerator referenceNumberGenerator;
     private final OrderItemRepository orderItemRepository;
+    private final ProcedureNotificationService notificationService;
 
     public ReturnService(
             OrderRepository orderRepository,
@@ -55,7 +57,8 @@ public class ReturnService {
             ReturnPolicyService returnPolicyService,
             RefundService refundService,
             PaymentRepository paymentRepository,
-            ReferenceNumberGenerator referenceNumberGenerator, OrderItemRepository orderItemRepository) {
+            ReferenceNumberGenerator referenceNumberGenerator, OrderItemRepository orderItemRepository,
+            ProcedureNotificationService notificationService) {
         this.orderRepository = orderRepository;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.returnRequestRepository = returnRequestRepository;
@@ -64,6 +67,7 @@ public class ReturnService {
         this.paymentRepository = paymentRepository;
         this.referenceNumberGenerator = referenceNumberGenerator;
         this.orderItemRepository = orderItemRepository;
+        this.notificationService = notificationService;
     }
 
     public ReturnRequest requestReturn(VerifiedOrderRef orderRef, String sku, int quantity, ReturnReason reason) {
@@ -92,7 +96,9 @@ public class ReturnService {
 
         ReturnRequest returnRequest = new ReturnRequest(referenceNumberGenerator.returnNumber(), order, reason);
         returnRequest.addItem(new ReturnItem(item, quantity, reason));
-        return returnRequestRepository.save(returnRequest);
+        ReturnRequest saved = returnRequestRepository.save(returnRequest);
+        notificationService.notifyReturnRequested(saved);
+        return saved;
     }
 
     public ReturnRequest approve(UUID returnRequestId) {
@@ -138,7 +144,8 @@ public class ReturnService {
         BigDecimal refundAmount = returnRequest.getItems().stream()
                 .map(ri -> ri.getOrderItem().getUnitPrice().multiply(BigDecimal.valueOf(ri.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        refundService.initiateRefund(returnRequest.getOrder(), payment, returnRequest, refundAmount, RefundReason.RETURN);
+        var refund = refundService.initiateRefund(returnRequest.getOrder(), payment, returnRequest, refundAmount, RefundReason.RETURN);
+        notificationService.notifyRefundInitiated(refund, "Return " + returnRequest.getReturnNumber());
         return returnRequest;
     }
 

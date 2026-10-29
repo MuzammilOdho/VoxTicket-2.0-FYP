@@ -4,6 +4,8 @@ import com.voxticket.observability.TurnMetrics;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +40,8 @@ public class RagService {
     private static final Duration SEARCH_CACHE_TTL = Duration.ofMinutes(10);
     private static final int SEARCH_CACHE_MAX_ENTRIES = 200;
     private final ConcurrentHashMap<String, CachedSearch> searchCache = new ConcurrentHashMap<>();
+    /** Insertion order for FIFO eviction (cache hits do not reorder). */
+    private final Queue<String> searchCacheOrder = new ConcurrentLinkedQueue<>();
 
     private record CachedSearch(List<DocHit> hits, List<PolicySnippet> snippets, long expiresAtMillis) {
     }
@@ -79,7 +83,12 @@ public class RagService {
     private SearchOutcome searchInternal(String query) {
         String cacheKey = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
         CachedSearch hit = searchCache.get(cacheKey);
-        if (hit != null && hit.expiresAtMillis() > System.currentTimeMillis()) {
+        if (hit != null && hit.expiresAtMillis() <= System.currentTimeMillis()) {
+            searchCache.remove(cacheKey, hit);
+            searchCacheOrder.remove(cacheKey);
+            hit = null;
+        }
+        if (hit != null) {
             turnMetrics.recordRagSearch(Duration.ZERO, hit.snippets().size());
             log.debug("event=rag_search_cached retrievedCount={} queryLength={}", hit.snippets().size(), query == null ? 0 : query.length());
             return new SearchOutcome(hit.hits(), hit.snippets(), true, 0);
@@ -110,10 +119,31 @@ public class RagService {
                 properties.topK(), properties.similarityThreshold(), snippets.size(), categories, query == null ? 0 : query.length(), durationMs);
         turnMetrics.recordRagSearch(Duration.ofMillis(durationMs), snippets.size());
 
-        if (searchCache.size() < SEARCH_CACHE_MAX_ENTRIES) {
-            searchCache.put(cacheKey, new CachedSearch(hits, snippets, System.currentTimeMillis() + SEARCH_CACHE_TTL.toMillis()));
+        // Previously the cache stopped accepting new entries forever once
+        // it reached 200 distinct queries, because nothing ever evicted
+        // expired entries. Now: drop expired entries first, then evict the
+        // oldest inserted entry while still full, then always cache.
+        evictExpiredCacheEntries();
+        while (searchCache.size() >= SEARCH_CACHE_MAX_ENTRIES) {
+            String oldest = searchCacheOrder.poll();
+            if (oldest == null) {
+                break;
+            }
+            searchCache.remove(oldest);
         }
+        searchCache.put(cacheKey, new CachedSearch(hits, snippets, System.currentTimeMillis() + SEARCH_CACHE_TTL.toMillis()));
+        searchCacheOrder.offer(cacheKey);
         return new SearchOutcome(hits, snippets, false, durationMs);
+    }
+
+    private void evictExpiredCacheEntries() {
+        long now = System.currentTimeMillis();
+        for (var entry : searchCache.entrySet()) {
+            if (entry.getValue().expiresAtMillis() <= now) {
+                searchCache.remove(entry.getKey(), entry.getValue());
+                searchCacheOrder.remove(entry.getKey());
+            }
+        }
     }
 
     /** P2: one retrieved document - identity + relevance only, never content. */

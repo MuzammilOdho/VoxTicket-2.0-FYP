@@ -1,6 +1,7 @@
 package com.voxticket.service;
 
 import com.voxticket.identity.VerifiedOrderRef;
+import com.voxticket.notification.ProcedureNotificationService;
 import com.voxticket.persistence.entity.Order;
 import com.voxticket.persistence.entity.Payment;
 import com.voxticket.persistence.entity.Refund;
@@ -45,6 +46,7 @@ public class CancellationService {
     private final RefundService refundService;
     private final SupportTicketRepository supportTicketRepository;
     private final ReferenceNumberGenerator referenceNumberGenerator;
+    private final ProcedureNotificationService notificationService;
 
     public CancellationService(
             OrderRepository orderRepository,
@@ -52,13 +54,15 @@ public class CancellationService {
             CancellationPolicyService cancellationPolicyService,
             RefundService refundService,
             SupportTicketRepository supportTicketRepository,
-            ReferenceNumberGenerator referenceNumberGenerator) {
+            ReferenceNumberGenerator referenceNumberGenerator,
+            ProcedureNotificationService notificationService) {
         this.orderRepository = orderRepository;
         this.paymentRepository = paymentRepository;
         this.cancellationPolicyService = cancellationPolicyService;
         this.refundService = refundService;
         this.supportTicketRepository = supportTicketRepository;
         this.referenceNumberGenerator = referenceNumberGenerator;
+        this.notificationService = notificationService;
     }
 
     public CancellationResult cancel(VerifiedOrderRef orderRef) {
@@ -99,6 +103,10 @@ public class CancellationService {
                             + " Payment resolution needs manual review."));
         }
 
+        // One email for the cancellation, carrying the refund outcome.
+        // The notification service never throws and sends only after
+        // commit, so this cannot fail or roll back the cancellation.
+        notificationService.notifyCancellation(order, eligibility.paymentConsequence(), refund, manualReviewTicket);
         return new CancellationResult(order.getOrderNumber(), eligibility.paymentConsequence(), refund, manualReviewTicket);
     }
 

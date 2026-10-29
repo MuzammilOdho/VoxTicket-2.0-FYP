@@ -23,6 +23,11 @@ public final class CachingEmbeddingService implements RoutingEmbeddingService, A
     }
 
     @Override
+    public int dimension() {
+        return delegate.dimension();
+    }
+
+    @Override
     public float[] embed(String text) {
         String key = text == null ? "" : text;
         float[] cached = cache.get(key);

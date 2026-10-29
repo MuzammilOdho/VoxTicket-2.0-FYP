@@ -295,8 +295,8 @@ public class ConversationRuntime {
                         // live procedure impossible, so guarded turns no longer
                         // need to be read-only.
                         AgentResponse residual = isGuardedProcedureActive(session)
-                                ? respondGuardedViaAgent(session, sensitive.residualText(), checkedSink)
-                                : respondViaAgent(session, sensitive.residualText(), checkedSink);
+                                ? respondGuardedViaAgent(session, sensitive.residualText(), checkedSink, voiceGeneration)
+                                : respondViaAgent(session, sensitive.residualText(), checkedSink, voiceGeneration);
                         responseText = combineResponses(responseText, residual.text());
                     }
                 } else if (sensitive.resendRequested()) {
@@ -308,7 +308,7 @@ public class ConversationRuntime {
                     emit(checkedSink, responseText);
                     if (sensitive.hasResidual()) {
                         // The guarded verification is still unresolved.
-                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText(), checkedSink);
+                        AgentResponse residual = respondGuardedViaAgent(session, sensitive.residualText(), checkedSink, voiceGeneration);
                         responseText = combineResponses(responseText, residual.text());
                     }
                 } else {
@@ -317,7 +317,7 @@ public class ConversationRuntime {
                     // mutation request (deferred by the coordinator), a
                     // correction, or an explicit replacement. A second live
                     // procedure is impossible by coordinator construction.
-                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText, checkedSink);
+                    AgentResponse agentResponse = respondGuardedViaAgent(session, normalizedText, checkedSink, voiceGeneration);
                     responseText = agentResponse.text();
                     outcomeLabel = agentResponse.outcome().toTurnLabel("verification_unclear");
                 }
@@ -345,7 +345,7 @@ public class ConversationRuntime {
                         // agent can understand a second request (deferred by the
                         // coordinator), a correction, or an explicit replacement.
                         // The coordinator makes a second live procedure impossible.
-                        unclearResponse = respondGuardedViaAgent(session, normalizedText, checkedSink);
+                        unclearResponse = respondGuardedViaAgent(session, normalizedText, checkedSink, voiceGeneration);
                         yield unclearResponse.text();
                     }
                 };
@@ -365,11 +365,17 @@ public class ConversationRuntime {
                 // contested slot explicitly instead of the coordinator
                 // silently deciding the queued request's fate.
                 AgentResponse agentResponse = session.getDeferredIntent().isPresent()
-                        ? respondGuardedViaAgent(session, normalizedText, checkedSink)
-                        : respondViaAgent(session, normalizedText, checkedSink);
+                        ? respondGuardedViaAgent(session, normalizedText, checkedSink, voiceGeneration)
+                        : respondViaAgent(session, normalizedText, checkedSink, voiceGeneration);
                 responseText = agentResponse.text();
                 outcomeLabel = agentResponse.outcome().toTurnLabel("normal");
             }
+            // A superseded turn must never record its reply: a barge-in that
+            // arrived during the final chunk (or during a blocking agent call,
+            // which has no per-chunk check) would otherwise leave a stale
+            // assistant message in history for a turn the caller abandoned.
+            // No-op for chat turns (voiceGeneration == 0).
+            checkNotSuperseded(session.getSessionId(), voiceGeneration);
             session.recordAssistantMessage(responseText);
             auditService.recordMessage(session, turnNumber, MessageRole.ASSISTANT, responseText);
 
@@ -562,11 +568,13 @@ public class ConversationRuntime {
      * <p>When {@code deltaSink} is non-null the agent streams token deltas to
      * it; {@code null} keeps the classic blocking behavior.
      */
-    private AgentResponse respondGuardedViaAgent(ConversationSession session, String text, Consumer<String> deltaSink) {
+    private AgentResponse respondGuardedViaAgent(ConversationSession session, String text, Consumer<String> deltaSink,
+            long voiceGeneration) {
         session.resetToolInvokedFlag();
         AgentResponse response = deltaSink == null
                 ? supportAgent.respondGuarded(session, text)
-                : supportAgent.respondStream(session, text, ToolAccessMode.GUARDED, deltaSink);
+                : supportAgent.respondStream(session, text, ToolAccessMode.GUARDED, deltaSink,
+                        () -> checkNotSuperseded(session.getSessionId(), voiceGeneration));
         checkForSuspectedFabrication(session, response);
         return response;
     }
@@ -609,11 +617,13 @@ public class ConversationRuntime {
     }
 
     /** Wraps every SupportAgent.respond call so the fabrication check always has a clean per-turn tool-invocation signal to check against. */
-    private AgentResponse respondViaAgent(ConversationSession session, String normalizedText, Consumer<String> deltaSink) {
+    private AgentResponse respondViaAgent(ConversationSession session, String normalizedText, Consumer<String> deltaSink,
+            long voiceGeneration) {
         session.resetToolInvokedFlag();
         AgentResponse response = deltaSink == null
                 ? supportAgent.respond(session, normalizedText)
-                : supportAgent.respondStream(session, normalizedText, ToolAccessMode.FULL, deltaSink);
+                : supportAgent.respondStream(session, normalizedText, ToolAccessMode.FULL, deltaSink,
+                        () -> checkNotSuperseded(session.getSessionId(), voiceGeneration));
         checkForSuspectedFabrication(session, response);
         return response;
     }

@@ -31,16 +31,27 @@ public class RoutingExampleIndex {
 
     /**
      * Embeds every example once and caches the vectors. This is the ONLY per-example
-     * embedding call in the application's lifetime.
+     * embedding call in the application's lifetime. Uses {@code embedBatch}
+     * so a cloud service embeds all prototypes in one call; a local service
+     * uses the default loop, exactly as before. The expected dimension is
+     * the service's own {@link RoutingEmbeddingService#dimension()} (384
+     * ONNX, 1024 Voyage), not a fixed constant and not the first vector's
+     * length - so a service returning vectors of the wrong length is
+     * rejected with a dimension error instead of silently redefining
+     * the dimension to whatever it happened to return.
      */
     public static RoutingExampleIndex build(List<RoutingExample> examples, RoutingEmbeddingService embeddingService) {
         Map<ModelTier, List<float[]>> byTier = new EnumMap<>(ModelTier.class);
         for (ModelTier tier : ModelTier.values()) {
             byTier.put(tier, new ArrayList<>());
         }
-        for (RoutingExample example : examples) {
-            float[] vector = embeddingService.embed(example.text());
-            requireNormalized(vector, example.id());
+        List<float[]> vectors = embeddingService.embedBatch(
+                examples.stream().map(RoutingExample::text).toList());
+        int expectedDimension = embeddingService.dimension();
+        for (int i = 0; i < examples.size(); i++) {
+            RoutingExample example = examples.get(i);
+            float[] vector = vectors.get(i);
+            requireNormalized(vector, example.id(), expectedDimension);
             byTier.get(example.tier()).add(vector);
         }
         for (ModelTier tier : ModelTier.values()) {
@@ -78,9 +89,9 @@ public class RoutingExampleIndex {
     }
 
     private static double dot(float[] a, float[] b) {
-        if (a.length != RoutingEmbeddingService.DIMENSION || b.length != RoutingEmbeddingService.DIMENSION) {
-            throw new IllegalArgumentException("Routing vectors must be "
-                    + RoutingEmbeddingService.DIMENSION + "-dimensional");
+        if (a.length != b.length) {
+            throw new IllegalArgumentException("Routing vectors must have equal dimensions, got "
+                    + a.length + " and " + b.length);
         }
         double sum = 0.0;
         for (int i = 0; i < a.length; i++) {
@@ -89,10 +100,10 @@ public class RoutingExampleIndex {
         return sum;
     }
 
-    private static void requireNormalized(float[] vector, String exampleId) {
-        if (vector.length != RoutingEmbeddingService.DIMENSION) {
+    private static void requireNormalized(float[] vector, String exampleId, int expectedDimension) {
+        if (vector.length != expectedDimension) {
             throw new IllegalArgumentException("Prototype embedding for example '" + exampleId
-                    + "' has dimension " + vector.length + ", expected " + RoutingEmbeddingService.DIMENSION);
+                    + "' has dimension " + vector.length + ", expected " + expectedDimension);
         }
         double norm = 0.0;
         for (float v : vector) {

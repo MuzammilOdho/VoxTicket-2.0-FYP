@@ -2,6 +2,7 @@ package com.voxticket.service;
 
 import com.voxticket.identity.OwnedOrderItemResolver;
 import com.voxticket.identity.VerifiedOrderRef;
+import com.voxticket.notification.ProcedureNotificationService;
 import com.voxticket.persistence.entity.Order;
 import com.voxticket.persistence.entity.OrderClaim;
 import com.voxticket.persistence.entity.OrderItem;
@@ -45,6 +46,7 @@ public class ClaimService {
     private final PaymentRepository paymentRepository;
     private final RefundService refundService;
     private final ReferenceNumberGenerator referenceNumberGenerator;
+    private final ProcedureNotificationService notificationService;
 
     public ClaimService(
             OrderRepository orderRepository,
@@ -54,7 +56,8 @@ public class ClaimService {
             SupportTicketRepository supportTicketRepository,
             PaymentRepository paymentRepository,
             RefundService refundService,
-            ReferenceNumberGenerator referenceNumberGenerator) {
+            ReferenceNumberGenerator referenceNumberGenerator,
+            ProcedureNotificationService notificationService) {
         this.orderRepository = orderRepository;
         this.ownedOrderItemResolver = ownedOrderItemResolver;
         this.orderItemRepository = orderItemRepository;
@@ -63,6 +66,7 @@ public class ClaimService {
         this.paymentRepository = paymentRepository;
         this.refundService = refundService;
         this.referenceNumberGenerator = referenceNumberGenerator;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -101,7 +105,9 @@ public class ClaimService {
 
         OrderClaim claim = new OrderClaim(referenceNumberGenerator.claimNumber(), order, item, reason, requestedResolution);
         claim.setSupportTicket(ticket);
-        return orderClaimRepository.save(claim);
+        OrderClaim saved = orderClaimRepository.save(claim);
+        notificationService.notifyClaimFiled(saved);
+        return saved;
     }
 
     public OrderClaim markInReview(UUID claimId) {
@@ -117,7 +123,8 @@ public class ClaimService {
         OrderClaim claim = getForUpdate(claimId);
         requireOpenOrInReview(claim);
         Payment payment = paymentRepository.findFirstByOrderIdOrderByCreatedAtDesc(claim.getOrder().getId()).orElseThrow();
-        refundService.initiateRefund(claim.getOrder(), payment, null, amount, RefundReason.CLAIM);
+        var refund = refundService.initiateRefund(claim.getOrder(), payment, null, amount, RefundReason.CLAIM);
+        notificationService.notifyRefundInitiated(refund, "Claim " + claim.getClaimNumber());
         claim.setStatus(ClaimStatus.RESOLVED);
         return claim;
     }

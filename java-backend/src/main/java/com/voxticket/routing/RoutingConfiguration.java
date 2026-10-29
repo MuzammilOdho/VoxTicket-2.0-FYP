@@ -1,8 +1,11 @@
 package com.voxticket.routing;
 
+import com.voxticket.embedding.VoyageEmbeddingClient;
 import com.voxticket.routing.embedding.OnnxMultilingualE5EmbeddingService;
+import com.voxticket.routing.embedding.VoyageRoutingEmbeddingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,12 +34,40 @@ public class RoutingConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = STRATEGY_PROPERTY, havingValue = "HYBRID", matchIfMissing = true)
-    public RoutingEmbeddingService routingEmbeddingService(RoutingProperties routingProperties) {
+    public RoutingEmbeddingService routingEmbeddingService(RoutingProperties routingProperties,
+            @Value("${voxticket.routing.provider:local}") String routingProvider,
+            @Value("${voxticket.routing.voyage.model:voyage-4-lite}") String voyageModel,
+            @Value("${voxticket.routing.voyage.api-key:}") String voyageApiKey,
+            @Value("${voxticket.routing.voyage.base-url:https://api.voyageai.com/v1}") String voyageBaseUrl,
+            @Value("${voxticket.routing.voyage.timeout-seconds:5}") int voyageTimeoutSeconds) {
         SemanticRoutingProperties semantic = routingProperties.semantic();
         if (!semantic.enabled()) {
             throw new IllegalStateException("Routing strategy is HYBRID but "
                     + "voxticket.ai.selector.semantic.enabled=false - HYBRID requires the semantic "
                     + "stack; refusing to silently fall back to RULE_ONLY");
+        }
+        if (!"voyage".equalsIgnoreCase(routingProvider) && !"local".equalsIgnoreCase(routingProvider)) {
+            throw new IllegalArgumentException(
+                    "voxticket.routing.provider must be 'local' or 'voyage', got '" + routingProvider + "'");
+        }
+        if ("voyage".equalsIgnoreCase(routingProvider)) {
+            // Cloud routing: the Voyage model is voxticket.routing.voyage.model
+            // (default voyage-4-lite), independent of the RAG model under
+            // voxticket.embedding.voyage.model. semantic.model / model-path
+            // below are local-ONNX settings and are ignored here, not
+            // validated. Routing builds its own client from the routing
+            // voyage properties (key / base-url / timeout fall back to
+            // the embedding values in application.yaml when not set
+            // separately), instead of taking an ObjectProvider parameter:
+            // a Provider-typed parameter in this package trips
+            // RoutingArchitectureBoundaryTest, and the client is stateless,
+            // so a second instance is harmless. A blank key still fails
+            // fast inside the client constructor.
+            VoyageEmbeddingClient client = new VoyageEmbeddingClient(voyageBaseUrl, voyageApiKey,
+                    voyageModel, Duration.ofSeconds(voyageTimeoutSeconds));
+            log.info("event=routing_model_loaded model={} dim={} provider=voyage",
+                    voyageModel, VoyageEmbeddingClient.EXPECTED_DIMENSIONS);
+            return new VoyageRoutingEmbeddingService(client);
         }
         String modelPath = semantic.modelPath();
         if (!semantic.model().equals("intfloat/multilingual-e5-small")) {

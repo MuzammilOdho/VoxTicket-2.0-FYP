@@ -186,6 +186,23 @@ public class SupportAgent {
      */
     public AgentResponse respondStream(ConversationSession session, String currentUserMessage,
             ToolAccessMode mode, Consumer<String> deltaSink) {
+        return respondStream(session, currentUserMessage, mode, deltaSink, null);
+    }
+
+    /**
+     * Streaming variant with a barge-in generation check.
+     *
+     * <p>{@code generationCheck} is invoked before the LLM call and on every
+     * streamed chunk, including tool-call chunks that carry no text delta.
+     * Previously only text deltas passed through the generation-checked sink,
+     * so a turn doing tool calls with no text could run to completion behind
+     * a barge-in. A superseded turn throws {@link com.voxticket.conversation.TurnAbortedException}
+     * from the check, which this method rethrows unwrapped (see the first
+     * catch below) so the runtime drops the partial reply and releases the
+     * per-session lock. A null check means no generation tracking (chat).
+     */
+    public AgentResponse respondStream(ConversationSession session, String currentUserMessage,
+            ToolAccessMode mode, Consumer<String> deltaSink, Runnable generationCheck) {
         long start = System.nanoTime();
         String tierLabel = "UNKNOWN";
         String providerLabel = "unknown";
@@ -226,6 +243,9 @@ public class SupportAgent {
                 deltaSink.accept(delta);
             };
 
+            if (generationCheck != null) {
+                generationCheck.run();
+            }
             ChatClient chatClient = clientRegistry.clientFor(selection.tier());
             StringBuilder fullText = new StringBuilder();
             final ChatResponse[] lastChunk = new ChatResponse[1];
@@ -236,6 +256,9 @@ public class SupportAgent {
                     .stream()
                     .chatResponse()
                     .toIterable()) {
+                if (generationCheck != null) {
+                    generationCheck.run();
+                }
                 lastChunk[0] = chunk;
                 String delta = chunk.getResult() == null || chunk.getResult().getOutput() == null
                         ? null
