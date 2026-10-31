@@ -7,7 +7,12 @@ import com.voxticket.persistence.entity.Refund;
 import com.voxticket.persistence.entity.ReturnRequest;
 import com.voxticket.persistence.entity.SupportTicket;
 import com.voxticket.policy.PaymentConsequence;
+import jakarta.annotation.PreDestroy;
 import java.math.BigDecimal;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,8 +38,18 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *   <li>The message is fully built inside the calling transaction, so
  *       lazy associations (customer, items) are still readable.</li>
  *   <li>The send itself is deferred to after-commit when a transaction
- *       is active, and sent immediately otherwise (unit tests, admin
- *       calls outside a transaction). A send failure is logged, never thrown.</li>
+ *       is active, and then to a dedicated background thread (2026-10-29
+ *       async fix: previously after-commit called the SMTP sender
+ *       synchronously on the committing turn thread, inside the
+ *       per-session lock, so a slow or failing SMTP server delayed the
+ *       turn's model reply by the full SMTP attempt). Sent immediately
+ *       otherwise (unit tests, admin calls outside a transaction).
+ *       A send failure is logged, never thrown.</li>
+ *   <li>The background queue is bounded (100 mails). A full queue drops
+ *       the mail and logs, never blocks the turn. Delivery is therefore
+ *       best-effort: a mail may arrive seconds after the reply, and a
+ *       backend restart before the queue drains loses queued mail.
+ *       The procedure result itself is unaffected either way.</li>
  * </ul>
  *
  * <p>The From address reuses {@code voxticket.otp.email-from} (MAIL_FROM),
@@ -59,6 +74,15 @@ public class ProcedureNotificationService {
     private final String fromAddress;
     private final boolean enabled;
 
+    /**
+     * Single background sender thread. Daemon, so it can never keep the
+     * JVM alive on its own; bounded queue, so a dead SMTP server can
+     * never grow the queue without limit or block a turn. One thread
+     * also keeps mail order per procedure sequence, which a pool would
+     * not guarantee.
+     */
+    private final ThreadPoolExecutor mailExecutor;
+
     public ProcedureNotificationService(
             JavaMailSender mailSender,
             @Value("${spring.mail.host:}") String mailHost,
@@ -68,6 +92,31 @@ public class ProcedureNotificationService {
         this.mailHost = mailHost == null ? "" : mailHost;
         this.fromAddress = fromAddress;
         this.enabled = enabled;
+        ThreadFactory factory = runnable -> {
+            Thread thread = new Thread(runnable, "voxticket-mail");
+            thread.setDaemon(true);
+            return thread;
+        };
+        this.mailExecutor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(100),
+                factory,
+                (task, executor) -> log.warn(
+                        "event=procedure_notification_dropped reason=mail_queue_full"));
+    }
+
+    /** Best-effort shutdown: queued mail gets 5 seconds to drain, then is dropped. */
+    @PreDestroy
+    public void shutdown() {
+        mailExecutor.shutdown();
+        try {
+            if (!mailExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                mailExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            mailExecutor.shutdownNow();
+        }
     }
 
     /** Order cancelled, with the refund outcome (or manual-review ticket) included. No separate refund email follows. */
@@ -182,14 +231,37 @@ public class ProcedureNotificationService {
         message.setSubject(subject);
         message.setText(body);
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            // Async fix: after-commit must not run SMTP on the committing
+            // turn thread (it delayed the model reply and held the
+            // per-session lock). Enqueue only; the background thread
+            // performs the send. The after-commit guarantee is unchanged:
+            // this hook only runs for a committed transaction, and a
+            // rollback never enqueues anything.
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    doSend(message, event, reference);
+                    enqueueSend(message, event, reference);
                 }
             });
         } else {
+            // No transaction (unit tests, admin calls outside a
+            // transaction): send immediately, as before, so existing
+            // callers that expect a synchronous send keep working.
             doSend(message, event, reference);
+        }
+    }
+
+    /**
+     * Hands a fully built message to the background sender. Never blocks
+     * the caller and never throws: a full or shut-down executor drops
+     * the mail and logs, exactly as a failed send would.
+     */
+    private void enqueueSend(SimpleMailMessage message, String event, String reference) {
+        try {
+            mailExecutor.execute(() -> doSend(message, event, reference));
+        } catch (Exception e) {
+            log.warn("event=procedure_notification_dropped reason=mail_executor_rejected event={} reference={}",
+                    event, reference);
         }
     }
 

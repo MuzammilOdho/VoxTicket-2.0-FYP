@@ -20,7 +20,12 @@ public record AdminSummaryV2(
         List<ToolStat> tools,
         RagStats rag,
         Procedures procedures,
-        List<RecentError> recentErrors) {
+        List<RecentError> recentErrors,
+        // Phase 3 (admin rework): Dashboard voice-health section — the five
+        // most recent voice calls in the window, by started_at. Means are
+        // computed from voice_call_turn_metrics; a call with no metrics yet
+        // (still in progress) reports null means, never zeroes.
+        List<RecentVoiceCall> recentVoiceCalls) {
 
     public record Totals(long total, long active, long completed, long aborted) {
     }
@@ -67,5 +72,14 @@ public record AdminSummaryV2(
             String outcome,
             String errorCode,
             Instant at) {
+    }
+
+    public record RecentVoiceCall(
+            String room,
+            String outcome,
+            long turnCount,
+            Double avgE2eMs,
+            Double avgBrainMs,
+            Instant startedAt) {
     }
 }

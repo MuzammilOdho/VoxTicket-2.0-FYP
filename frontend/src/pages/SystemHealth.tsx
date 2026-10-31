@@ -8,23 +8,22 @@ export function SystemHealth() {
   const q = useSystemHealth();
   return (
     <div>
-      <PageHeader title="System health" sub="Java backend, PostgreSQL/pgvector, voice worker, LLM providers and embedding services. Auto-refreshes every 30s." />
+      <PageHeader title="System health" sub="Java backend, PostgreSQL/pgvector, voice worker, LLM providers and embedding services. Auto-refreshes every 30s. This is a point-in-time snapshot — no health history is stored." />
       <QueryState query={q}>
         {(h) => (
-          <div>
-            <div className="mb-4 flex items-center gap-2">
-              <span className="text-sm text-ink-dim">Overall status:</span>
-              <StatusBadge value={h.status} />
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="rounded-[24px] border border-line bg-paper p-5 shadow-card">
+            <p className="border-b border-line pb-4 text-[14px] text-ink">
+              Overall status: <StatusBadge value={h.status} />
+            </p>
+            <div className="divide-y divide-line-soft">
               {h.components.map((c) => (
-                <div key={c.name} className="rounded-xl border border-line bg-raised p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-ink">{c.name}</div>
+                <div key={c.name} className="py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-ink">{c.name}</div>
                     <StatusBadge value={c.status} />
                   </div>
-                  {c.detail && <div className="mt-2 whitespace-pre-wrap text-xs text-ink-mute">{c.detail}</div>}
-                  <div className="mt-2 text-[11px] text-ink-mute">Checked {fmtTime(c.checkedAt)}</div>
+                  {c.detail && <div className="mt-1 whitespace-pre-wrap text-xs text-ink-mute">{c.detail}</div>}
+                  <div className="mt-1 text-[11px] text-ink-mute">Checked {fmtTime(c.checkedAt)}</div>
                 </div>
               ))}
             </div>

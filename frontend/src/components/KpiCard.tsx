@@ -1,27 +1,40 @@
+/** Signal figure, Phase 5 (admin rework).
+ *
+ * A figure is a label, a number, and a note — telemetry readouts,
+ * not display type. `accent` colours the value only when the number
+ * itself is an outcome: 'red' for an error-adjacent rate (abort rate),
+ * 'green'/'amber' for rates judged against a threshold, 'signal'/'sky'
+ * for the interaction colour. Default (no accent) stays ink.
+ */
 export function KpiCard({
   title,
   value,
   sub,
   accent = 'signal',
+  className = '',
 }: {
   title: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
   accent?: 'signal' | 'green' | 'amber' | 'red' | 'sky';
+  className?: string;
 }) {
-  const bar: Record<string, string> = {
-    signal: 'bg-signal',
-    green: 'bg-ok',
-    amber: 'bg-warn',
-    red: 'bg-bad',
-    sky: 'bg-info',
-  };
+  // Stat block per the reference: label 12px uppercase mid-gray, value
+  // 30px/600 with tight tracking. The value takes the accent colour
+  // only when the number is itself an outcome (see the header note).
+  // NOTE: the default accent is 'signal', but it renders ink — most
+  // KPI values are plain numbers, not outcomes, so they stay black
+  // text. Only an explicit 'sky' accent renders indigo.
+  const accentClass =
+    accent === 'red' ? 'text-ember' :
+    accent === 'green' ? 'text-ok' :
+    accent === 'amber' ? 'text-warn' :
+    accent === 'sky' ? 'text-signal' : 'text-ink';
   return (
-    <div className="border border-line bg-raised p-4">
-      <div className={`mb-2 h-0.5 w-8 ${bar[accent]}`} />
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-mute">{title}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight text-ink">{value}</div>
-      {sub !== undefined && <div className="mt-1 text-xs text-ink-mute">{sub}</div>}
+    <div className={className}>
+      <div className="text-[12px] font-medium uppercase tracking-[0.6px] text-ink-mute">{title}</div>
+      <div className={`mt-1 text-[30px] font-semibold leading-[1.2] tracking-[-0.025em] ${accentClass}`}>{value}</div>
+      {sub !== undefined && <div className="mt-1 text-[13px] text-ink-mute">{sub}</div>}
     </div>
   );
 }

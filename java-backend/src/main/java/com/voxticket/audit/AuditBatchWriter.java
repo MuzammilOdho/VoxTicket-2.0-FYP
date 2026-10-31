@@ -373,9 +373,23 @@ public class AuditBatchWriter {
         if (callId == null) {
             callId = queryUuidOrNull("SELECT id FROM voice_call_sessions WHERE room = ?", metric.room());
             if (callId == null) {
-                log.warn("event=audit_voice_turn_metric_skipped reason=unknown_call room={}", metric.room());
-                droppedWriteError.increment();
-                return;
+                // Latency Step 0 (2026-10-29): do NOT drop the turn metric.
+                // The worker sends turn metrics during the call, but the
+                // call record only arrives at session close (and that
+                // close flush can be cancelled), so in every live call so
+                // far the metrics arrived before any call row existed and
+                // were dropped as unknown_call. A voice room name IS the
+                // conversation session_id (VoiceCallRecord is built with
+                // sessionId = room, and VoiceTurnRequest documents that
+                // sessionId is the LiveKit room name), so the conversation
+                // row for this room can supply the session FK. Create a
+                // minimal call row now; the real call record, when it
+                // arrives, upserts on (room) and fills in ended_at,
+                // outcome, and the rest, without disturbing these metrics.
+                callId = ensureCallRowForTurnMetric(metric);
+                if (callId == null) {
+                    return;
+                }
             }
             roomCallIdCache.put(metric.room(), callId);
         }
@@ -398,6 +412,49 @@ public class AuditBatchWriter {
                             + " tts_model = COALESCE(?, tts_model) WHERE id = ?",
                     metric.sttProvider(), metric.sttModel(), metric.ttsProvider(), metric.ttsModel(), callId);
         }
+    }
+
+    /**
+     * Creates the voice_call_sessions row a turn metric needs, when the
+     * worker's call record has not arrived yet. Returns the call id, or
+     * null when no conversation row exists for this room (then the metric
+     * still cannot be linked, and dropping it is the only honest option).
+     * The insert is ON CONFLICT (room) DO NOTHING, so a racing call
+     * record can never duplicate the row, and the later call record's
+     * ON CONFLICT DO UPDATE fills in the fields left null here.
+     */
+    private UUID ensureCallRowForTurnMetric(AuditEvent.VoiceTurnMetricRecord metric) {
+        UUID sessionUuid = sessionIdCache.get(metric.room());
+        if (sessionUuid == null) {
+            sessionUuid = queryUuidOrNull("SELECT id FROM conversation_sessions WHERE session_id = ?", metric.room());
+            if (sessionUuid != null) {
+                sessionIdCache.put(metric.room(), sessionUuid);
+            }
+        }
+        if (sessionUuid == null) {
+            // The call's conversation never touched the backend: nothing to link to.
+            log.warn("event=audit_voice_turn_metric_skipped reason=unknown_session room={}", metric.room());
+            droppedWriteError.increment();
+            return null;
+        }
+        jdbc.update("""
+                        INSERT INTO voice_call_sessions
+                            (id, session_id, room, trace_id, stt_provider, stt_model, tts_provider, tts_model,
+                             started_at, ended_at, outcome, barge_in_count, disconnect_reason, worker_id)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        ON CONFLICT (room) DO NOTHING
+                        """,
+                UUID.randomUUID(), sessionUuid, metric.room(), metric.traceId(),
+                metric.sttProvider(), metric.sttModel(), metric.ttsProvider(), metric.ttsModel(),
+                ts(metric.occurredAt()), null, null, 0, null, null);
+        UUID callId = queryUuidOrNull("SELECT id FROM voice_call_sessions WHERE room = ?", metric.room());
+        if (callId == null) {
+            log.warn("event=audit_voice_turn_metric_skipped reason=unknown_call room={}", metric.room());
+            droppedWriteError.increment();
+            return null;
+        }
+        log.info("event=audit_voice_call_created_from_turn_metric room={}", metric.room());
+        return callId;
     }
 
     private void writeHeartbeat(AuditEvent.WorkerHeartbeat heartbeat) {

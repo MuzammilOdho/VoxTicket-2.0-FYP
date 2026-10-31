@@ -5,6 +5,7 @@ import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { FilterBar, SelectInput, TextInput } from '../components/Filters';
 import { DataTable } from '../components/Table';
+import { Button } from '../components/Button';
 import { StatusBadge } from '../components/StatusBadge';
 import { fmtTime } from '../components/KpiCard';
 
@@ -18,7 +19,7 @@ export function AuditLog() {
   function apply() {
     setF({
       page: 0,
-      size: 20,
+      size: f.size,
       sessionId: draft.sessionId || undefined,
       type: draft.type || undefined,
       from: draft.from || undefined,
@@ -29,7 +30,14 @@ export function AuditLog() {
   return (
     <div>
       <PageHeader title="Audit log" sub="Business events and procedure/action history with success/failure classification." />
-      <FilterBar onReset={() => { setDraft({ sessionId: '', type: '', from: '', to: '' }); setF(EMPTY); }}>
+      <FilterBar
+        dateNote
+        chips={[
+          ...(f.sessionId ? [{ label: `Session: ${f.sessionId}`, onRemove: () => { setF({ ...f, sessionId: undefined, page: 0 }); setDraft((d) => ({ ...d, sessionId: '' })); } }] : []),
+          ...(f.type ? [{ label: `Type: ${f.type}`, onRemove: () => { setF({ ...f, type: undefined, page: 0 }); setDraft((d) => ({ ...d, type: '' })); } }] : []),
+          ...(f.from || f.to ? [{ label: `Window: ${f.from ?? '…'} → ${f.to ?? '…'}`, onRemove: () => { setF({ ...f, from: undefined, to: undefined, page: 0 }); setDraft((d) => ({ ...d, from: '', to: '' })); } }] : []),
+        ]}
+        onReset={() => { setDraft({ sessionId: '', type: '', from: '', to: '' }); setF(EMPTY); }}>
         <TextInput label="Session" placeholder="session id" value={draft.sessionId} onChange={(e) => setDraft({ ...draft, sessionId: e.target.value })} />
         <SelectInput
           label="Event type"
@@ -39,11 +47,9 @@ export function AuditLog() {
         />
         <TextInput label="From" type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
         <TextInput label="To" type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-        <button onClick={apply} className="rounded-xl bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
-          Apply
-        </button>
+        <Button onClick={apply}>Apply</Button>
       </FilterBar>
-      <QueryState query={q} emptyTitle="No audit events">
+      <QueryState query={q} emptyTitle="No audit events" skeleton>
         {(p) =>
           p.content.length === 0 ? (
             <EmptyState title="No audit events match" hint="Adjust the filters." />
@@ -55,7 +61,7 @@ export function AuditLog() {
                   key: 'sessionId',
                   header: 'Session',
                   render: (r) => (
-                    <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline">
+                    <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline hover:underline-offset-4">
                       {r.sessionId.slice(0, 20)}…
                     </Link>
                   ),
@@ -72,6 +78,7 @@ export function AuditLog() {
               totalPages={p.totalPages}
               totalElements={p.totalElements}
               onPage={(pg) => setF({ ...f, page: pg })}
+              onSizeChange={(n) => setF({ ...f, size: n, page: 0 })}
             />
           )
         }

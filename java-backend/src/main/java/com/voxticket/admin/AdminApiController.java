@@ -23,6 +23,8 @@ import com.voxticket.admin.dto.VoiceDtos.VoiceCallSummaryDto;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,8 +40,10 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code AdminSecurityConfig} - the profile gate is NOT access control.
  * Every endpoint is read-only: no business write operation is exposed here.
  *
- * <p>The pre-existing {@link AdminController} is left untouched; its three
- * endpoints keep their exact behavior.
+ * <p>Phase 2 (admin rework): the pre-existing AdminController was retired
+ * (see the Phase 2 runbook for the files to delete). Its three endpoints
+ * are superseded by {@code /summary/v2} and the search/detail endpoints
+ * below; no frontend code calls them.
  */
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -80,8 +84,10 @@ public class AdminApiController {
     // ---- Dashboard ----
 
     @GetMapping("/summary/v2")
-    public AdminSummaryV2 summaryV2() {
-        return summaryService.getSummary();
+    public AdminSummaryV2 summaryV2(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        return summaryService.getSummary(from, to);
     }
 
     // ---- Conversations ----
@@ -200,6 +206,56 @@ public class AdminApiController {
         return voiceService.listCalls(outcome, from, to, page, size);
     }
 
+    /**
+     * Phase 1 (admin rework): CSV export of every voice call matching the
+     * filter, unpaged (capped at 10,000 rows by the service). The exact
+     * path wins over the {@code /voice/calls/{sessionId}} template, so
+     * "export" is never treated as a session id.
+     */
+    @GetMapping(value = "/voice/calls/export", produces = "text/csv")
+    public ResponseEntity<String> voiceCallsExport(
+            @RequestParam(required = false) String outcome,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        List<VoiceCallSummaryDto> calls = voiceService.listAllCalls(outcome, from, to);
+        StringBuilder csv = new StringBuilder();
+        csv.append("room,sessionId,outcome,turnCount,bargeInCount,avgSttMs,avgBrainTtftMs,"
+                + "avgTtsFirstAudioMs,avgE2eMs,sttProvider,ttsProvider,startedAt,endedAt\n");
+        for (VoiceCallSummaryDto c : calls) {
+            csv.append(csvCell(c.room())).append(',')
+                    .append(csvCell(c.sessionId())).append(',')
+                    .append(csvCell(c.outcome())).append(',')
+                    .append(c.turnCount()).append(',')
+                    .append(c.bargeInCount()).append(',')
+                    .append(csvNumber(c.avgSttLatencyMs())).append(',')
+                    .append(csvNumber(c.avgBrainTtftMs())).append(',')
+                    .append(csvNumber(c.avgTtsFirstAudioMs())).append(',')
+                    .append(csvNumber(c.avgE2eMs())).append(',')
+                    .append(csvCell(c.sttProvider())).append(',')
+                    .append(csvCell(c.ttsProvider())).append(',')
+                    .append(csvCell(c.startedAt() == null ? null : c.startedAt().toString())).append(',')
+                    .append(csvCell(c.endedAt() == null ? null : c.endedAt().toString())).append('\n');
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"voxticket-voice-calls.csv\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv.toString());
+    }
+
+    private static String csvCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    private static String csvNumber(Double value) {
+        return value == null ? "" : value.toString();
+    }
+
     @GetMapping("/voice/calls/{sessionId}")
     public ResponseEntity<VoiceCallDetailDto> voiceCallDetail(@PathVariable String sessionId) {
         try {
@@ -225,30 +281,40 @@ public class AdminApiController {
     // ---- AI analytics ----
 
     @GetMapping("/ai/models")
-    public ModelAnalyticsDto aiModels() {
-        return aiAnalyticsService.modelAnalytics();
+    public ModelAnalyticsDto aiModels(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        return aiAnalyticsService.modelAnalytics(from, to);
     }
 
     @GetMapping("/ai/routing")
-    public RoutingAnalyticsDto aiRouting() {
-        return aiAnalyticsService.routingAnalytics();
+    public RoutingAnalyticsDto aiRouting(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        return aiAnalyticsService.routingAnalytics(from, to);
     }
 
     @GetMapping("/ai/rag")
-    public RagAnalyticsDto aiRag() {
-        return aiAnalyticsService.ragAnalytics();
+    public RagAnalyticsDto aiRag(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        return aiAnalyticsService.ragAnalytics(from, to);
     }
 
     @GetMapping("/ai/cost")
-    public CostAnalyticsDto aiCost() {
-        return aiAnalyticsService.costAnalytics();
+    public CostAnalyticsDto aiCost(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        return aiAnalyticsService.costAnalytics(from, to);
     }
 
     // ---- Evaluation ----
 
     @GetMapping("/evaluation/summary")
-    public EvaluationSummaryDto evaluationSummary() {
-        return evaluationService.getSummary();
+    public EvaluationSummaryDto evaluationSummary(
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        return evaluationService.getSummary(from, to);
     }
 
     // ---- System health ----

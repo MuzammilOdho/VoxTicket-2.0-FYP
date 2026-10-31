@@ -18,20 +18,19 @@ function Node({
   children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const dot =
+  const rule =
     status === 'ok'
-      ? 'bg-ok'
+      ? 'border-ok'
       : status === 'warn'
-        ? 'bg-amber-500'
+        ? 'border-warn'
         : status === 'bad'
-          ? 'bg-rose-500'
-          : 'bg-smoke';
+          ? 'border-bad'
+          : 'border-line';
   return (
-    <div className="min-w-[10.5rem] flex-1 rounded-xl border border-line bg-raised">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 p-3 text-left">
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
+    <div className={`min-w-[10.5rem] flex-1 border-l-[3px] pl-3 ${rule}`}>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 py-1 text-left">
         <span className="min-w-0">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-mute">{title}</span>
+          <span className="block text-[11px] font-medium uppercase tracking-wide text-ink-mute">{title}</span>
           <span className="block truncate text-sm font-medium text-ink">{headline ?? '—'}</span>
           {ms !== undefined && (
             <span className="block text-[11px] text-ink-mute">
@@ -41,7 +40,7 @@ function Node({
         </span>
         <span className="ml-auto text-xs text-ink-mute">{open ? '▾' : '▸'}</span>
       </button>
-      {open && children && <div className="border-t border-line/70 p-3 text-xs text-ink-dim">{children}</div>}
+      {open && children && <div className="border-t border-line-soft py-2 text-xs text-ink-dim">{children}</div>}
     </div>
   );
 }
@@ -139,24 +138,26 @@ export function DecisionTrace({ trace, voice }: { trace: TurnTrace; voice?: Voic
       </div>
 
       {voice && (
-        <div className="mt-3 rounded-xl border border-info/25 bg-info/[0.06] p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-info">
+        <div className="mt-3 border-y border-line py-3">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-ink">
             Voice pipeline
             {voice.bargeIn && <StatusBadge value="BARGE_IN" />}
             {voice.aborted && <StatusBadge value="ABORTED" />}
             {voice.error && <StatusBadge value="ERROR" label={voice.error} />}
           </div>
+          {/* Phase 4: the old block had a "Java Brain" chip showing the
+              end-to-end value, duplicating the End-to-End chip and
+              mislabelling it. Removed, not relabelled — the sequence is
+              now STT → brain TTFT → TTS first audio → end-to-end. */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <span className="flex items-center gap-2"><span className="text-info font-medium">STT</span><Latency ms={voice.sttLatencyMs} maxMs={voice.e2eMs ?? undefined} /></span>
-            <span className="text-info">→</span>
-            <span className="flex items-center gap-2"><span className="text-info font-medium">Java Brain</span><Latency ms={voice.e2eMs} /></span>
-            <span className="text-info">→</span>
-            <span className="flex items-center gap-2"><span className="text-info font-medium">TTFT</span><Latency ms={voice.brainTtftMs} maxMs={voice.e2eMs ?? undefined} /></span>
-            <span className="text-info">→</span>
-            <span className="flex items-center gap-2"><span className="text-info font-medium">TTS First Audio</span><Latency ms={voice.ttsFirstAudioMs} maxMs={voice.e2eMs ?? undefined} /></span>
-            <span className="text-info">→</span>
-            <span className="flex items-center gap-2"><span className="text-info font-medium">End-to-End</span><Latency ms={voice.e2eMs} /></span>
-            {voice.sttLanguage && <span className="text-xs text-info">STT lang: {voice.sttLanguage}</span>}
+            <span className="flex items-center gap-2"><span className="font-medium text-ink">STT</span><Latency ms={voice.sttLatencyMs} maxMs={voice.e2eMs ?? undefined} /></span>
+            <span className="text-ink-mute">→</span>
+            <span className="flex items-center gap-2"><span className="font-medium text-ink">Brain TTFT</span><Latency ms={voice.brainTtftMs} maxMs={voice.e2eMs ?? undefined} /></span>
+            <span className="text-ink-mute">→</span>
+            <span className="flex items-center gap-2"><span className="font-medium text-ink">TTS first audio</span><Latency ms={voice.ttsFirstAudioMs} maxMs={voice.e2eMs ?? undefined} /></span>
+            <span className="text-ink-mute">→</span>
+            <span className="flex items-center gap-2"><span className="font-medium text-ink">End-to-end</span><Latency ms={voice.e2eMs} /></span>
+            {voice.sttLanguage && <span className="text-xs text-ink-mute">STT lang: {voice.sttLanguage}</span>}
           </div>
         </div>
       )}

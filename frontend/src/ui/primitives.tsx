@@ -1,6 +1,9 @@
-/** VoxTicket UI primitives — Linear "midnight precision instrument".
- *  6px buttons/inputs, 12px cards, 9999px pills, 4px badges.
- *  Acid lime (#e4f222) is the ONLY chromatic action element. */
+/** VoxTicket UI primitives — shared legacy file (public site, demo, login).
+ * Admin pages use the newer shared components in components/ (Button,
+ * Filters, Table, States) instead of these where they overlap; this file
+ * stays for the surfaces that still import from it (Login's Kicker,
+ * States' Loading/ErrorBox/Empty, StatusBadge's Badge). Do not add new
+ * admin components here — add them under components/. */
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -37,18 +40,18 @@ export function SectionTitle({ children, right }: { children: ReactNode; right?:
 type BtnVariant = 'primary' | 'ghost' | 'danger' | 'light' | 'pill';
 
 const btnBase =
-  'inline-flex items-center justify-center gap-2 px-4 py-2 text-[13px] font-medium tracking-[-0.011em] transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40';
+  'inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium tracking-[-0.011em] transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40';
 
 const btnStyles: Record<BtnVariant, string> = {
   // The one chromatic button in the system.
   primary:
-    'rounded-md bg-signal text-[#08090a] hover:brightness-110 hover:shadow-[0_8px_28px_-8px_rgba(228,242,34,0.45)] active:brightness-95 disabled:hover:bg-signal disabled:hover:shadow-none',
+    'rounded-[18px] bg-signal text-[#08090a] hover:brightness-110 hover:shadow-[0_8px_28px_-8px_rgba(228,242,34,0.45)] active:brightness-95 disabled:hover:bg-signal disabled:hover:shadow-none',
   light:
-    'rounded-md bg-ink text-[#08090a] hover:bg-white disabled:hover:bg-ink',
+    'rounded-[18px] bg-ink text-[#08090a] hover:bg-white disabled:hover:bg-ink',
   ghost:
-    'rounded-md border border-line bg-transparent text-ink-dim hover:border-smoke hover:bg-white/[0.04] hover:text-ink',
+    'rounded-[18px] border border-line bg-transparent text-ink-dim hover:border-smoke hover:bg-white/[0.04] hover:text-ink',
   danger:
-    'rounded-md border border-bad/50 text-bad hover:bg-bad/10',
+    'rounded-[18px] border border-bad/50 text-bad hover:bg-bad/10',
   // White pill — nav CTA.
   pill:
     'rounded-full bg-white text-[#08090a] hover:bg-bone active:bg-mist',
@@ -96,22 +99,24 @@ export function ButtonLink({ to, children, variant = 'ghost', className = '' }: 
 
 /* ---------- badges / status ---------- */
 
-export function Badge({ tone = 'mute', children, pulse }: {
+export function Badge({ tone = 'mute', children, pulse, title }: {
   tone?: 'mute' | 'signal' | 'ok' | 'warn' | 'bad' | 'info' | 'violet';
   children: ReactNode;
   pulse?: boolean;
+  title?: string;
 }) {
   const tones: Record<string, string> = {
     mute: 'bg-white/[0.05] text-ink-mute',
-    signal: 'bg-signal/10 text-signal',
-    ok: 'bg-ok/10 text-ok',
-    warn: 'bg-warn/10 text-warn',
-    bad: 'bg-bad/10 text-bad',
+    signal: 'bg-signal/5 text-signal',
+    ok: 'bg-ok/5 text-ok',
+    warn: 'bg-warn/5 text-warn',
+    bad: 'bg-bad/5 text-bad',
     info: 'bg-info/10 text-info',
     violet: 'bg-iris-violet/15 text-lavender',
   };
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] font-normal ${tones[tone]}`}
     >
       {pulse && <span className="vq-pulse inline-block h-1.5 w-1.5 rounded-full bg-current" />}
@@ -181,7 +186,7 @@ export function KV({ k, v, mono }: { k: string; v: ReactNode; mono?: boolean }) 
 
 export function Empty({ title, body }: { title: string; body?: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center">
+    <div className="rounded-[24px] border border-dashed border-line px-4 py-10 text-center">
       <div className="text-sm font-medium text-ink-dim">{title}</div>
       {body && <div className="mt-1 text-xs text-ink-mute">{body}</div>}
     </div>
@@ -190,7 +195,7 @@ export function Empty({ title, body }: { title: string; body?: string }) {
 
 export function Loading({ label = 'Loading' }: { label?: string }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-10 text-sm text-ink-mute">
+    <div role="status" className="flex items-center gap-3 px-4 py-10 text-sm text-ink-mute">
       <span className="vq-pulse inline-block h-2 w-2 rounded-full bg-signal" />
       {label}…
     </div>
@@ -199,7 +204,7 @@ export function Loading({ label = 'Loading' }: { label?: string }) {
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-xl border border-bad/40 bg-bad/5 px-4 py-6 text-center">
+    <div role="alert" className="rounded-[24px] border border-bad/40 bg-bad/5 px-4 py-6 text-center">
       <div className="text-sm font-medium text-bad">Something went wrong</div>
       <div className="mt-1 font-mono text-xs text-ink-mute">{message}</div>
       {onRetry && (

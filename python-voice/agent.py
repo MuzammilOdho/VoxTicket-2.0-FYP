@@ -12,7 +12,8 @@ Realtime pipeline, all verified against livekit-agents 1.8.4:
          English/Urdu voice picked per reply, Urdu-aware sentence chunking
          so first audio isn't gated on the full reply
       -> audio back to the browser
-    VAD: Silero. Turn detection: LiveKit default audio turn detector.
+    VAD: Silero. Turn detection: AssemblyAI STT endpointing (best config
+        2026-10-31: turn_detection="stt", mode=min_latency, VAD aligned 0.3).
 
 Design notes (see README for the full rationale):
 - preemptive_generation is DISABLED. The Java brain is stateful (OTP attempt
@@ -113,7 +114,21 @@ class Config:
     stt_provider: str = "assemblyai"
     tts_provider: str = "cartesia"
     # AssemblyAI STT (required when STT_PROVIDER=assemblyai).
+    # Best config 2026-10-31 (verified against LiveKit + AssemblyAI docs):
+    # model is explicit (was previously the plugin default, same value);
+    # mode=min_latency is the fastest time-to-text preset (balanced is the
+    # server default for most agents; max_accuracy is for note-taking);
+    # vad_threshold=0.3 is the Universal-3 Pro default and matches Silero
+    # below; max_turn_silence=1000 is AssemblyAI's API default for the
+    # forced turn end (the LiveKit plugin default is 100, too aggressive
+    # for hesitant speakers and digits read aloud). min_turn_silence is
+    # deliberately NOT set: an explicit value would override the mode's
+    # own tuning for the speculative end-of-turn check.
     assemblyai_api_key: str = ""
+    assemblyai_model: str = "universal-3-6-pro"
+    assemblyai_mode: str = "min_latency"
+    assemblyai_vad_threshold: float = 0.3
+    assemblyai_max_turn_silence_ms: int = 1000
     assemblyai_keyterms: tuple = ()
     # ElevenLabs STT via Scribe v2 Realtime (required: ELEVENLABS_API_KEY when
     # STT_PROVIDER=elevenlabs). Primary language hint + secondary languages
@@ -155,14 +170,16 @@ class Config:
     worker_id: str = ""  # default: <hostname>-<pid>, resolved in entrypoint
     greeting: str = "Welcome to VoxTicket! How can I help you today?"
     log_level: str = "INFO"
-    # Silero VAD speech-onset threshold (0.0-1.0). 0.4 aligns with
-    # AssemblyAI's internal VAD default (0.4): the two VADs agree on speech
-    # onset, so turn detection and STT endpointing don't fight each other.
-    # Tuning: lower (0.25-0.35) if soft speech is missed; higher (0.45-0.6)
-    # if keyboard/fan/traffic false-triggers turns. Change in 0.05 steps and
+    # Silero VAD speech-onset threshold (0.0-1.0). Best config 2026-10-31:
+    # 0.3 aligns with AssemblyAI Universal-3 Pro's vad_threshold default
+    # (0.3). The old 0.4 value matched Universal-Streaming, not the U3 Pro
+    # model actually in use, so the two VADs disagreed on speech onset.
+    # LiveKit's docs recommend aligning both at 0.3. Tuning: lower
+    # (0.25) if soft speech is missed; higher (0.45-0.6) if
+    # keyboard/fan/traffic false-triggers turns. Change in 0.05 steps and
     # re-run the voice-quality matrix; adaptive interruption guards the
     # extra false triggers a lower value admits.
-    vad_activation_threshold: float = 0.4
+    vad_activation_threshold: float = 0.3
     # Seconds after the agent starts speaking during which caller audio is
     # ignored for interruption (AEC warmup: prevents the agent's own voice
     # from false-triggering barge-in before echo cancellation settles).
@@ -202,6 +219,13 @@ def load_config(env: dict | None = None) -> Config:
         except ValueError:
             raise ConfigError(f"{key} must be a number, got {raw!r}")
 
+    def opt_int(key: str, default: int) -> int:
+        raw = opt(key, str(default))
+        try:
+            return int(raw)
+        except ValueError:
+            raise ConfigError(f"{key} must be an integer, got {raw!r}")
+
     def require_keys(provider_label: str, *keys: str) -> None:
         missing = [k for k in keys if not (env.get(k) or "").strip()]
         if missing:
@@ -222,6 +246,12 @@ def load_config(env: dict | None = None) -> Config:
     require_keys("LiveKit", "LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
     if stt_provider == "assemblyai":
         require_keys("STT_PROVIDER=assemblyai", "ASSEMBLYAI_API_KEY")
+    assemblyai_mode = opt("ASSEMBLYAI_MODE", "min_latency").lower()
+    if assemblyai_mode not in ("min_latency", "balanced", "max_accuracy"):
+        raise ConfigError(
+            "ASSEMBLYAI_MODE must be one of min_latency, balanced, "
+            f"max_accuracy, got {assemblyai_mode!r}"
+        )
     elif stt_provider == "elevenlabs":
         require_keys("STT_PROVIDER=elevenlabs", "ELEVENLABS_API_KEY")
     if tts_provider == "cartesia":
@@ -242,6 +272,10 @@ def load_config(env: dict | None = None) -> Config:
         stt_provider=stt_provider,
         tts_provider=tts_provider,
         assemblyai_api_key=opt("ASSEMBLYAI_API_KEY", ""),
+        assemblyai_model=opt("ASSEMBLYAI_MODEL", "universal-3-6-pro"),
+        assemblyai_mode=assemblyai_mode,
+        assemblyai_vad_threshold=opt_float("ASSEMBLYAI_VAD_THRESHOLD", 0.3),
+        assemblyai_max_turn_silence_ms=opt_int("ASSEMBLYAI_MAX_TURN_SILENCE_MS", 1000),
         assemblyai_keyterms=opt_list("ASSEMBLYAI_KEYTERMS", default_keyterms),
         elevenlabs_api_key=opt("ELEVENLABS_API_KEY", ""),
         elevenlabs_stt_model=opt("ELEVENLABS_STT_MODEL", "scribe_v2_realtime"),
@@ -269,7 +303,7 @@ def load_config(env: dict | None = None) -> Config:
         worker_id=opt("WORKER_ID", ""),
         greeting=opt("GREETING", "Welcome to VoxTicket! How can I help you today?"),
         log_level=opt("LOG_LEVEL", "INFO"),
-        vad_activation_threshold=opt_float("VAD_ACTIVATION_THRESHOLD", 0.4),
+        vad_activation_threshold=opt_float("VAD_ACTIVATION_THRESHOLD", 0.3),
         aec_warmup_duration_s=opt_float("AEC_WARMUP_DURATION_S", 3.0),
         transcription_timeout_s=opt_float("TRANSCRIPTION_TIMEOUT_S", 8.0),
         transcription_reprompt=opt(
@@ -305,7 +339,7 @@ def is_urdu(text: str) -> bool:
 # Sentence splitting: Urdu-aware (Cartesia chunks synthesis per sentence)
 # --------------------------------------------------------------------------
 
-_SENTENCE_BOUNDARY_RE = re.compile(r"[۔؟!?.;:\n]")
+_SENTENCE_BOUNDARY_RE = re.compile(r"[۔؟!?.;:,\n،]")
 
 
 def _split_sentences(text: str) -> list[tuple[str, int, int]]:
@@ -313,9 +347,13 @@ def _split_sentences(text: str) -> list[tuple[str, int, int]]:
 
     The stock tokenizers don't split on Urdu full stop U+06D4 (۔) or question
     mark U+061F (؟), so a whole Urdu reply would reach TTS as one chunk and
-    streaming would buy nothing. Slight over-splitting (e.g. decimals) is
-    harmless: the buffered stream holds tiny fragments until more context
-    arrives, and shorter synthesis requests are still correct audio.
+    streaming would buy nothing. Latency Tier A (2026-10-29) also splits on
+    the Latin comma (,) and the Urdu comma U+060C (،): a long comma-heavy
+    reply previously waited for the next full stop before any audio, even
+    though the first clause was already complete. Slight over-splitting
+    (e.g. decimals) is harmless: the buffered stream holds tiny fragments
+    until more context arrives, and shorter synthesis requests are still
+    correct audio.
     """
     out: list[tuple[str, int, int]] = []
     start = 0
@@ -349,8 +387,12 @@ class UrduAwareSentenceTokenizer(SentenceTokenizer):
             # complete: sentences like "جی ہاں، بالکل۔" must not wait for
             # a long buffer before first audio. Tiny fragments still gather
             # a little context before going out.
-            min_token_len=10,
-            min_ctx_len=10,
+            # Latency Tier A (2026-10-29): 10 -> 6 on both holds. A 6-char
+            # hold still covers abbreviations and decimals ("Dr.", "1.5"),
+            # which stay buffered, while a short first clause no longer
+            # waits for 10 chars of following context before first audio.
+            min_token_len=6,
+            min_ctx_len=6,
         )
 
 
@@ -918,6 +960,12 @@ def build_stt(cfg: Config) -> stt_api.STT:
     if cfg.stt_provider == "assemblyai":
         return assemblyai.STT(
             api_key=cfg.assemblyai_api_key,
+            model=cfg.assemblyai_model,
+            mode=cfg.assemblyai_mode,
+            vad_threshold=cfg.assemblyai_vad_threshold,
+            # Forced turn end only. min_turn_silence stays unset so the
+            # mode's own tuning governs the speculative end-of-turn check.
+            max_turn_silence=cfg.assemblyai_max_turn_silence_ms,
             language_codes=["en", "ur"],  # steer auto-detection to our two languages
             # Bias the decoder toward VoxTicket vocabulary (brand name, OTP,
             # support verbs). Helps most where the model is weakest (Urdu).
@@ -1013,12 +1061,18 @@ _NETWORK_BROADCAST_VERSION = 1
 _NETWORK_TIERS = ("full", "low", "survival")
 
 # (min_delay, max_delay) seconds per tier: how long after the caller stops
-# speaking the worker waits before committing the turn. 'full' is the
-# framework default; worse tiers wait longer.
+# speaking the worker waits before committing the turn.
+# Best config 2026-10-31: turn_detection="stt", so min_delay is 0 on every
+# tier. In STT mode LiveKit's min_delay ADDS to AssemblyAI's own endpoint
+# signal, so any non-zero value is pure stacked wait; the provider's
+# min_turn_silence / max_turn_silence already control the timing. The
+# max_delay stays tiered: it is only the fallback ceiling for a turn the
+# STT never signals as ended (unfinished thought, hesitant speaker), and
+# a worse network still deserves more patience there.
 _NETWORK_ENDPOINTING: dict[str, tuple[float, float]] = {
-    "full": (0.5, 3.0),
-    "low": (0.8, 4.0),
-    "survival": (1.2, 5.0),
+    "full": (0.0, 3.0),
+    "low": (0.0, 4.0),
+    "survival": (0.0, 5.0),
 }
 
 
@@ -1332,8 +1386,8 @@ class VoxTicketAgent(Agent):
 def _stt_model_name(cfg: Config) -> str:
     """STT model identifier for telemetry facts."""
     if cfg.stt_provider == "assemblyai":
-        # livekit-plugins-assemblyai default (verified against 1.8.x).
-        return "universal-3-6-pro"
+        # Explicitly configured in build_stt (best config 2026-10-31).
+        return cfg.assemblyai_model
     if cfg.stt_provider == "elevenlabs":
         return cfg.elevenlabs_stt_model
     return cfg.stt_provider
@@ -1430,13 +1484,23 @@ async def entrypoint(ctx: agents.JobContext):
         # silently skips reply generation ("skip response if no llm is set").
         # The real brain is VoxTicketAgent.llm_node -> Java backend.
         llm=_PlaceholderLLM(),
-        # Default audio turn detector stays on. Preemptive generation MUST stay
-        # off: speculative calls would execute real, stateful Java turns twice.
+        # Best config 2026-10-31: turn_detection="stt" replaces the default
+        # audio turn detector. AssemblyAI's punctuation-based end-of-turn
+        # signal now decides the boundary, and endpointing min_delay=0
+        # (here and in _NETWORK_ENDPOINTING) stops LiveKit adding a second
+        # wait on top of it. If STT turn detection ever misbehaves on a
+        # call (turns not committing), delete just the turn_detection line
+        # to fall back to the audio detector; the mode/VAD/max-silence
+        # changes above still stand on their own.
+        # Preemptive generation MUST stay off: speculative calls would
+        # execute real, stateful Java turns twice.
         # Interruption mode is pinned to adaptive (not the production default
         # of VAD-only): the ML detector distinguishes real interruptions from
         # backchannels ("okay") and noise, and falls back to VAD gracefully
         # if the inference service is unreachable.
         turn_handling={
+            "turn_detection": "stt",
+            "endpointing": {"min_delay": 0.0, "max_delay": 3.0},
             "preemptive_generation": {"enabled": False},
             "interruption": {"mode": "adaptive"},
         },

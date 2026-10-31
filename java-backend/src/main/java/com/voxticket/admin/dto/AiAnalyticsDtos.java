@@ -61,10 +61,28 @@ public final class AiAnalyticsDtos {
             Double ragCacheHitRate,
             List<TierLatency> latencyByTier,
             List<ReasonCount> routing,
+            List<VoiceTierLatency> voiceLatencyByTier,
             String notes) {
     }
 
     public record TierLatency(String tier, Double p50, Double p95) {
+    }
+
+    /**
+     * Phase 2 (admin rework): per-tier voice stage latencies, joined from
+     * {@code voice_call_turn_metrics} onto turn traces by {@code trace_id}.
+     * Percentiles are p50 unless stated; {@code percentile_cont} ignores
+     * null stage values, so a tier with only some stages measured still
+     * reports the stages it has.
+     */
+    public record VoiceTierLatency(
+            String tier,
+            Double sttP50Ms,
+            Double brainP50Ms,
+            Double ttsP50Ms,
+            Double e2eP50Ms,
+            Double e2eP95Ms,
+            long turns) {
     }
 
     public record ReasonCount(String reason, long count) {

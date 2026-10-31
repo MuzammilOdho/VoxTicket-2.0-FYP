@@ -11,8 +11,8 @@ export function Latency({ ms, maxMs, label }: { ms: number | null | undefined; m
         {ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms.toFixed(0)}ms`}
       </span>
       {maxMs !== undefined && (
-        <span className="h-1.5 w-16 overflow-hidden rounded bg-graphite">
-          <span className="block h-full rounded bg-signal" style={{ width: `${pct}%` }} />
+        <span className="h-1.5 w-16 overflow-hidden rounded-full bg-line">
+          <span className="block h-full rounded-full bg-signal" style={{ width: `${pct}%` }} />
         </span>
       )}
     </span>

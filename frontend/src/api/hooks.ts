@@ -1,4 +1,4 @@
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { QueryClient, keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api } from './client';
 import type {
   AiCost,
@@ -25,11 +25,40 @@ export const queryClient = new QueryClient({
       retryDelay: 500,
       staleTime: 15_000,
       refetchOnWindowFocus: false,
+      // Stage 5: a filter/page change keeps the previous page on screen
+      // while the new one loads (QueryState shows a quiet "Updating…"
+      // line instead of blanking the page). Detail queries benefit too.
+      placeholderData: keepPreviousData,
     },
   },
 });
 
 const ADMIN = '/api/v1/admin';
+
+/**
+ * Phase 1 (admin rework): filter dates are `yyyy-MM-dd` days from a date
+ * input. The backend window is [from, to) on instants, so a from-date
+ * becomes that day at 00:00 UTC and a to-date becomes the *next* day at
+ * 00:00 UTC (exclusive), making the to-date itself included. A value that
+ * is already a full instant passes through unchanged.
+ */
+export function dateToInstant(date: string | undefined, endOfDay: boolean): string | undefined {
+  if (!date) return undefined;
+  if (date.length > 10) return date;
+  if (endOfDay) {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString();
+  }
+  return `${date}T00:00:00.000Z`;
+}
+
+function setWindow(p: URLSearchParams, from?: string, to?: string) {
+  const f = dateToInstant(from, false);
+  const t = dateToInstant(to, true);
+  if (f) p.set('from', f);
+  if (t) p.set('to', t);
+}
 
 export interface ConversationFilters {
   channel?: string;
@@ -43,8 +72,14 @@ export interface ConversationFilters {
   size: number;
 }
 
-export function useSummary() {
-  return useQuery({ queryKey: ['summary'], queryFn: () => api.get<SummaryV2>(`${ADMIN}/summary/v2`) });
+export function useSummary(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  setWindow(p, from, to);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['summary', from ?? '', to ?? ''],
+    queryFn: () => api.get<SummaryV2>(`${ADMIN}/summary/v2${qs ? `?${qs}` : ''}`),
+  });
 }
 
 export function useConversations(f: ConversationFilters) {
@@ -99,11 +134,12 @@ export function useOperations(kind: string, f: OperationFilters) {
   });
 }
 
-export function useVoiceCalls(page: number, size: number, outcome?: string) {
+export function useVoiceCalls(page: number, size: number, outcome?: string, from?: string, to?: string) {
   const p = new URLSearchParams({ page: String(page), size: String(size) });
   if (outcome) p.set('outcome', outcome);
+  setWindow(p, from, to);
   return useQuery({
-    queryKey: ['voice-calls', page, size, outcome ?? ''],
+    queryKey: ['voice-calls', page, size, outcome ?? '', from ?? '', to ?? ''],
     queryFn: () => api.get<Page<VoiceCall>>(`${ADMIN}/voice/calls?${p}`),
     placeholderData: (prev) => prev,
   });
@@ -147,24 +183,54 @@ export function useAuditEvents(f: AuditFilters) {
   });
 }
 
-export function useAiModels() {
-  return useQuery({ queryKey: ['ai-models'], queryFn: () => api.get<AiModels>(`${ADMIN}/ai/models`) });
+export function useAiModels(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  setWindow(p, from, to);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['ai-models', from ?? '', to ?? ''],
+    queryFn: () => api.get<AiModels>(`${ADMIN}/ai/models${qs ? `?${qs}` : ''}`),
+  });
 }
 
-export function useAiRouting() {
-  return useQuery({ queryKey: ['ai-routing'], queryFn: () => api.get<AiRouting>(`${ADMIN}/ai/routing`) });
+export function useAiRouting(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  setWindow(p, from, to);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['ai-routing', from ?? '', to ?? ''],
+    queryFn: () => api.get<AiRouting>(`${ADMIN}/ai/routing${qs ? `?${qs}` : ''}`),
+  });
 }
 
-export function useAiRag() {
-  return useQuery({ queryKey: ['ai-rag'], queryFn: () => api.get<AiRag>(`${ADMIN}/ai/rag`) });
+export function useAiRag(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  setWindow(p, from, to);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['ai-rag', from ?? '', to ?? ''],
+    queryFn: () => api.get<AiRag>(`${ADMIN}/ai/rag${qs ? `?${qs}` : ''}`),
+  });
 }
 
-export function useAiCost() {
-  return useQuery({ queryKey: ['ai-cost'], queryFn: () => api.get<AiCost>(`${ADMIN}/ai/cost`) });
+export function useAiCost(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  setWindow(p, from, to);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['ai-cost', from ?? '', to ?? ''],
+    queryFn: () => api.get<AiCost>(`${ADMIN}/ai/cost${qs ? `?${qs}` : ''}`),
+  });
 }
 
-export function useEvaluation() {
-  return useQuery({ queryKey: ['evaluation'], queryFn: () => api.get<EvaluationSummary>(`${ADMIN}/evaluation/summary`) });
+export function useEvaluation(from?: string, to?: string) {
+  const p = new URLSearchParams();
+  setWindow(p, from, to);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ['evaluation', from ?? '', to ?? ''],
+    queryFn: () => api.get<EvaluationSummary>(`${ADMIN}/evaluation/summary${qs ? `?${qs}` : ''}`),
+  });
 }
 
 export function useSystemHealth() {

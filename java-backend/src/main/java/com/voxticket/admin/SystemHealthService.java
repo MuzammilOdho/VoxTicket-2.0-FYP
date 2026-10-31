@@ -2,6 +2,7 @@ package com.voxticket.admin;
 
 import com.voxticket.admin.dto.AiAnalyticsDtos.ComponentHealthDto;
 import com.voxticket.admin.dto.AiAnalyticsDtos.SystemHealthDto;
+import com.voxticket.audit.AuditEventBus;
 import com.voxticket.agent.AiProvider;
 import com.voxticket.agent.AiProvidersProperties;
 import com.voxticket.agent.ProviderProperties;
@@ -39,6 +40,7 @@ public class SystemHealthService {
     private final JdbcTemplate jdbc;
     private final AiProvidersProperties providers;
     private final VoiceWorkerHeartbeatRepository heartbeatRepository;
+    private final AuditEventBus auditEventBus;
     private final String ollamaBaseUrl;
     private final HttpClient httpClient;
 
@@ -46,10 +48,12 @@ public class SystemHealthService {
             JdbcTemplate jdbc,
             AiProvidersProperties providers,
             VoiceWorkerHeartbeatRepository heartbeatRepository,
+            AuditEventBus auditEventBus,
             @Value("${spring.ai.ollama.base-url:http://localhost:11434}") String ollamaBaseUrl) {
         this.jdbc = jdbc;
         this.providers = providers;
         this.heartbeatRepository = heartbeatRepository;
+        this.auditEventBus = auditEventBus;
         this.ollamaBaseUrl = ollamaBaseUrl;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(PROBE_TIMEOUT)
@@ -65,6 +69,7 @@ public class SystemHealthService {
         components.add(probeOllama(now));
         components.addAll(probeProviders(now));
         components.addAll(probeVoiceWorkers(now));
+        components.add(probeTelemetry(now));
         return new SystemHealthDto(overallStatus(components), now, List.copyOf(components));
     }
 
@@ -144,6 +149,27 @@ public class SystemHealthService {
             }
         }
         return out;
+    }
+
+    /**
+     * Phase 1 (admin rework): surfaces the audit-bus drop counter and queue
+     * depth that previously existed only as Micrometer meters. Any dropped
+     * event is telemetry loss, so it reports DEGRADED (and therefore pulls
+     * the overall status to DEGRADED) until the next restart; the detail
+     * string carries the counts so the Health page needs no new field.
+     */
+    private ComponentHealthDto probeTelemetry(Instant now) {
+        try {
+            int depth = auditEventBus.depth();
+            long dropped = auditEventBus.droppedOverflowCount();
+            int capacity = auditEventBus.capacity();
+            String detail = "audit queue depth " + depth + " of " + capacity
+                    + ", dropped (queue overflow) " + dropped + " events";
+            return new ComponentHealthDto("telemetry", dropped > 0 ? "DEGRADED" : "UP", detail, now);
+        } catch (Exception e) {
+            log.warn("event=health_probe_failed component=telemetry errorType={}", e.getClass().getSimpleName());
+            return new ComponentHealthDto("telemetry", "UNKNOWN", "telemetry unreadable", now);
+        }
     }
 
     private List<ComponentHealthDto> probeVoiceWorkers(Instant now) {

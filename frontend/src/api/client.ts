@@ -68,6 +68,28 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
 };
 
+/** Raw-text fetch with the same auth/401 behaviour as `api.get` (for CSV exports). */
+export async function fetchText(path: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  const auth = getAuth();
+  if (auth) headers['Authorization'] = 'Basic ' + auth;
+  let res: Response;
+  try {
+    res = await fetch(path, { headers });
+  } catch (e) {
+    throw new ApiError(0, e instanceof Error ? `Network error: ${e.message}` : 'Network error');
+  }
+  if (res.status === 401) {
+    goLogin();
+    throw new ApiError(401, 'Unauthorized - please log in');
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new ApiError(res.status, text || `Request failed (${res.status})`);
+  }
+  return res.text();
+}
+
 export function isNotFound(e: unknown): boolean {
   return e instanceof ApiError && e.status === 404;
 }

@@ -25,7 +25,8 @@
  *  slow ones. A 5s stats poll (packet loss / jitter / RTT from the mic
  *  sender's getStats) plus LiveKit's connection-quality events drive a
  *  hysteresis controller: step down fast on poor signal, step up slowly on
- *  sustained excellent signal, hold otherwise. Tier switches republish the
+ *  sustained excellent signal, hold otherwise, except that an excellent
+ *  first measured sample jumps straight to 'full' (Latency Tier A). Tier switches republish the
  *  mic (brief ~200ms gap, mute state preserved; the mic is restored on the
  *  previous tier if a republish fails) and are broadcast to the
  *  worker on the 'voxticket.network' data topic so it can apply matching
@@ -282,6 +283,13 @@ export function useVoiceCall() {
           const signal = qualityFromLiveKit(quality);
           lastQualityRef.current = signal;
           const prevTier = c.tier;
+          // Latency Tier A: an excellent first sample jumps straight to
+          // 'full' instead of waiting for the good streak (see firstSample).
+          const first = c.firstSample(signal, c.lastLossPct);
+          if (first) {
+            void applyTier(room, first, prevTier);
+            return;
+          }
           const stepped = c.note(signal, c.lastLossPct);
           if (stepped) void applyTier(room, stepped, prevTier);
         },
@@ -295,6 +303,11 @@ export function useVoiceCall() {
         undefined,
         publishOptionsForTier(ctl.tier, AudioPresets),
       );
+      // Latency Tier A: a quality event before mic publish may already
+      // have jumped the controller to 'full' via firstSample(); sync the
+      // badge with the tier actually published. The tier broadcast below
+      // tells the worker the same tier.
+      setNetworkTier(ctl.tier);
       refreshAgent();
       attachAgentAudio(room);
 
@@ -316,6 +329,13 @@ export function useVoiceCall() {
             if (!extracted.sample) return; // first sample: no loss delta yet
             lastSampleRef.current = extracted.sample;
             const prevTier = c.tier;
+            // Latency Tier A: same first-sample jump as the quality
+            // handler above, for the case where the stats poll fires first.
+            const first = c.firstSample(lastQualityRef.current, extracted.sample.lossPct);
+            if (first) {
+              await applyTier(r, first, prevTier);
+              return;
+            }
             const stepped = c.note(lastQualityRef.current, extracted.sample.lossPct);
             if (stepped) await applyTier(r, stepped, prevTier);
           } catch {

@@ -9,9 +9,10 @@ import com.voxticket.admin.dto.AdminSummaryV2.Procedures;
 import com.voxticket.admin.dto.AdminSummaryV2.RagStats;
 import com.voxticket.admin.dto.AdminSummaryV2.Rates;
 import com.voxticket.admin.dto.AdminSummaryV2.RecentError;
+import com.voxticket.admin.dto.AdminSummaryV2.RecentVoiceCall;
 import com.voxticket.admin.dto.AdminSummaryV2.Tokens;
-import com.voxticket.admin.dto.AdminSummaryV2.ToolStat;
 import com.voxticket.admin.dto.AdminSummaryV2.Totals;
+import com.voxticket.admin.dto.AdminSummaryV2.ToolStat;
 import com.voxticket.admin.dto.AiAnalyticsDtos.CostReportDto;
 import com.voxticket.admin.dto.AiAnalyticsDtos.ModelUsageDto;
 import com.voxticket.admin.dto.AiAnalyticsDtos.RagStatsDto;
@@ -30,6 +31,14 @@ import org.springframework.transaction.annotation.Transactional;
  * Phase 12 (P4): v2 dashboard summary. Durable numbers come from Postgres
  * (turn traces, sessions, events); nothing here depends on in-memory
  * Micrometer state, so the numbers survive restarts.
+ *
+ * <p>Phase 1 (admin rework): the summary accepts an optional date window.
+ * Window semantics are shared with the other admin services (see
+ * {@link WindowFilter}): sessions are counted by {@code started_at},
+ * turn traces by {@code ended_at}, events by {@code created_at}; the
+ * window is [from, to). A null bound is unbounded, so the no-argument
+ * call is exactly the old all-time summary. Turns whose {@code ended_at}
+ * is null fall outside every bounded window, by construction.
  */
 @Service
 @Transactional(readOnly = true)
@@ -48,83 +57,103 @@ public class AdminSummaryService {
         this.activeWindowMinutes = activeWindowMinutes;
     }
 
+    /** All-time summary (the pre-Phase-1 behaviour). */
     public AdminSummaryV2 getSummary() {
-        Totals totals = totals();
-        ByChannel byChannel = byChannel();
-        Rates rates = rates(totals);
-        Latency latency = latency();
-        List<ModelUsageDto> usage = aiAnalyticsService.modelUsage();
+        return getSummary(null, null);
+    }
+
+    public AdminSummaryV2 getSummary(Instant from, Instant to) {
+        Totals totals = totals(from, to);
+        ByChannel byChannel = byChannel(from, to);
+        Rates rates = rates(totals, from, to);
+        Latency latency = latency(from, to);
+        List<ModelUsageDto> usage = aiAnalyticsService.modelUsage(from, to);
         Models models = models(usage);
         Tokens tokens = tokens(usage);
-        CostReportDto costReport = aiAnalyticsService.costReport();
+        CostReportDto costReport = aiAnalyticsService.costReport(from, to);
         Cost cost = new Cost(costReport.estimatedTotalUsd(),
                 costReport.byModel().stream()
                         .map(m -> new AdminSummaryV2.ModelCost(
                                 m.model(), m.totalTokens(), m.estimatedCostUsd()))
                         .toList());
-        List<ToolStat> tools = aiAnalyticsService.toolStats().stream()
+        List<ToolStat> tools = aiAnalyticsService.toolStats(from, to).stream()
                 .map(t -> new ToolStat(t.name(), t.calls(), t.successRate(), t.meanMs()))
                 .toList();
-        RagStatsDto rag = aiAnalyticsService.ragStats();
+        RagStatsDto rag = aiAnalyticsService.ragStats(from, to);
         return new AdminSummaryV2(
                 totals, byChannel, rates, latency, models, tokens, cost, tools,
                 new RagStats(rag.searches(), rag.cacheHitRate(), rag.meanLatencyMs()),
-                procedures(),
-                recentErrors());
+                procedures(from, to),
+                recentErrors(from, to),
+                recentVoiceCalls(from, to));
     }
 
-    private Totals totals() {
+    private Totals totals(Instant from, Instant to) {
         Map<String, Long> byStatus = new LinkedHashMap<>();
         RowCallbackHandler handler = rs ->
                 byStatus.put(rs.getString("status"), rs.getLong("cnt"));
-        jdbc.query(
-                "SELECT status, COUNT(*) AS cnt FROM ("
-                        + "SELECT CASE WHEN last_activity_at > now() - make_interval(mins => ?) THEN 'ACTIVE' "
-                        + "WHEN last_turn_outcome = 'aborted' THEN 'ABORTED' "
-                        + "ELSE 'COMPLETED' END AS status "
-                        + "FROM conversation_sessions) s GROUP BY status",
-                handler,
-                activeWindowMinutes);
+        List<Object> params = new ArrayList<>();
+        params.add(activeWindowMinutes);
+        String sql = "SELECT status, COUNT(*) AS cnt FROM ("
+                + "SELECT CASE WHEN last_activity_at > now() - make_interval(mins => ?) THEN 'ACTIVE' "
+                + "WHEN last_turn_outcome = 'aborted' THEN 'ABORTED' "
+                + "ELSE 'COMPLETED' END AS status "
+                + "FROM conversation_sessions WHERE 1=1"
+                + WindowFilter.and("started_at", from, to, params)
+                + ") s GROUP BY status";
+        jdbc.query(sql, handler, params.toArray());
         long active = byStatus.getOrDefault("ACTIVE", 0L);
         long aborted = byStatus.getOrDefault("ABORTED", 0L);
         long completed = byStatus.getOrDefault("COMPLETED", 0L);
         return new Totals(active + aborted + completed, active, completed, aborted);
     }
 
-    private ByChannel byChannel() {
+    private ByChannel byChannel(Instant from, Instant to) {
         Map<String, Long> counts = new LinkedHashMap<>();
         RowCallbackHandler handler = rs -> counts.put(rs.getString("channel"), rs.getLong("cnt"));
-        jdbc.query("SELECT channel, COUNT(*) AS cnt FROM conversation_sessions GROUP BY channel", handler);
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT channel, COUNT(*) AS cnt FROM conversation_sessions WHERE 1=1"
+                + WindowFilter.and("started_at", from, to, params)
+                + " GROUP BY channel";
+        jdbc.query(sql, handler, params.toArray());
         return new ByChannel(
                 counts.getOrDefault("CHAT", 0L),
                 counts.getOrDefault("PHONE", 0L));
     }
 
-    private Rates rates(Totals totals) {
+    private Rates rates(Totals totals, Instant from, Instant to) {
         if (totals.total() == 0) {
             return new Rates(null, null);
         }
+        List<Object> sessionParams = new ArrayList<>();
+        String escalationSql = "SELECT COUNT(*) FILTER (WHERE escalated)::double precision / COUNT(*) "
+                + "FROM conversation_sessions WHERE 1=1"
+                + WindowFilter.and("started_at", from, to, sessionParams);
         Double escalationRate = jdbc.queryForObject(
-                "SELECT COUNT(*) FILTER (WHERE escalated)::double precision / COUNT(*) "
-                        + "FROM conversation_sessions",
-                Double.class);
+                escalationSql, Double.class, sessionParams.toArray());
+        List<Object> traceParams = new ArrayList<>();
+        String resolutionSql = "SELECT COUNT(*) FILTER (WHERE outcome = 'normal')::double precision "
+                + "/ NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0) "
+                + "FROM conversation_turn_traces WHERE 1=1"
+                + WindowFilter.and("ended_at", from, to, traceParams);
         Double resolutionRate = jdbc.queryForObject(
-                "SELECT COUNT(*) FILTER (WHERE outcome = 'normal')::double precision "
-                        + "/ NULLIF(COUNT(*) FILTER (WHERE outcome IS NOT NULL), 0) "
-                        + "FROM conversation_turn_traces",
-                Double.class);
+                resolutionSql, Double.class, traceParams.toArray());
         return new Rates(resolutionRate, escalationRate);
     }
 
-    private Latency latency() {
+    private Latency latency(Instant from, Instant to) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT percentile_cont(0.5) WITHIN GROUP ("
+                + "ORDER BY EXTRACT(EPOCH FROM (ended_at - started_at)) * 1000) AS p50, "
+                + "percentile_cont(0.95) WITHIN GROUP ("
+                + "ORDER BY EXTRACT(EPOCH FROM (ended_at - started_at)) * 1000) AS p95 "
+                + "FROM conversation_turn_traces WHERE ended_at IS NOT NULL"
+                + WindowFilter.and("ended_at", from, to, params);
         List<Double[]> rows = jdbc.query(
-                "SELECT percentile_cont(0.5) WITHIN GROUP ("
-                        + "ORDER BY EXTRACT(EPOCH FROM (ended_at - started_at)) * 1000) AS p50, "
-                        + "percentile_cont(0.95) WITHIN GROUP ("
-                        + "ORDER BY EXTRACT(EPOCH FROM (ended_at - started_at)) * 1000) AS p95 "
-                        + "FROM conversation_turn_traces WHERE ended_at IS NOT NULL",
+                sql,
                 (rs, n) -> new Double[] {
-                        getNullable(rs, "p50"), getNullable(rs, "p95") });
+                        getNullable(rs, "p50"), getNullable(rs, "p95") },
+                params.toArray());
         if (rows.isEmpty()) {
             return new Latency(null, null);
         }
@@ -151,35 +180,71 @@ public class AdminSummaryService {
         return new Tokens(total, byProvider);
     }
 
-    private Procedures procedures() {
+    private Procedures procedures(Instant from, Instant to) {
         Map<String, Long> counts = new LinkedHashMap<>();
         RowCallbackHandler handler = rs -> counts.put(rs.getString("event_type"), rs.getLong("cnt"));
-        jdbc.query(
-                "SELECT event_type, COUNT(*) AS cnt FROM conversation_events "
-                        + "WHERE event_type IN ('PROCEDURE_COMPLETED', 'PROCEDURE_FAILED', 'PROCEDURE_CLARIFICATION') "
-                        + "GROUP BY event_type",
-                handler);
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT event_type, COUNT(*) AS cnt FROM conversation_events "
+                + "WHERE event_type IN ('PROCEDURE_COMPLETED', 'PROCEDURE_FAILED', 'PROCEDURE_CLARIFICATION') "
+                + WindowFilter.and("created_at", from, to, params)
+                + " GROUP BY event_type";
+        jdbc.query(sql, handler, params.toArray());
         return new Procedures(
                 counts.getOrDefault("PROCEDURE_COMPLETED", 0L),
                 counts.getOrDefault("PROCEDURE_FAILED", 0L),
                 counts.getOrDefault("PROCEDURE_CLARIFICATION", 0L));
     }
 
-    private List<RecentError> recentErrors() {
+    private List<RecentError> recentErrors(Instant from, Instant to) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT t.trace_id, s.session_id, t.turn_number, t.outcome, t.error_code, t.ended_at "
+                + "FROM conversation_turn_traces t "
+                + "JOIN conversation_sessions s ON s.id = t.session_id "
+                + "WHERE (t.aborted OR t.error_code IS NOT NULL "
+                + "OR t.outcome IN ('blocked', 'agent_error_recovered', 'blank_fallback')) "
+                + WindowFilter.and("t.ended_at", from, to, params)
+                + " ORDER BY t.ended_at DESC NULLS LAST LIMIT 20";
         return new ArrayList<>(jdbc.query(
-                "SELECT t.trace_id, s.session_id, t.turn_number, t.outcome, t.error_code, t.ended_at "
-                        + "FROM conversation_turn_traces t "
-                        + "JOIN conversation_sessions s ON s.id = t.session_id "
-                        + "WHERE t.aborted OR t.error_code IS NOT NULL "
-                        + "OR t.outcome IN ('blocked', 'agent_error_recovered', 'blank_fallback') "
-                        + "ORDER BY t.ended_at DESC NULLS LAST LIMIT 20",
+                sql,
                 (rs, n) -> new RecentError(
                         rs.getString("trace_id"),
                         rs.getString("session_id"),
                         rs.getInt("turn_number"),
                         rs.getString("outcome"),
                         rs.getString("error_code"),
-                        toInstant(rs.getTimestamp("ended_at")))));
+                        toInstant(rs.getTimestamp("ended_at"))),
+                params.toArray()));
+    }
+
+    /**
+     * Phase 3 (admin rework): Dashboard voice-health section. The five most
+     * recent voice calls in the window, by {@code started_at}, with mean
+     * end-to-end and mean brain TTFT from {@code voice_call_turn_metrics}.
+     * A call whose metrics have not arrived yet keeps null means (the
+     * LEFT JOIN + AVG ignore missing rows) instead of a fabricated 0.
+     * Windowed on the call's start, like sessions — a long call that
+     * started before the window is not pulled in by its later turns.
+     */
+    private List<RecentVoiceCall> recentVoiceCalls(Instant from, Instant to) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT v.room, v.outcome, COUNT(m.id) AS turns, "
+                + "AVG(m.e2e_ms) AS avg_e2e, AVG(m.brain_ttft_ms) AS avg_brain, v.started_at "
+                + "FROM voice_call_sessions v "
+                + "LEFT JOIN voice_call_turn_metrics m ON m.call_id = v.id "
+                + "WHERE 1=1"
+                + WindowFilter.and("v.started_at", from, to, params)
+                + " GROUP BY v.id, v.room, v.outcome, v.started_at "
+                + "ORDER BY v.started_at DESC NULLS LAST LIMIT 5";
+        return new ArrayList<>(jdbc.query(
+                sql,
+                (rs, n) -> new RecentVoiceCall(
+                        rs.getString("room"),
+                        rs.getString("outcome"),
+                        rs.getLong("turns"),
+                        getNullable(rs, "avg_e2e"),
+                        getNullable(rs, "avg_brain"),
+                        toInstant(rs.getTimestamp("started_at"))),
+                params.toArray()));
     }
 
     private static Map<String, Long> countBy(

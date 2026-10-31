@@ -5,6 +5,7 @@ import com.voxticket.agent.SupportAgent;
 import com.voxticket.agent.ToolAccessMode;
 import com.voxticket.audit.ConversationAuditService;
 import com.voxticket.identity.CustomerIdentity;
+import com.voxticket.identity.IdentityAssurance;
 import com.voxticket.identity.IdentityService;
 import com.voxticket.observability.TraceIds;
 import com.voxticket.observability.TurnMetrics;
@@ -188,8 +189,24 @@ public class ConversationRuntime {
             // stale turn.
             checkNotSuperseded(session.getSessionId(), voiceGeneration);
             if (StringUtils.hasText(turn.callerPhone())) {
-                CustomerIdentity resolved = identityService.resolveByPhone(turn.callerPhone());
-                session.applyResolvedIdentity(resolved);
+                // Latency Tier A (2026-10-29): skip the per-turn DB lookup
+                // when the session already holds a non-anonymous identity
+                // for exactly this phone. A DB lookup for that phone would
+                // return the same PHONE_MATCHED identity (IdentityService
+                // never grants OTP_VERIFIED, and applyResolvedIdentity only
+                // upgrades the same customer to a higher assurance, which
+                // this lookup cannot produce). Still look up when the
+                // session is anonymous, when it holds no phone, or when the
+                // phone differs, so a changed caller or an unknown number
+                // is never served from a stale cached identity.
+                CustomerIdentity existing = session.getCustomerIdentity();
+                boolean alreadyResolvedForThisPhone = existing != null
+                        && existing.assuranceLevel() != IdentityAssurance.ANONYMOUS
+                        && turn.callerPhone().equals(existing.phone());
+                if (!alreadyResolvedForThisPhone) {
+                    CustomerIdentity resolved = identityService.resolveByPhone(turn.callerPhone());
+                    session.applyResolvedIdentity(resolved);
+                }
             }
             auditService.recordSessionTouch(session);
 

@@ -83,6 +83,16 @@ public class AuditEventBus {
         return queue.size();
     }
 
+    /** Total events dropped because the bounded queue was full (since startup). */
+    public long droppedOverflowCount() {
+        return (long) droppedOverflow.count();
+    }
+
+    /** Queue capacity (current depth plus remaining capacity). */
+    public int capacity() {
+        return queue.size() + queue.remainingCapacity();
+    }
+
     /**
      * Test hook: drains up to {@code maxElements} events into
      * {@code target} without involving the writer.

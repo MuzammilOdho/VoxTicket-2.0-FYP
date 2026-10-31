@@ -3,9 +3,11 @@ package com.voxticket.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.voxticket.persistence.entity.Customer;
@@ -25,10 +27,13 @@ import com.voxticket.persistence.entity.enums.TicketPriority;
 import com.voxticket.policy.PaymentConsequence;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Procedure notification emails, with a mocked mail sender and no Spring
@@ -208,5 +213,71 @@ class ProcedureNotificationServiceTest {
         assertThatCode(() -> service.notifyCancellation(
                 order(customer()), PaymentConsequence.NO_REFUND_REQUIRED, null, null))
                 .doesNotThrowAnyException();
+    }
+
+    /**
+     * Async fix (2026-10-29): inside a transaction, notify must only
+     * register the after-commit hook, not send yet, and after-commit
+     * must hand the send to the background thread, not run SMTP on
+     * the committing thread. The transaction is simulated with the
+     * static TransactionSynchronizationManager, exactly as Spring
+     * would set it up, and after-commit is triggered manually.
+     */
+    @Test
+    void afterCommitSendRunsOnBackgroundThreadNotCallerThread() {
+        JavaMailSender mailSender = mock(JavaMailSender.class);
+        AtomicReference<String> sendThread = new AtomicReference<>();
+        doAnswer(invocation -> {
+            sendThread.set(Thread.currentThread().getName());
+            return null;
+        }).when(mailSender).send(any(SimpleMailMessage.class));
+        ProcedureNotificationService service =
+                new ProcedureNotificationService(mailSender, "smtp.gmail.com", FROM, true);
+
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            service.notifyCancellation(order(customer()), PaymentConsequence.NO_REFUND_REQUIRED, null, null);
+            // Registered, but not sent: after-commit has not run yet.
+            verify(mailSender, never()).send(any(SimpleMailMessage.class));
+            for (TransactionSynchronization synchronization
+                    : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCommit();
+            }
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
+
+        verify(mailSender, timeout(2000)).send(any(SimpleMailMessage.class));
+        assertThat(sendThread.get()).isEqualTo("voxticket-mail");
+        assertThat(sendThread.get()).isNotEqualTo(Thread.currentThread().getName());
+        service.shutdown();
+    }
+
+    @Test
+    void backgroundSendFailureNeverPropagatesFromAfterCommit() {
+        JavaMailSender mailSender = mock(JavaMailSender.class);
+        doThrow(new RuntimeException("SMTP down")).when(mailSender).send(any(SimpleMailMessage.class));
+        ProcedureNotificationService service =
+                new ProcedureNotificationService(mailSender, "smtp.gmail.com", FROM, true);
+
+        TransactionSynchronizationManager.initSynchronization();
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        try {
+            service.notifyCancellation(order(customer()), PaymentConsequence.NO_REFUND_REQUIRED, null, null);
+            assertThatCode(() -> {
+                for (TransactionSynchronization synchronization
+                        : TransactionSynchronizationManager.getSynchronizations()) {
+                    synchronization.afterCommit();
+                }
+            }).doesNotThrowAnyException();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            TransactionSynchronizationManager.setActualTransactionActive(false);
+        }
+
+        verify(mailSender, timeout(2000)).send(any(SimpleMailMessage.class));
+        service.shutdown();
     }
 }

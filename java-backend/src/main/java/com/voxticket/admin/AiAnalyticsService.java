@@ -11,6 +11,7 @@ import com.voxticket.admin.dto.AiAnalyticsDtos.RoutingAnalyticsDto;
 import com.voxticket.admin.dto.AiAnalyticsDtos.RoutingBucket;
 import com.voxticket.admin.dto.AiAnalyticsDtos.RoutingStatsDto;
 import com.voxticket.admin.dto.AiAnalyticsDtos.ToolStat;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +26,12 @@ import org.springframework.transaction.annotation.Transactional;
  * sums; cost is an estimate from the configured per-model prices (unknown
  * prices contribute 0, never a fabricated number). Micrometer is not used
  * here - these numbers must survive restarts.
+ *
+ * <p>Phase 1 (admin rework): the trace-based queries accept an optional
+ * date window (see {@link WindowFilter}; traces counted by
+ * {@code ended_at}, [from, to). The no-argument methods are exactly the
+ * old all-time queries. Phase 2 windows the {@code /ai/*} endpoints too,
+ * through the windowed {@code *Analytics} variants below.
  */
 @Service
 @Transactional(readOnly = true)
@@ -40,12 +47,19 @@ public class AiAnalyticsService {
 
     /** Token usage and estimated cost grouped by provider/model/tier. */
     public List<ModelUsageDto> modelUsage() {
+        return modelUsage(null, null);
+    }
+
+    public List<ModelUsageDto> modelUsage(Instant from, Instant to) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT provider, model, tier, COUNT(*) AS turns, "
+                + "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
+                + "COALESCE(SUM(completion_tokens), 0) AS completion_tokens "
+                + "FROM conversation_turn_traces WHERE 1=1"
+                + WindowFilter.and("ended_at", from, to, params)
+                + " GROUP BY provider, model, tier ORDER BY turns DESC";
         return jdbc.query(
-                "SELECT provider, model, tier, COUNT(*) AS turns, "
-                        + "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
-                        + "COALESCE(SUM(completion_tokens), 0) AS completion_tokens "
-                        + "FROM conversation_turn_traces "
-                        + "GROUP BY provider, model, tier ORDER BY turns DESC",
+                sql,
                 (rs, n) -> {
                     long prompt = rs.getLong("prompt_tokens");
                     long completion = rs.getLong("completion_tokens");
@@ -55,11 +69,16 @@ public class AiAnalyticsService {
                     return new ModelUsageDto(
                             rs.getString("provider"), model, rs.getString("tier"),
                             rs.getLong("turns"), prompt, completion, total, cost);
-                });
+                },
+                params.toArray());
     }
 
     public CostReportDto costReport() {
-        List<ModelUsageDto> byModel = modelUsage();
+        return costReport(null, null);
+    }
+
+    public CostReportDto costReport(Instant from, Instant to) {
+        List<ModelUsageDto> byModel = modelUsage(from, to);
         double total = byModel.stream().mapToDouble(ModelUsageDto::estimatedCostUsd).sum();
         long tokens = byModel.stream().mapToLong(ModelUsageDto::totalTokens).sum();
         return new CostReportDto(total, tokens, byModel);
@@ -67,20 +86,30 @@ public class AiAnalyticsService {
 
     /** Routing distribution plus semantic-margin percentiles (semantic path only). */
     public RoutingStatsDto routingStats() {
+        return routingStats(null, null);
+    }
+
+    public RoutingStatsDto routingStats(Instant from, Instant to) {
+        List<Object> distParams = new ArrayList<>();
         List<RoutingBucket> distribution = jdbc.query(
                 "SELECT routing_strategy, tier, routing_reason, COUNT(*) AS cnt "
-                        + "FROM conversation_turn_traces "
-                        + "GROUP BY routing_strategy, tier, routing_reason ORDER BY cnt DESC",
+                        + "FROM conversation_turn_traces WHERE 1=1"
+                        + WindowFilter.and("ended_at", from, to, distParams)
+                        + " GROUP BY routing_strategy, tier, routing_reason ORDER BY cnt DESC",
                 (rs, n) -> new RoutingBucket(
                         rs.getString("routing_strategy"), rs.getString("tier"),
-                        rs.getString("routing_reason"), rs.getLong("cnt")));
+                        rs.getString("routing_reason"), rs.getLong("cnt")),
+                distParams.toArray());
+        List<Object> marginParams = new ArrayList<>();
         List<Double[]> margins = jdbc.query(
                 "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY semantic_margin) AS p50, "
                         + "percentile_cont(0.95) WITHIN GROUP (ORDER BY semantic_margin) AS p95 "
-                        + "FROM conversation_turn_traces WHERE semantic_margin IS NOT NULL",
+                        + "FROM conversation_turn_traces WHERE semantic_margin IS NOT NULL"
+                        + WindowFilter.and("ended_at", from, to, marginParams),
                 (rs, n) -> new Double[] {
                         rs.getObject("p50") == null ? null : rs.getDouble("p50"),
-                        rs.getObject("p95") == null ? null : rs.getDouble("p95") });
+                        rs.getObject("p95") == null ? null : rs.getDouble("p95") },
+                marginParams.toArray());
         Double p50 = margins.isEmpty() ? null : margins.get(0)[0];
         Double p95 = margins.isEmpty() ? null : margins.get(0)[1];
         return new RoutingStatsDto(distribution, p50, p95);
@@ -88,31 +117,43 @@ public class AiAnalyticsService {
 
     /** RAG usage: search count, cache-hit rate, mean latency, similarity stats. */
     public RagStatsDto ragStats() {
+        return ragStats(null, null);
+    }
+
+    public RagStatsDto ragStats(Instant from, Instant to) {
+        List<Object> params = new ArrayList<>();
+        String baseSql = "SELECT COUNT(*) FILTER (WHERE rag_docs IS NOT NULL) AS searches, "
+                + "AVG(rag_ms) AS mean_ms, "
+                + "AVG(CASE WHEN rag_cache_hit THEN 1.0 ELSE 0.0 END) "
+                + "FILTER (WHERE rag_cache_hit IS NOT NULL) AS hit_rate "
+                + "FROM conversation_turn_traces WHERE 1=1"
+                + WindowFilter.and("ended_at", from, to, params);
         List<RagStatsDto> rows = jdbc.query(
-                "SELECT COUNT(*) FILTER (WHERE rag_docs IS NOT NULL) AS searches, "
-                        + "AVG(rag_ms) AS mean_ms, "
-                        + "AVG(CASE WHEN rag_cache_hit THEN 1.0 ELSE 0.0 END) "
-                        + "FILTER (WHERE rag_cache_hit IS NOT NULL) AS hit_rate "
-                        + "FROM conversation_turn_traces",
+                baseSql,
                 (rs, n) -> new RagStatsDto(
                         rs.getLong("searches"),
                         getNullableDouble(rs, "hit_rate"),
                         getNullableDouble(rs, "mean_ms"),
-                        null, null, null));
+                        null, null, null),
+                params.toArray());
         RagStatsDto base = rows.isEmpty()
                 ? new RagStatsDto(0, null, null, null, null, null)
                 : rows.get(0);
+        List<Object> simParams = new ArrayList<>();
+        String simSql = "SELECT AVG((d->>'similarity')::double precision) AS mean_sim, "
+                + "MIN((d->>'similarity')::double precision) AS min_sim, "
+                + "MAX((d->>'similarity')::double precision) AS max_sim "
+                + "FROM conversation_turn_traces, "
+                + "jsonb_array_elements(rag_docs) AS d "
+                + "WHERE rag_docs IS NOT NULL"
+                + WindowFilter.and("ended_at", from, to, simParams);
         List<Double[]> sim = jdbc.query(
-                "SELECT AVG((d->>'similarity')::double precision) AS mean_sim, "
-                        + "MIN((d->>'similarity')::double precision) AS min_sim, "
-                        + "MAX((d->>'similarity')::double precision) AS max_sim "
-                        + "FROM conversation_turn_traces, "
-                        + "jsonb_array_elements(rag_docs) AS d "
-                        + "WHERE rag_docs IS NOT NULL",
+                simSql,
                 (rs, n) -> new Double[] {
                         getNullableDouble(rs, "mean_sim"),
                         getNullableDouble(rs, "min_sim"),
-                        getNullableDouble(rs, "max_sim") });
+                        getNullableDouble(rs, "max_sim") },
+                simParams.toArray());
         Double mean = null, min = null, max = null;
         if (!sim.isEmpty()) {
             mean = sim.get(0)[0];
@@ -125,18 +166,26 @@ public class AiAnalyticsService {
 
     /** Per-tool call counts, success rates, and mean durations from turn traces. */
     public List<ToolStat> toolStats() {
+        return toolStats(null, null);
+    }
+
+    public List<ToolStat> toolStats(Instant from, Instant to) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT t->>'name' AS name, COUNT(*) AS calls, "
+                + "AVG(CASE WHEN t->>'result' = 'OK' THEN 1.0 ELSE 0.0 END) AS success_rate, "
+                + "AVG((t->>'durationMs')::double precision) AS mean_ms "
+                + "FROM conversation_turn_traces, jsonb_array_elements(tools) AS t "
+                + "WHERE tools IS NOT NULL "
+                + WindowFilter.and("ended_at", from, to, params)
+                + " GROUP BY t->>'name' ORDER BY calls DESC";
         return new ArrayList<>(jdbc.query(
-                "SELECT t->>'name' AS name, COUNT(*) AS calls, "
-                        + "AVG(CASE WHEN t->>'result' = 'OK' THEN 1.0 ELSE 0.0 END) AS success_rate, "
-                        + "AVG((t->>'durationMs')::double precision) AS mean_ms "
-                        + "FROM conversation_turn_traces, jsonb_array_elements(tools) AS t "
-                        + "WHERE tools IS NOT NULL "
-                        + "GROUP BY t->>'name' ORDER BY calls DESC",
+                sql,
                 (rs, n) -> new ToolStat(
                         rs.getString("name"),
                         rs.getLong("calls"),
                         getNullableDouble(rs, "success_rate"),
-                        getNullableDouble(rs, "mean_ms"))));
+                        getNullableDouble(rs, "mean_ms")),
+                params.toArray()));
     }
 
     private static Double getNullableDouble(java.sql.ResultSet rs, String column)
@@ -149,7 +198,11 @@ public class AiAnalyticsService {
 
     /** GET /api/v1/admin/ai/models */
     public ModelAnalyticsDto modelAnalytics() {
-        List<ModelUsageDto> usage = modelUsage();
+        return modelAnalytics(null, null);
+    }
+
+    public ModelAnalyticsDto modelAnalytics(Instant from, Instant to) {
+        List<ModelUsageDto> usage = modelUsage(from, to);
         Map<String, Long> byTier = new LinkedHashMap<>();
         Map<String, Long> byProvider = new LinkedHashMap<>();
         Map<String, Long> byModel = new LinkedHashMap<>();
@@ -168,7 +221,11 @@ public class AiAnalyticsService {
 
     /** GET /api/v1/admin/ai/routing */
     public RoutingAnalyticsDto routingAnalytics() {
-        RoutingStatsDto stats = routingStats();
+        return routingAnalytics(null, null);
+    }
+
+    public RoutingAnalyticsDto routingAnalytics(Instant from, Instant to) {
+        RoutingStatsDto stats = routingStats(from, to);
         Map<String, Long> byStrategy = new LinkedHashMap<>();
         Map<String, Long> byTier = new LinkedHashMap<>();
         Map<String, Long> byReason = new LinkedHashMap<>();
@@ -183,15 +240,22 @@ public class AiAnalyticsService {
 
     /** GET /api/v1/admin/ai/rag */
     public RagAnalyticsDto ragAnalytics() {
-        RagStatsDto base = ragStats();
+        return ragAnalytics(null, null);
+    }
+
+    public RagAnalyticsDto ragAnalytics(Instant from, Instant to) {
+        RagStatsDto base = ragStats(from, to);
+        List<Object> simParams = new ArrayList<>();
         List<Double[]> sim = jdbc.query(
                 "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY (d->>'similarity')::double precision) AS p50, "
                         + "percentile_cont(0.95) WITHIN GROUP (ORDER BY (d->>'similarity')::double precision) AS p95 "
                         + "FROM conversation_turn_traces, "
                         + "jsonb_array_elements(rag_docs) AS d "
-                        + "WHERE rag_docs IS NOT NULL",
+                        + "WHERE rag_docs IS NOT NULL"
+                        + WindowFilter.and("ended_at", from, to, simParams),
                 (rs, n) -> new Double[] {
-                        getNullableDouble(rs, "p50"), getNullableDouble(rs, "p95") });
+                        getNullableDouble(rs, "p50"), getNullableDouble(rs, "p95") },
+                simParams.toArray());
         Double p50 = sim.isEmpty() ? null : sim.get(0)[0];
         Double p95 = sim.isEmpty() ? null : sim.get(0)[1];
         return new RagAnalyticsDto(
@@ -200,7 +264,11 @@ public class AiAnalyticsService {
 
     /** GET /api/v1/admin/ai/cost */
     public CostAnalyticsDto costAnalytics() {
-        CostReportDto report = costReport();
+        return costAnalytics(null, null);
+    }
+
+    public CostAnalyticsDto costAnalytics(Instant from, Instant to) {
+        CostReportDto report = costReport(from, to);
         List<ModelCostEntry> perModel = report.byModel().stream()
                 .map(m -> new ModelCostEntry(m.model(), m.totalTokens(), m.estimatedCostUsd()))
                 .toList();

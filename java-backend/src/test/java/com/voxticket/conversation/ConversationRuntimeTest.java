@@ -88,6 +88,36 @@ class ConversationRuntimeTest {
     }
 
     @Test
+    void secondTurnWithSamePhoneSkipsIdentityLookup() {
+        // Latency Tier A: a DB lookup for a phone the session already holds
+        // as PHONE_MATCHED would return the same identity, so it is skipped.
+        UUID customerId = UUID.randomUUID();
+        when(identityService.resolveByPhone("+923001234567"))
+                .thenReturn(new CustomerIdentity(customerId, IdentityAssurance.PHONE_MATCHED, "+923001234567"));
+
+        runtime.processTurn(new UserTurn("s2b", Channel.CHAT, "where is my order", "+923001234567", Instant.now(), Map.of()));
+        AssistantTurn second = runtime.processTurn(new UserTurn("s2b", Channel.CHAT, "and my other order", "+923001234567", Instant.now(), Map.of()));
+
+        verify(identityService, times(1)).resolveByPhone("+923001234567");
+        assertThat(second.conversationState().identityAssurance()).isEqualTo(IdentityAssurance.PHONE_MATCHED);
+    }
+
+    @Test
+    void changedPhoneStillLooksUpIdentity() {
+        UUID customerId = UUID.randomUUID();
+        when(identityService.resolveByPhone("+923001234567"))
+                .thenReturn(new CustomerIdentity(customerId, IdentityAssurance.PHONE_MATCHED, "+923001234567"));
+        when(identityService.resolveByPhone("+923009999999"))
+                .thenReturn(new CustomerIdentity(UUID.randomUUID(), IdentityAssurance.PHONE_MATCHED, "+923009999999"));
+
+        runtime.processTurn(new UserTurn("s2c", Channel.CHAT, "where is my order", "+923001234567", Instant.now(), Map.of()));
+        runtime.processTurn(new UserTurn("s2c", Channel.CHAT, "where is my order", "+923009999999", Instant.now(), Map.of()));
+
+        verify(identityService, times(1)).resolveByPhone("+923001234567");
+        verify(identityService, times(1)).resolveByPhone("+923009999999");
+    }
+
+    @Test
     void turnNumberIncrementsAcrossSuccessiveTurnsOnTheSameSession() {
         runtime.processTurn(new UserTurn("s3", Channel.CHAT, "hi", null, Instant.now(), Map.of()));
         AssistantTurn secondResponse = runtime.processTurn(new UserTurn("s3", Channel.CHAT, "still there?", null, Instant.now(), Map.of()));

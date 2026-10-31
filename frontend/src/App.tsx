@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './api/hooks';
@@ -18,7 +19,9 @@ import { AuditLog } from './pages/AuditLog';
 import { SystemHealth } from './pages/SystemHealth';
 import { Landing } from './site/Landing';
 import { Product, HowItWorks, Technology } from './site/docs';
-import { Demo } from './demo/Demo';
+// Stage 8: the demo pulls in livekit-client (~586 kB). Lazy-loading it
+// keeps the admin bundle free of voice-client code until /demo is visited.
+const Demo = lazy(() => import('./demo/Demo').then((m) => ({ default: m.Demo })));
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
@@ -40,7 +43,7 @@ export function App() {
           <Route path="/technology" element={<Technology />} />
 
           {/* Interactive demo */}
-          <Route path="/demo" element={<Demo />} />
+          <Route path="/demo" element={<Suspense fallback={<div className="p-8 text-sm text-ink-mute">Loading demo…</div>}><Demo /></Suspense>} />
 
           {/* Admin console (auth-gated) */}
           <Route path="/admin/login" element={<Login />} />

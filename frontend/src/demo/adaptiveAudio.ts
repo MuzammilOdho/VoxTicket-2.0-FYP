@@ -96,16 +96,46 @@ export const GOOD_STREAK_TO_STEP_UP = 6;
  * sample, and 'good' (not excellent, not poor) always holds the tier.
  *
  * Starts at 'low' — the safe default that works on any network.
+ * Latency Tier A: the first measured sample may jump straight to 'full'
+ * via firstSample() (excellent + loss < 1%); later samples use hysteresis.
  */
 export class TierController {
   private _tier: AudioTier = 'low';
   private _poorStreak = 0;
   private _goodStreak = 0;
+  /** Whether the first measured sample has already been consumed. */
+  private _firstSampleSeen = false;
   /** Most recent loss reading, exposed so quality events can vote with it. */
   lastLossPct = 0;
 
   get tier(): AudioTier {
     return this._tier;
+  }
+
+  /**
+   * Latency Tier A (2026-10-29): first-sample jump to 'full'.
+   *
+   * There is no network measurement before the call connects, so the first
+   * turn still starts at 'low'. But an excellent, low-loss *first* measured
+   * sample no longer has to wait for GOOD_STREAK_TO_STEP_UP good polls
+   * (about 30s of 5s polls) before stepping up: it jumps straight to
+   * 'full', saving 0.3s of endpointing per turn from then on (0.8s -> 0.5s
+   * min_delay). The sample is consumed either way, and later samples always
+   * go through note() hysteresis, so an excellent sample after a dip
+   * cannot bypass the streak and flap the tier. Returns 'full' when it
+   * jumps, otherwise null.
+   */
+  firstSample(signal: QualitySignal, lossPct: number): AudioTier | null {
+    if (this._firstSampleSeen) return null;
+    this._firstSampleSeen = true;
+    this.lastLossPct = lossPct;
+    if (this._tier === 'low' && signal === 'excellent' && lossPct < LOSS_GOOD_PCT) {
+      this._tier = 'full';
+      this._poorStreak = 0;
+      this._goodStreak = 0;
+      return 'full';
+    }
+    return null;
   }
 
   /**

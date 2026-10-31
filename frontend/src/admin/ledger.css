@@ -1,0 +1,80 @@
+/* Ledger theme for the admin console, Phase 3 (admin rework).
+ *
+ * Scope guard: this file does NOT touch the global dark theme in
+ * index.css. It only overrides Tailwind v4 theme variables underneath a
+ * `.ledger` ancestor, and AdminShell is the only surface that renders
+ * inside one. The public site, the demo, and the admin login page keep
+ * the dark theme exactly as before, because they render outside .ledger.
+ *
+ * Why variables instead of new classes: every admin component already
+ * styles itself with token utilities (bg-raised, border-line, text-ink,
+ * bg-signal, bg-ok, ...), so remapping the values restyles the whole
+ * console without rewriting every page. Components that hardcode a
+ * colour (chart palette, tooltip) are fixed in their own files.
+ *
+ * Contrast, checked against paper #F6F5F1 and white cards: ink 14.59:1,
+ * muted #5B6663 5.46:1, teal on paper 5.02:1, white on teal 5.47:1,
+ * green #15803D, amber #B45309 and red #B42318 all pass AA for text.
+ */
+.ledger {
+  color-scheme: light;
+
+  --color-canvas: #f6f5f1;
+  --color-raised: #ffffff;
+  --color-raised-2: #fdfcfa;
+  --color-line: #dddad2;
+  --color-line-soft: #e9e6de;
+  --color-ink: #1a2422;
+  --color-ink-dim: #34423f;
+  --color-ink-mute: #5b6663;
+  --color-signal: #0f766e;
+  --color-signal-dim: #115e59;
+  --color-ok: #15803d;
+  --color-warn: #b45309;
+  --color-bad: #b42318;
+  --color-info: #115e59;
+
+  --color-void: #f6f5f1;
+  --color-carbon: #ffffff;
+  --color-obsidian: #fdfcfa;
+  --color-graphite: #dddad2;
+  --color-smoke: #c9c5bb;
+  --color-ash: #5b6663;
+  --color-fog: #5b6663;
+  --color-mist: #34423f;
+  --color-bone: #e9e6de;
+  --color-paper: #ffffff;
+  --color-acid-lime: #0f766e;
+  --color-pulse-green: #15803d;
+  --color-coral-red: #b42318;
+  --color-signal-teal: #0f766e;
+  --color-iris-violet: #5b6663;
+  --color-lavender: #5b6663;
+
+  --font-serif: Georgia, "Times New Roman", serif;
+}
+
+.ledger ::selection {
+  background: var(--color-signal);
+  color: #ffffff;
+}
+
+.ledger * {
+  scrollbar-color: var(--color-smoke) transparent;
+}
+.ledger *::-webkit-scrollbar-thumb {
+  background: var(--color-smoke);
+}
+
+/* Phase 4: visible keyboard focus, and no pulse animation for users who
+   asked for reduced motion. */
+.ledger :focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger .vq-pulse {
+    animation: none;
+  }
+}

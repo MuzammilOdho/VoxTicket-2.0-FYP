@@ -5,6 +5,7 @@ import { AdminPageHeader as PageHeader } from '../admin/shell';
 import { EmptyState, QueryState } from '../components/States';
 import { FilterBar, SelectInput, TextInput } from '../components/Filters';
 import { DataTable } from '../components/Table';
+import { Button } from '../components/Button';
 import { StatusBadge, BoolBadge } from '../components/StatusBadge';
 import { fmtTime } from '../components/KpiCard';
 
@@ -18,7 +19,7 @@ export function Conversations() {
   function apply() {
     setF({
       page: 0,
-      size: 20,
+      size: f.size,
       channel: draft.channel || undefined,
       status: draft.status || undefined,
       outcome: draft.outcome || undefined,
@@ -32,7 +33,17 @@ export function Conversations() {
   return (
     <div>
       <PageHeader title="Conversations" sub="Search and filter all conversations, then drill into the decision trace." />
-      <FilterBar onReset={() => { setDraft({ channel: '', status: '', outcome: '', escalated: '', q: '', from: '', to: '' }); setF(EMPTY); }}>
+      <FilterBar
+        dateNote
+        chips={[
+          ...(f.channel ? [{ label: `Channel: ${f.channel}`, onRemove: () => { setF({ ...f, channel: undefined, page: 0 }); setDraft((d) => ({ ...d, channel: '' })); } }] : []),
+          ...(f.status ? [{ label: `Status: ${f.status}`, onRemove: () => { setF({ ...f, status: undefined, page: 0 }); setDraft((d) => ({ ...d, status: '' })); } }] : []),
+          ...(f.outcome ? [{ label: `Outcome: ${f.outcome}`, onRemove: () => { setF({ ...f, outcome: undefined, page: 0 }); setDraft((d) => ({ ...d, outcome: '' })); } }] : []),
+          ...(f.escalated ? [{ label: `Escalated: ${f.escalated}`, onRemove: () => { setF({ ...f, escalated: undefined, page: 0 }); setDraft((d) => ({ ...d, escalated: '' })); } }] : []),
+          ...(f.q ? [{ label: `Search: ${f.q}`, onRemove: () => { setF({ ...f, q: undefined, page: 0 }); setDraft((d) => ({ ...d, q: '' })); } }] : []),
+          ...(f.from || f.to ? [{ label: `Window: ${f.from ?? '…'} → ${f.to ?? '…'}`, onRemove: () => { setF({ ...f, from: undefined, to: undefined, page: 0 }); setDraft((d) => ({ ...d, from: '', to: '' })); } }] : []),
+        ]}
+        onReset={() => { setDraft({ channel: '', status: '', outcome: '', escalated: '', q: '', from: '', to: '' }); setF(EMPTY); }}>
         <SelectInput label="Channel" value={draft.channel} onChange={(v) => setDraft({ ...draft, channel: v })} options={[{ value: 'CHAT', label: 'Chat' }, { value: 'VOICE', label: 'Voice' }]} />
         <SelectInput label="Status" value={draft.status} onChange={(v) => setDraft({ ...draft, status: v })} options={['ACTIVE', 'COMPLETED', 'ABORTED', 'EXPIRED'].map((v) => ({ value: v, label: v }))} />
         <TextInput label="Last outcome" placeholder="e.g. normal" value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })} />
@@ -40,12 +51,10 @@ export function Conversations() {
         <TextInput label="Search" placeholder="session / customer" value={draft.q} onChange={(e) => setDraft({ ...draft, q: e.target.value })} />
         <TextInput label="From" type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
         <TextInput label="To" type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
-        <button onClick={apply} className="rounded-xl bg-signal px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">
-          Apply
-        </button>
+        <Button onClick={apply}>Apply</Button>
       </FilterBar>
 
-      <QueryState query={q} emptyTitle="No conversations">
+      <QueryState query={q} emptyTitle="No conversations" skeleton>
         {(page) =>
           page.content.length === 0 ? (
             <EmptyState title="No conversations match" hint="Adjust the filters." />
@@ -56,7 +65,7 @@ export function Conversations() {
                   key: 'sessionId',
                   header: 'Session',
                   render: (r) => (
-                    <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline">
+                    <Link to={`/admin/conversations/${encodeURIComponent(r.sessionId)}`} className="font-mono text-xs text-signal hover:underline hover:underline-offset-4">
                       {r.sessionId}
                     </Link>
                   ),
@@ -76,6 +85,7 @@ export function Conversations() {
               totalPages={page.totalPages}
               totalElements={page.totalElements}
               onPage={(p) => setF({ ...f, page: p })}
+              onSizeChange={(n) => setF({ ...f, size: n, page: 0 })}
             />
           )
         }

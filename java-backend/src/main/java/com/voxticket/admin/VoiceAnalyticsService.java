@@ -62,6 +62,24 @@ public class VoiceAnalyticsService {
         return PageDto.of(rows.map(this::toSummary));
     }
 
+    /**
+     * Phase 1 (admin rework): every call matching the filter, unpaged, for
+     * CSV export. Capped at 10,000 rows; beyond that the operator should
+     * narrow the date window instead of exporting the whole history.
+     */
+    public List<VoiceCallSummaryDto> listAllCalls(String outcome, Instant from, Instant to) {
+        Pageable pageable = PageRequest.of(
+                0,
+                10_000,
+                Sort.by(Sort.Direction.DESC, "startedAt"));
+        Page<VoiceCallRow> rows = searchRepository.search(
+                blankToNull(outcome),
+                from == null ? Instant.EPOCH : from,
+                to == null ? Instant.now().plusSeconds(60) : to,
+                pageable);
+        return rows.map(this::toSummary).getContent();
+    }
+
     public VoiceCallDetailDto getCallDetail(String roomOrSessionId) {
         VoiceCallSessionEntity call = callRepository.findByRoom(roomOrSessionId)
                 .or(() -> {

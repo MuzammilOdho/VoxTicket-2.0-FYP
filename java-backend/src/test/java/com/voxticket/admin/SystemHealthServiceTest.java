@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.voxticket.admin.dto.AiAnalyticsDtos.SystemHealthDto;
+import com.voxticket.audit.AuditEventBus;
 import com.voxticket.agent.AiProvider;
 import com.voxticket.agent.AiProvidersProperties;
 import com.voxticket.agent.ProviderProperties;
@@ -34,12 +35,15 @@ class SystemHealthServiceTest {
     private AiProvidersProperties providers;
     @Mock
     private VoiceWorkerHeartbeatRepository heartbeatRepository;
+    @Mock
+    private AuditEventBus auditEventBus;
 
     private SystemHealthService service;
 
     @BeforeEach
     void setUp() {
-        service = new SystemHealthService(jdbc, providers, heartbeatRepository, "http://localhost:11434");
+        service = new SystemHealthService(
+                jdbc, providers, heartbeatRepository, auditEventBus, "http://localhost:11434");
     }
 
     @Test
@@ -98,6 +102,41 @@ class SystemHealthServiceTest {
         SystemHealthDto health = service.getHealth();
 
         assertThat(component(health, "voiceWorker:worker-1").status()).isEqualTo("DEGRADED");
+    }
+
+    @Test
+    void telemetryComponent_reportsQueueDepthAndDroppedCount() {
+        when(jdbc.queryForObject(eq("SELECT 1"), eq(Integer.class))).thenReturn(1);
+        when(jdbc.queryForObject(eq("SELECT count(*) FROM vector_store"), eq(Long.class))).thenReturn(0L);
+        when(providers.forProvider(any(AiProvider.class)))
+                .thenReturn(new ProviderProperties(true, "k", null));
+        when(heartbeatRepository.findAll()).thenReturn(List.of());
+        when(auditEventBus.depth()).thenReturn(3);
+        when(auditEventBus.capacity()).thenReturn(8192);
+        when(auditEventBus.droppedOverflowCount()).thenReturn(0L);
+
+        SystemHealthDto health = service.getHealth();
+
+        assertThat(component(health, "telemetry").status()).isEqualTo("UP");
+        assertThat(component(health, "telemetry").detail()).contains("3 of 8192");
+        assertThat(component(health, "telemetry").detail()).contains("dropped (queue overflow) 0");
+    }
+
+    @Test
+    void telemetryComponent_isDegradedAfterAnyDrop() {
+        when(jdbc.queryForObject(eq("SELECT 1"), eq(Integer.class))).thenReturn(1);
+        when(jdbc.queryForObject(eq("SELECT count(*) FROM vector_store"), eq(Long.class))).thenReturn(0L);
+        when(providers.forProvider(any(AiProvider.class)))
+                .thenReturn(new ProviderProperties(true, "k", null));
+        when(heartbeatRepository.findAll()).thenReturn(List.of());
+        when(auditEventBus.depth()).thenReturn(0);
+        when(auditEventBus.capacity()).thenReturn(8192);
+        when(auditEventBus.droppedOverflowCount()).thenReturn(2L);
+
+        SystemHealthDto health = service.getHealth();
+
+        assertThat(component(health, "telemetry").status()).isEqualTo("DEGRADED");
+        assertThat(component(health, "telemetry").detail()).contains("dropped (queue overflow) 2");
     }
 
     private static com.voxticket.admin.dto.AiAnalyticsDtos.ComponentHealthDto component(

@@ -29,6 +29,16 @@ export interface SummaryV2 {
   tools: { name: string; calls: number; successRate: number | null; meanMs: number | null }[];
   rag: { searches: number; cacheHitRate: number | null; meanMs: number | null };
   procedures: { success: number; failure: number; clarification: number };
+  // Phase 3 (admin rework): the Dashboard voice-health section. Five most
+  // recent calls in the window, by started_at; means come from turn metrics.
+  recentVoiceCalls: {
+    room: string;
+    outcome: string | null;
+    turnCount: number;
+    avgE2eMs: number | null;
+    avgBrainMs: number | null;
+    startedAt: string;
+  }[];
   recentErrors: {
     traceId: string;
     sessionId: string;
@@ -152,6 +162,11 @@ export interface VoiceCall {
   endedAt: string | null;
   sttProvider: string | null;
   ttsProvider: string | null;
+  // Per-call stage means computed by the backend from turn metrics.
+  avgSttLatencyMs: number | null;
+  avgBrainTtftMs: number | null;
+  avgTtsFirstAudioMs: number | null;
+  avgE2eMs: number | null;
 }
 
 export interface VoiceTurnMetric {
@@ -224,6 +239,16 @@ export interface EvaluationSummary {
   latencyByTier: { tier: string; p50: number | null; p95: number | null }[];
   ragCacheHitRate: number | null;
   routing: { reason: string; count: number }[];
+  voiceLatencyByTier: {
+    tier: string;
+    sttP50Ms: number | null;
+    brainP50Ms: number | null;
+    ttsP50Ms: number | null;
+    e2eP50Ms: number | null;
+    e2eP95Ms: number | null;
+    turns: number;
+  }[];
+  notes: string | null;
 }
 
 /* ---------------- system health ---------------- */
