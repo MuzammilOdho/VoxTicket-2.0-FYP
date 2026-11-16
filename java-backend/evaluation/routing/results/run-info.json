@@ -1,0 +1,19 @@
+{
+  "timestamp" : "2026-11-04T10:43:06.892828100Z",
+  "gitSha" : "a78ff418243410536386f240f8476f9e63b4abea",
+  "model" : "intfloat/multilingual-e5-small",
+  "onnxSha256" : "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
+  "tokenizerSha256" : "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+  "prototypeHash" : "74b6393b5c5ab9749d193cb88dc96b2269aea312fe5f2805d24572b210ca1ceb",
+  "validationCorpusHash" : "304932a4c47ef1d807da04d6f311898ea1438aacd8e8ed3631b7f2c150880cc9",
+  "finalTestCorpusHash" : "55ea51a7be46bda6b343cdfc6ce7039250bb7c1a01adc441869e8fdefb6e56c1",
+  "topK" : 3,
+  "originalSimpleMargin" : 0.02,
+  "originalComplexMargin" : 0.02,
+  "javaVersion" : "21.0.11",
+  "onnxRuntimeVersion" : "1.22.0",
+  "modelInitMs" : 3478,
+  "prototypeIndexInitMs" : 1262,
+  "prototypeCountTier1" : 48,
+  "prototypeCountTier2" : 48
+}

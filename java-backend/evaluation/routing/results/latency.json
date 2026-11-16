@@ -1,0 +1,19 @@
+{
+  "method" : "System.nanoTime around the production routing path per turn; 100-iteration ONNX warmup on the real pipeline; model loading and prototype indexing excluded from per-turn figures and reported separately in run-info.json; 300 measured iterations per path, round-robin over all validation texts taking that path. Every measured semantic iteration runs genuine tokenization + ONNX inference + pooling + normalization + similarity scoring + RoutingDecisionEngine.decide (asserted: 300 real embedding calls, zero cache reuse); prototype embeddings precomputed once in step 1 and reused (asserted: zero new prototype inference).",
+  "structuralShortCircuitMs" : {
+    "n" : 300,
+    "meanMs" : 0.013839999999999983,
+    "p50Ms" : 0.0103,
+    "p95Ms" : 0.0281,
+    "maxMs" : 0.161
+  },
+  "semanticPathMs" : {
+    "n" : 300,
+    "meanMs" : 10.620639000000004,
+    "p50Ms" : 9.626,
+    "p95Ms" : 16.5086,
+    "maxMs" : 22.8952
+  },
+  "modelInitMs" : 3478,
+  "prototypeIndexInitMs" : 1262
+}

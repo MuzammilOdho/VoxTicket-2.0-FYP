@@ -1,0 +1,1010 @@
+{
+  "area": "E1",
+  "method": "Counts computed from surefire XML and pytest junit XML. passed = total - failures - errors - skipped. A test error (context/infrastructure) is reported as an error, never folded into passes or failures.",
+  "java": {
+    "status": "measured",
+    "totals": {
+      "total": 1040,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 24,
+      "passed": 1016
+    },
+    "classes": [
+      {
+        "class": "com.voxticket.admin.AdminControllerProfileGatingTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.admin.AdminDashboardServiceTest",
+        "total": 14,
+        "passed": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.admin.AdminDashboardSummarySerializationTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.admin.AdminSecurityTest",
+        "total": 9,
+        "passed": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.admin.ConversationAdminServiceTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.admin.SystemHealthServiceTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.ContextBuilderTest",
+        "total": 14,
+        "passed": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.CustomerReadToolsTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.ModelSelectorTest",
+        "total": 14,
+        "passed": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.ProviderChatModelFactoryTest",
+        "total": 11,
+        "passed": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.ProviderRetryPolicyTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.SanitizedToolExecutionExceptionProcessorTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.SupportAgentErrorMetricsTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.SupportAgentModelInputTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.SupportAgentProviderIndependenceTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.SupportAgentSystemPromptTest",
+        "total": 22,
+        "passed": 22,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.SupportAgentToolModeTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.TierChatClientRegistryTest",
+        "total": 10,
+        "passed": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.agent.ToolCallLimitsEnforcementTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.chat.ChatControllerIntegrationTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.chat.ChatControllerProfileGatingTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.chat.ChatRequestValidationTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.voice.LiveKitTokenServiceTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.voice.TelemetrySecretDiagnosticTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.voice.VoiceTelemetrySecretTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.voice.VoiceTurnControllerTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.api.voice.VoiceTurnStreamControllerTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.ApplicationTests",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.audit.AuditBatchWriterFailureIsolationTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.audit.AuditBatchWriterTurnMetricCallRowTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.audit.AuditEventBusTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.audit.AuditOrderingTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.audit.ConversationAuditServiceFailureIsolationTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.audit.ConversationAuditServiceIntegrationTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.config.AiPropertiesBindingTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.config.SpringAiModelAutoConfigDisabledTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.CommunicationProfileTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.ConversationLanguageResolverTest",
+        "total": 37,
+        "passed": 37,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.ConversationRuntimeTest",
+        "total": 58,
+        "passed": 58,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.ConversationRuntimeTraceTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.ConversationSessionTest",
+        "total": 11,
+        "passed": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.DirectProcedureResponseRendererPromotionTest",
+        "total": 53,
+        "passed": 53,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.DirectProcedureResponseRendererTest",
+        "total": 52,
+        "passed": 52,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.InMemorySessionStoreTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.ProductConversationRegressionTest",
+        "total": 13,
+        "passed": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.PromptGuardOtpPrivacyTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.conversation.VoiceGenerationCancellationTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.embedding.EmbeddingPropertiesTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.embedding.VoyageEmbeddingClientTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.embedding.VoyageEmbeddingModelTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.embedding.VoyageRoutingEmbeddingServiceTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.identity.IdentityServiceTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.identity.OwnedOrderItemResolverTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.notification.ProcedureNotificationServiceTest",
+        "total": 12,
+        "passed": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.observability.TraceIdFilterTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.observability.TraceIdsTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.observability.TurnMetricsTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.observability.TurnTraceRedactionTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.persistence.CommerceDomainRepositoryIntegrationTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.persistence.DataSeederIdempotencyTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.persistence.OrderRepositoryScopeTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.persistence.seed.DataSeederTicketRelinkTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.persistence.seed.SeedDatasetDeterminismTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.persistence.VoxTicketApplicationContextTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.policy.ActionPolicyServiceTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.policy.CancellationPolicyServiceTest",
+        "total": 9,
+        "passed": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.policy.ClaimPolicyServiceTest",
+        "total": 9,
+        "passed": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.policy.ReturnPolicyBulkEvaluationTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.policy.ReturnPolicyServiceTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ExplicitConfirmationParserMultilingualTest",
+        "total": 68,
+        "passed": 68,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ExplicitConfirmationParserTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedureClaimIdempotencyTest",
+        "total": 9,
+        "passed": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedureCoordinatorCommitFailureTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedureCoordinatorIntegrationTest",
+        "total": 19,
+        "passed": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedureCoordinatorRateLimitTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedurePass2DBRegressionTest",
+        "total": 23,
+        "passed": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedurePromotionSafetyTest",
+        "total": 29,
+        "passed": 29,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedureRequestToolsDescriptionTest",
+        "total": 9,
+        "passed": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.procedure.ProcedureToolResultContractTest",
+        "total": 42,
+        "passed": 42,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.rag.KnowledgeIngestionServiceTest",
+        "total": 14,
+        "passed": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.rag.PolicyKnowledgeToolsTest",
+        "total": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.rag.RagEvaluationHarnessManualTest",
+        "total": 1,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "class": "com.voxticket.rag.RagServiceCacheEvictionTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.rag.RagServiceDetailedTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.rag.RagServiceTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.CalibratedRoutingDefaultsTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.embedding.E5TokenizerKnownIdsTest",
+        "total": 8,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 8
+      },
+      {
+        "class": "com.voxticket.routing.embedding.E5UnigramTokenizerTest",
+        "total": 11,
+        "passed": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.embedding.OnnxEmbeddingServiceTest",
+        "total": 7,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 7
+      },
+      {
+        "class": "com.voxticket.routing.eval.Phase3EvaluationSuite",
+        "total": 5,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 5
+      },
+      {
+        "class": "com.voxticket.routing.eval.Phase3NearDuplicateAudit",
+        "total": 1,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "class": "com.voxticket.routing.eval.Phase3ProviderE2E",
+        "total": 1,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "class": "com.voxticket.routing.eval.RouterParityTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.eval.RoutingMetricsTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.eval.ThresholdCalibratorTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.RoutingArchitectureBoundaryTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.RoutingDecisionEngineTest",
+        "total": 13,
+        "passed": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.RoutingExampleIndexTest",
+        "total": 8,
+        "passed": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.RoutingExampleLoaderTest",
+        "total": 8,
+        "passed": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.RoutingHybridContextTest",
+        "total": 1,
+        "passed": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "class": "com.voxticket.routing.RoutingNonHybridContextTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.RoutingStartupFailureTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.SemanticRoutingServiceTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.routing.StructuralFeatureExtractorTest",
+        "total": 10,
+        "passed": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.safety.GroqMlPromptGuardTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.safety.HeuristicPromptGuardTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.safety.InputNormalizerTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.ClaimServiceActiveClaimDedupeTest",
+        "total": 6,
+        "passed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.CommerceServicesIntegrationTest",
+        "total": 15,
+        "passed": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.ConcurrentMutationTest",
+        "total": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.CustomerFriendlyLanguageTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.CustomerOrderContextIntegrationTest",
+        "total": 15,
+        "passed": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.CustomerOrderQueryServiceIdorTest",
+        "total": 10,
+        "passed": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.dto.RefundContextViewTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.OrderContextQueryPerformanceTest",
+        "total": 4,
+        "passed": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.service.OrderSupportContextCapabilitiesTest",
+        "total": 19,
+        "passed": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.DevOtpDeliveryServiceTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.EmailOtpDeliveryServiceTest",
+        "total": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.SensitiveTurnParserTest",
+        "total": 26,
+        "passed": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.VerificationChallengeInvalidationTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.VerificationServiceCodeTest",
+        "total": 12,
+        "passed": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.VerificationServiceIntegrationTest",
+        "total": 7,
+        "passed": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.voxticket.verification.VerificationServiceResendTest",
+        "total": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "python": {
+    "status": "measured",
+    "totals": {
+      "total": 100,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 100
+    }
+  }
+}

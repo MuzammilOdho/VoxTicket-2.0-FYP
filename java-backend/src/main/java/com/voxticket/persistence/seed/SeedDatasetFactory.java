@@ -37,7 +37,7 @@ import java.util.Random;
  * <p>Determinism contract (Phase 3):
  * <ul>
  *   <li><b>Fixed time anchor</b> - every timestamp in the dataset is derived
- *       from {@link #ANCHOR} ({@code 2026-09-01T00:00:00Z}). Nothing reads the
+ *       from {@link #ANCHOR} ({@code 2026-10-24T00:00:00Z}). Nothing reads the
  *       wall clock: no {@code Instant.now()}, no "days ago from today". The
  *       anchor sits weeks in the past relative to any real run, so a timestamp
  *       leak from the wall clock is trivially detectable (it would land near
@@ -79,7 +79,7 @@ import java.util.Random;
 public final class SeedDatasetFactory {
 
     /** Fixed time anchor: every dataset timestamp is relative to this instant, never to the wall clock. */
-    public static final Instant ANCHOR = Instant.parse("2026-09-01T00:00:00Z");
+    public static final Instant ANCHOR = Instant.parse("2026-10-24T00:00:00Z");
 
     /** Fixed seed for all cosmetic randomness (product picks, price jitter, phone suffixes). */
     public static final long RANDOM_SEED = 20260930L;

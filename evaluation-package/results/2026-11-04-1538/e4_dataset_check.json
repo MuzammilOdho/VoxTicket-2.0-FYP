@@ -1,0 +1,53 @@
+{
+  "dataset": "D:\\dev\\VoxTicket-2.0-FYP\\evaluation-package\\datasets\\rag_questions_v2.json",
+  "valid": true,
+  "errors": [],
+  "warnings": [
+    "RQ2-009: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-010: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-011: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-012: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-013: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-014: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-015: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-016: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-021: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-022: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-023: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-024: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-025: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-026: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-031: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-032: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-033: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-034: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-038: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-039: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)",
+    "RQ2-040: needs_review=true (Urdu/Roman Urdu draft not yet reviewed)"
+  ],
+  "counts": {
+    "questions": 40,
+    "by_type": {
+      "direct": 16,
+      "paraphrase": 10,
+      "exception": 8,
+      "unsupported": 6
+    },
+    "by_language": {
+      "EN": 19,
+      "UR": 10,
+      "RU": 11
+    },
+    "by_category": {
+      "returns-policy": 9,
+      "cancellation-policy": 6,
+      "refund-timing": 6,
+      "claims-damaged-wrong-missing": 4,
+      "payment-issues": 3,
+      "shipping-and-delivery": 4,
+      "human-escalation": 2,
+      "null": 6
+    },
+    "needs_review": 21
+  }
+}

@@ -1,0 +1,15 @@
+scenario_id,declared_arm,response_text,task_completed,quality_1_to_5,notes
+E3-01,ALWAYS_TIER_1,"I see you have two recent orders: ORD‑10053, which is still OPEN, and ORD‑10054, which has been completed. Which one would you like to check?",yes,5,Retrieved two recent orders and asks which to check; good disambiguation.
+E3-02,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-03,ALWAYS_TIER_1,"Sure, I can help with that. Which order would you like to return an item from?",yes,4,Appropriate clarifying question: which order to return from.
+E3-04,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-05,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer in Roman Urdu."
+E3-06,ALWAYS_TIER_1,کیا آپ اپنا آرڈر نمبر بتا سکتے ہیں؟ اس کے بعد میں آپ کی مدد کر سکتا ہوں۔,yes,4,"Urdu, asks order number as next step for return; does not yet explain return steps."
+E3-07,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-08,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-09,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-10,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-11,ALWAYS_TIER_1,I’m sorry to hear that it didn’t meet your expectations. Could you let me know which order or item you’re referring to? That way I can look up the details and help you further.,yes,4,Appropriate clarifying question for vague message: which order/item.
+E3-12,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-13,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer in Roman Urdu."
+E3-14,ALWAYS_TIER_1,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer in Urdu."

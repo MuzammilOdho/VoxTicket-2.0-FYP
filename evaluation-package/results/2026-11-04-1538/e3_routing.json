@@ -1,0 +1,113 @@
+{
+  "area": "E3-routing",
+  "status": "measured",
+  "method": "Transcribed from Phase3EvaluationSuite console output. Calibration is tuned on the validation split only; the final-test split is held out and never used for tuning.",
+  "sections": {
+    "baseline VALIDATION": {
+      "section": "baseline VALIDATION",
+      "acc": "0.7417",
+      "bal": "0.7417",
+      "f1": "0.7232",
+      "under": "0",
+      "over": "31",
+      "t2": "0.7583"
+    },
+    "calibration": {
+      "section": "calibration",
+      "margin": "0.002625864735131711",
+      "before_acc": "0.7417",
+      "before_bal": "0.7417",
+      "before_f1": "0.7232",
+      "before_under": "0",
+      "before_over": "31",
+      "before_t2": "0.7583",
+      "after_acc": "0.9333",
+      "after_bal": "0.9333",
+      "after_f1": "0.9330",
+      "after_under": "0",
+      "after_over": "8",
+      "after_t2": "0.5667"
+    },
+    "FINAL_TEST ALWAYS_TIER_1": {
+      "section": "FINAL_TEST ALWAYS_TIER_1",
+      "acc": "0.5000",
+      "bal": "0.5000",
+      "f1": "0.3333",
+      "under": "60",
+      "over": "0",
+      "t2": "0.0000"
+    },
+    "FINAL_TEST ALWAYS_TIER_2": {
+      "section": "FINAL_TEST ALWAYS_TIER_2",
+      "acc": "0.5000",
+      "bal": "0.5000",
+      "f1": "0.3333",
+      "under": "0",
+      "over": "60",
+      "t2": "1.0000"
+    },
+    "FINAL_TEST RULE_ONLY": {
+      "section": "FINAL_TEST RULE_ONLY",
+      "acc": "0.5000",
+      "bal": "0.5000",
+      "f1": "0.3333",
+      "under": "60",
+      "over": "0",
+      "t2": "0.0000"
+    },
+    "FINAL_TEST HYBRID_CALIBRATED": {
+      "section": "FINAL_TEST HYBRID_CALIBRATED",
+      "acc": "0.9083",
+      "bal": "0.9083",
+      "f1": "0.9076",
+      "under": "0",
+      "over": "11",
+      "t2": "0.5917"
+    }
+  },
+  "inference": {
+    "val": 120,
+    "tst": 120,
+    "sem": 228,
+    "emb": 324
+  },
+  "latency_ms": {
+    "structural": {
+      "mean": 0.0138,
+      "p50": 0.0103,
+      "p95": 0.0281,
+      "max": 0.161
+    },
+    "semantic": {
+      "mean": 10.6206,
+      "p50": 9.626,
+      "p95": 16.5086,
+      "max": 22.8952
+    }
+  },
+  "run_info": {
+    "timestamp": "2026-11-04T10:43:06.892828100Z",
+    "gitSha": "a78ff418243410536386f240f8476f9e63b4abea",
+    "model": "intfloat/multilingual-e5-small",
+    "onnxSha256": "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
+    "tokenizerSha256": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39",
+    "prototypeHash": "74b6393b5c5ab9749d193cb88dc96b2269aea312fe5f2805d24572b210ca1ceb",
+    "validationCorpusHash": "304932a4c47ef1d807da04d6f311898ea1438aacd8e8ed3631b7f2c150880cc9",
+    "finalTestCorpusHash": "55ea51a7be46bda6b343cdfc6ce7039250bb7c1a01adc441869e8fdefb6e56c1",
+    "topK": "3",
+    "originalSimpleMargin": "0.02",
+    "originalComplexMargin": "0.02",
+    "javaVersion": "21.0.11",
+    "onnxRuntimeVersion": "1.22.0",
+    "modelInitMs": "3478",
+    "prototypeIndexInitMs": "1262",
+    "prototypeCountTier1": "48",
+    "prototypeCountTier2": "48"
+  },
+  "suite_tests": {
+    "run": 5,
+    "fail": 0,
+    "err": 0,
+    "skip": 0
+  }
+}

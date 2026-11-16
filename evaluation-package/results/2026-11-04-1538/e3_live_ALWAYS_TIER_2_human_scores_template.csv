@@ -1,0 +1,15 @@
+scenario_id,declared_arm,response_text,task_completed,quality_1_to_5,notes
+E3-01,ALWAYS_TIER_2,Sure thing! Could you let me know which order number you’d like the status for?,yes,4,Appropriate clarifying question: order number for status.
+E3-02,ALWAYS_TIER_2,"Refunds are created in our system right away, but it usually takes a few business days for the money to show up in your bank or wallet, depending on your provider. If it was a cash‑on‑delivery order that never charged you, there’s no refund to appear. If you have any other questions, just let me know.",yes,5,"Correct refund policy, including COD no-refund case."
+E3-03,ALWAYS_TIER_2,Sure thing! Could you let me know the order number (or the item you’d like to return) so I can check the return options for you?,yes,4,Appropriate clarifying question: order number or item to check return options.
+E3-04,ALWAYS_TIER_2,"We accept card payments, digital wallets, bank transfers, and cash on delivery. Let me know if you’d like help with anything else!",yes,5,"Correct payment methods: card, wallets, bank transfer, COD."
+E3-05,ALWAYS_TIER_2,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer in Roman Urdu."
+E3-06,ALWAYS_TIER_2,آپ کے آرڈر کو واپس کرنے کے لیے ہمیں آرڈر کا نمبر چاہیے تاکہ ہم واپسی کا عمل شروع کر سکیں۔ براہ کرم اپنا آرڈر ریفرنس بتائیں۔ شکریہ!,yes,4,"Urdu, asks order number to start return process."
+E3-07,ALWAYS_TIER_2,"Sure, I can help with that. Could you let me know the order number you’d like to return an item from and the order for which you’re asking about the refund timing?",yes,5,Correctly separates the two issues: return order number and refund-timing order number.
+E3-08,ALWAYS_TIER_2,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-09,ALWAYS_TIER_2,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-10,ALWAYS_TIER_2,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-11,ALWAYS_TIER_2,I’m sorry to hear that. Could you let me know which order or item you’re referring to so I can help you with a return or claim?,yes,4,"Appropriate clarifying question: which order/item, for return or claim."
+E3-12,ALWAYS_TIER_2,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer."
+E3-13,ALWAYS_TIER_2,Aapka order number kya hai?,yes,2,"Roman Urdu, asks order number only; minimal, no claim/refund/replacement guidance."
+E3-14,ALWAYS_TIER_2,I'm having trouble processing that right now - please try again in a moment.,no,1,"Error fallback, no answer in Urdu."

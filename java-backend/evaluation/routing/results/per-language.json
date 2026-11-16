@@ -1,0 +1,97 @@
+{
+  "strategy" : "HYBRID_CALIBRATED",
+  "byLanguage" : {
+    "CODE_SWITCH" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 15,
+        "fp" : 4,
+        "tn" : 11,
+        "fn" : 0
+      },
+      "accuracy" : 0.8666666666666667,
+      "balancedAccuracy" : 0.8666666666666667,
+      "macroF1" : 0.8642533936651583,
+      "t2Precision" : 0.7894736842105263,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8823529411764706,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.7333333333333333,
+      "t1F1" : 0.846153846153846,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 4,
+      "overRouteRate" : 0.26666666666666666,
+      "t2SelectionRate" : 0.6333333333333333
+    },
+    "ENGLISH" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 15,
+        "fp" : 4,
+        "tn" : 11,
+        "fn" : 0
+      },
+      "accuracy" : 0.8666666666666667,
+      "balancedAccuracy" : 0.8666666666666667,
+      "macroF1" : 0.8642533936651583,
+      "t2Precision" : 0.7894736842105263,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8823529411764706,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.7333333333333333,
+      "t1F1" : 0.846153846153846,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 4,
+      "overRouteRate" : 0.26666666666666666,
+      "t2SelectionRate" : 0.6333333333333333
+    },
+    "ROMAN_URDU" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 15,
+        "fp" : 3,
+        "tn" : 12,
+        "fn" : 0
+      },
+      "accuracy" : 0.9,
+      "balancedAccuracy" : 0.9,
+      "macroF1" : 0.898989898989899,
+      "t2Precision" : 0.8333333333333334,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.9090909090909091,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.8,
+      "t1F1" : 0.888888888888889,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 3,
+      "overRouteRate" : 0.2,
+      "t2SelectionRate" : 0.6
+    },
+    "URDU" : {
+      "n" : 30,
+      "confusionMatrix" : {
+        "tp" : 15,
+        "fp" : 0,
+        "tn" : 15,
+        "fn" : 0
+      },
+      "accuracy" : 1.0,
+      "balancedAccuracy" : 1.0,
+      "macroF1" : 1.0,
+      "t2Precision" : 1.0,
+      "t2Recall" : 1.0,
+      "t2F1" : 1.0,
+      "t1Precision" : 1.0,
+      "t1Recall" : 1.0,
+      "t1F1" : 1.0,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 0,
+      "overRouteRate" : 0.0,
+      "t2SelectionRate" : 0.5
+    }
+  }
+}

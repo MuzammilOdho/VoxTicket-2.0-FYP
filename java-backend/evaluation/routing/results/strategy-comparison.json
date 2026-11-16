@@ -1,0 +1,98 @@
+{
+  "split" : "FINAL_TEST",
+  "calibratedSimpleMargin" : 0.002625864735131711,
+  "strategies" : {
+    "ALWAYS_TIER_1" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 0,
+        "fp" : 0,
+        "tn" : 60,
+        "fn" : 60
+      },
+      "accuracy" : 0.5,
+      "balancedAccuracy" : 0.5,
+      "macroF1" : 0.3333333333333333,
+      "t2Precision" : 0.0,
+      "t2Recall" : 0.0,
+      "t2F1" : 0.0,
+      "t1Precision" : 0.5,
+      "t1Recall" : 1.0,
+      "t1F1" : 0.6666666666666666,
+      "underRouted" : 60,
+      "underRouteRate" : 1.0,
+      "overRouted" : 0,
+      "overRouteRate" : 0.0,
+      "t2SelectionRate" : 0.0
+    },
+    "ALWAYS_TIER_2" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 60,
+        "tn" : 0,
+        "fn" : 0
+      },
+      "accuracy" : 0.5,
+      "balancedAccuracy" : 0.5,
+      "macroF1" : 0.3333333333333333,
+      "t2Precision" : 0.5,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6666666666666666,
+      "t1Precision" : 0.0,
+      "t1Recall" : 0.0,
+      "t1F1" : 0.0,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 60,
+      "overRouteRate" : 1.0,
+      "t2SelectionRate" : 1.0
+    },
+    "RULE_ONLY" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 0,
+        "fp" : 0,
+        "tn" : 60,
+        "fn" : 60
+      },
+      "accuracy" : 0.5,
+      "balancedAccuracy" : 0.5,
+      "macroF1" : 0.3333333333333333,
+      "t2Precision" : 0.0,
+      "t2Recall" : 0.0,
+      "t2F1" : 0.0,
+      "t1Precision" : 0.5,
+      "t1Recall" : 1.0,
+      "t1F1" : 0.6666666666666666,
+      "underRouted" : 60,
+      "underRouteRate" : 1.0,
+      "overRouted" : 0,
+      "overRouteRate" : 0.0,
+      "t2SelectionRate" : 0.0
+    },
+    "HYBRID_CALIBRATED" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 11,
+        "tn" : 49,
+        "fn" : 0
+      },
+      "accuracy" : 0.9083333333333333,
+      "balancedAccuracy" : 0.9083333333333333,
+      "macroF1" : 0.9075565515792422,
+      "t2Precision" : 0.8450704225352113,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.916030534351145,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.8166666666666667,
+      "t1F1" : 0.8990825688073394,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 11,
+      "overRouteRate" : 0.18333333333333332,
+      "t2SelectionRate" : 0.5916666666666667
+    }
+  }
+}

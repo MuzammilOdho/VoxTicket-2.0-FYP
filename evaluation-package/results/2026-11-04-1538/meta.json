@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04T15:38:09.6993241+05:00",
+  "git_sha": "a78ff418243410536386f240f8476f9e63b4abea",
+  "java_version": "not found",
+  "model_path": "D:\\dev\\VoxTicket-models\\multilingual-e5-small",
+  "backend_url": "http://localhost:8080",
+  "rpm": 10,
+  "embedding_provider": "local (Ollama bge-m3, pgvector)",
+  "price_note": "No price given: cost cells stay empty (not estimated)."
+}

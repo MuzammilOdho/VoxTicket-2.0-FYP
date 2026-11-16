@@ -1,0 +1,851 @@
+{
+  "generatedAt" : "2026-11-04T15:48:57.688892800+05:00",
+  "datasetPath" : "D:\\dev\\VoxTicket-2.0-FYP\\evaluation-package\\datasets\\rag_questions_v2.json",
+  "datasetSha256" : "4f71925944fb250bda1bbe91fcbbbeec5622720797784559b1c7411b92931f9d",
+  "questionCount" : 40,
+  "ragTopK" : 3,
+  "ragSimilarityThreshold" : 0.35,
+  "embeddingProviderEnv" : "local",
+  "note" : "Retrieval-only run through the real RagService. Answer quality is collected separately and human-scored.",
+  "rows" : [ {
+    "id" : "RQ2-001",
+    "type" : "direct",
+    "expectedCategory" : "returns-policy",
+    "question" : "How many days do I have to return an item after delivery?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 1043,
+    "wallMs" : 1046,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.6363035440444946
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5637670159339905
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5405430495738983
+    } ]
+  }, {
+    "id" : "RQ2-002",
+    "type" : "direct",
+    "expectedCategory" : "returns-policy",
+    "question" : "Can I return only part of a multi-item order?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 188,
+    "wallMs" : 189,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.4838991165161133
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.45246821641921997
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.4336206316947937
+    } ]
+  }, {
+    "id" : "RQ2-003",
+    "type" : "direct",
+    "expectedCategory" : "cancellation-policy",
+    "question" : "Can I cancel an order that has already shipped?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 177,
+    "wallMs" : 178,
+    "hits" : [ {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.5865874290466309
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5629437565803528
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5126663148403168
+    } ]
+  }, {
+    "id" : "RQ2-004",
+    "type" : "direct",
+    "expectedCategory" : "cancellation-policy",
+    "question" : "If I cancel a cash-on-delivery order, do I get a refund?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 195,
+    "wallMs" : 195,
+    "hits" : [ {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.6260118782520294
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.6157159805297852
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.543948620557785
+    } ]
+  }, {
+    "id" : "RQ2-005",
+    "type" : "direct",
+    "expectedCategory" : "refund-timing",
+    "question" : "How long does a card refund take to appear in my account?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 190,
+    "wallMs" : 191,
+    "hits" : [ {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.65535107254982
+    }, {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.5519309639930725
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5087284743785858
+    } ]
+  }, {
+    "id" : "RQ2-006",
+    "type" : "direct",
+    "expectedCategory" : "claims-damaged-wrong-missing",
+    "question" : "What reasons can I file a claim for?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 177,
+    "wallMs" : 178,
+    "hits" : [ {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5624661147594452
+    }, {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.4422643780708313
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.44204068183898926
+    } ]
+  }, {
+    "id" : "RQ2-007",
+    "type" : "direct",
+    "expectedCategory" : "payment-issues",
+    "question" : "What does a FAILED payment status mean?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 186,
+    "wallMs" : 187,
+    "hits" : [ {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.7100752890110016
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.5810563862323761
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5588573813438416
+    } ]
+  }, {
+    "id" : "RQ2-008",
+    "type" : "direct",
+    "expectedCategory" : "shipping-and-delivery",
+    "question" : "What happens if my delivery attempt fails?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 180,
+    "wallMs" : 180,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5620402097702026
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.5604264736175537
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.4657211899757385
+    } ]
+  }, {
+    "id" : "RQ2-009",
+    "type" : "direct",
+    "expectedCategory" : "returns-policy",
+    "question" : "ڈیلیوری کے بعد مجھے چیز واپس کرنے کے لیے کتنے دن ملتے ہیں؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 190,
+    "wallMs" : 191,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.5959645807743073
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5478731095790863
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5116581320762634
+    } ]
+  }, {
+    "id" : "RQ2-010",
+    "type" : "direct",
+    "expectedCategory" : "refund-timing",
+    "question" : "کارڈ ریفنڈ میرے اکاؤنٹ میں آنے میں کتنا وقت لگتا ہے؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 196,
+    "wallMs" : 196,
+    "hits" : [ {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5901899039745331
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.48925089836120605
+    }, {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.48077476024627686
+    } ]
+  }, {
+    "id" : "RQ2-011",
+    "type" : "direct",
+    "expectedCategory" : "cancellation-policy",
+    "question" : "کیا میں وہ آرڈر منسوخ کر سکتا ہوں جو ابھی بھیجا نہیں گیا؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 187,
+    "wallMs" : 188,
+    "hits" : [ {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.5465572476387024
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5451285243034363
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.5262211561203003
+    } ]
+  }, {
+    "id" : "RQ2-012",
+    "type" : "direct",
+    "expectedCategory" : "shipping-and-delivery",
+    "question" : "اگر میری ڈیلیوری کی کوشش ناکام ہو جائے تو کیا ہوگا؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 182,
+    "wallMs" : 183,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5119659304618835
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.48304152488708496
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.419211208820343
+    } ]
+  }, {
+    "id" : "RQ2-013",
+    "type" : "direct",
+    "expectedCategory" : "returns-policy",
+    "question" : "Delivery ke baad mujhe item wapas karne ke liye kitne din milte hain?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 196,
+    "wallMs" : 197,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.4514583349227905
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.4294036030769348
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.42800194025039673
+    } ]
+  }, {
+    "id" : "RQ2-014",
+    "type" : "direct",
+    "expectedCategory" : "refund-timing",
+    "question" : "Card refund mere account me aane me kitna waqt lagta hai?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 196,
+    "wallMs" : 196,
+    "hits" : [ {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5498161017894745
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.4846354126930237
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.47963833808898926
+    } ]
+  }, {
+    "id" : "RQ2-015",
+    "type" : "direct",
+    "expectedCategory" : "claims-damaged-wrong-missing",
+    "question" : "Damage item ke liye main claim kaise file kar sakta hoon?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 192,
+    "wallMs" : 192,
+    "hits" : [ {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.49416249990463257
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.3886687159538269
+    }, {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.38235360383987427
+    } ]
+  }, {
+    "id" : "RQ2-016",
+    "type" : "direct",
+    "expectedCategory" : "payment-issues",
+    "question" : "FAILED payment status ka kya matlab hai?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 182,
+    "wallMs" : 183,
+    "hits" : [ {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.6137651205062866
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.4969927668571472
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.4781656265258789
+    } ]
+  }, {
+    "id" : "RQ2-017",
+    "type" : "paraphrase",
+    "expectedCategory" : "returns-policy",
+    "question" : "Is there a deadline for sending something back?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 185,
+    "wallMs" : 185,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.6004430651664734
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5539146661758423
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5157316625118256
+    } ]
+  }, {
+    "id" : "RQ2-018",
+    "type" : "paraphrase",
+    "expectedCategory" : "refund-timing",
+    "question" : "I was told my refund was approved. When will I actually see the money?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 176,
+    "wallMs" : 177,
+    "hits" : [ {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.6052565574645996
+    }, {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.576339989900589
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.5104154348373413
+    } ]
+  }, {
+    "id" : "RQ2-019",
+    "type" : "paraphrase",
+    "expectedCategory" : "shipping-and-delivery",
+    "question" : "My tracking shows delivered but I never got the parcel. Will I be refunded automatically?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 218,
+    "wallMs" : 218,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.6162978708744049
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5583160519599915
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.527686357498169
+    } ]
+  }, {
+    "id" : "RQ2-020",
+    "type" : "paraphrase",
+    "expectedCategory" : "human-escalation",
+    "question" : "I want to speak to a real person about my issue. Is that possible?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 187,
+    "wallMs" : 188,
+    "hits" : [ {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.5172123312950134
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.48208755254745483
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.4156779646873474
+    } ]
+  }, {
+    "id" : "RQ2-021",
+    "type" : "paraphrase",
+    "expectedCategory" : "cancellation-policy",
+    "question" : "Mera order abhi ship nahi hua, kya main ise cancel kar sakta hoon?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 215,
+    "wallMs" : 216,
+    "hits" : [ {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.41297447681427
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.4005018472671509
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.39832133054733276
+    } ]
+  }, {
+    "id" : "RQ2-022",
+    "type" : "paraphrase",
+    "expectedCategory" : "returns-policy",
+    "question" : "Kya main apne order ka sirf aik item wapas kar sakta hoon?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 224,
+    "wallMs" : 225,
+    "hits" : [ {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.41488444805145264
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.40766096115112305
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.3873790502548218
+    } ]
+  }, {
+    "id" : "RQ2-023",
+    "type" : "paraphrase",
+    "expectedCategory" : "payment-issues",
+    "question" : "Mere card se do dafa paise kat gaye lagte hain, ye kya hai?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 184,
+    "wallMs" : 185,
+    "hits" : [ {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.4344288110733032
+    }, {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.39576685428619385
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.39268308877944946
+    } ]
+  }, {
+    "id" : "RQ2-024",
+    "type" : "paraphrase",
+    "expectedCategory" : "claims-damaged-wrong-missing",
+    "question" : "مجھے غلط چیز موصول ہوئی ہے، میں کیا کروں؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 180,
+    "wallMs" : 180,
+    "hits" : [ {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5250413417816162
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.523004025220871
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.5199776887893677
+    } ]
+  }, {
+    "id" : "RQ2-025",
+    "type" : "paraphrase",
+    "expectedCategory" : "human-escalation",
+    "question" : "کیا میں اپنے مسئلے پر کسی انسان سے بات کر سکتا ہوں؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 185,
+    "wallMs" : 185,
+    "hits" : [ {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.4831044673919678
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.4359033703804016
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.38392317295074463
+    } ]
+  }, {
+    "id" : "RQ2-026",
+    "type" : "paraphrase",
+    "expectedCategory" : "shipping-and-delivery",
+    "question" : "میرا پارسل گم ہو گیا ہے، کیا یہ عام تاخیر ہے؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 183,
+    "wallMs" : 184,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.48470789194107056
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.4522549510002136
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.4327819347381592
+    } ]
+  }, {
+    "id" : "RQ2-027",
+    "type" : "exception",
+    "expectedCategory" : "returns-policy",
+    "question" : "Can I return an item marked final sale?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 188,
+    "wallMs" : 188,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.5182416141033173
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.47557371854782104
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.4351575970649719
+    } ]
+  }, {
+    "id" : "RQ2-028",
+    "type" : "exception",
+    "expectedCategory" : "returns-policy",
+    "question" : "My item arrived 40 days ago. Can I still return it?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 177,
+    "wallMs" : 177,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.612865537405014
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5171220004558563
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5095466673374176
+    } ]
+  }, {
+    "id" : "RQ2-029",
+    "type" : "exception",
+    "expectedCategory" : "cancellation-policy",
+    "question" : "My card payment is still PENDING and I want to cancel. Do I get an automatic refund?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 219,
+    "wallMs" : 220,
+    "hits" : [ {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.6446703672409058
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.6375460624694824
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.6257443428039551
+    } ]
+  }, {
+    "id" : "RQ2-030",
+    "type" : "exception",
+    "expectedCategory" : "refund-timing",
+    "question" : "My refund shows FAILED. Is my money lost?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 182,
+    "wallMs" : 182,
+    "hits" : [ {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.5924093723297119
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.5557971000671387
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5313009917736053
+    } ]
+  }, {
+    "id" : "RQ2-031",
+    "type" : "exception",
+    "expectedCategory" : "cancellation-policy",
+    "question" : "Mera order ship ho gaya hai, kya main ise cancel kar sakta hoon?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 194,
+    "wallMs" : 194,
+    "hits" : [ {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.47212010622024536
+    }, {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.4501967430114746
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.43432843685150146
+    } ]
+  }, {
+    "id" : "RQ2-032",
+    "type" : "exception",
+    "expectedCategory" : "refund-timing",
+    "question" : "Mera refund FAILED show ho raha hai, kya mere paise zaya ho gaye?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 217,
+    "wallMs" : 217,
+    "hits" : [ {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.44423049688339233
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.43699735403060913
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.39543503522872925
+    } ]
+  }, {
+    "id" : "RQ2-033",
+    "type" : "exception",
+    "expectedCategory" : "returns-policy",
+    "question" : "کیا میں فائنل سیل والی چیز واپس کر سکتا ہوں؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 189,
+    "wallMs" : 189,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.4877825379371643
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.48335546255111694
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.461810827255249
+    } ]
+  }, {
+    "id" : "RQ2-034",
+    "type" : "exception",
+    "expectedCategory" : "claims-damaged-wrong-missing",
+    "question" : "کلیم اور عام واپسی میں کیا فرق ہے؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 187,
+    "wallMs" : 187,
+    "hits" : [ {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.5075434744358063
+    }, {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.3908230662345886
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.3867296576499939
+    } ]
+  }, {
+    "id" : "RQ2-035",
+    "type" : "unsupported",
+    "expectedCategory" : null,
+    "question" : "Do you offer a discount code for my next purchase?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 189,
+    "wallMs" : 190,
+    "hits" : [ {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.4429734945297241
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.43737101554870605
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.4353947043418884
+    } ]
+  }, {
+    "id" : "RQ2-036",
+    "type" : "unsupported",
+    "expectedCategory" : null,
+    "question" : "What is the warranty period for electronic items?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 187,
+    "wallMs" : 188,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.5018739998340607
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.42799460887908936
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.42280638217926025
+    } ]
+  }, {
+    "id" : "RQ2-037",
+    "type" : "unsupported",
+    "expectedCategory" : null,
+    "question" : "Can I change my delivery address after my order has shipped?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 188,
+    "wallMs" : 188,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.5677339732646942
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.49926143884658813
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.4890820384025574
+    } ]
+  }, {
+    "id" : "RQ2-038",
+    "type" : "unsupported",
+    "expectedCategory" : null,
+    "question" : "Kya aap international shipping karte hain?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 186,
+    "wallMs" : 186,
+    "hits" : [ {
+      "docId" : "25c75d85-ab4f-3c54-bad5-a59ea2886c04",
+      "category" : "shipping-and-delivery",
+      "similarity" : 0.41066986322402954
+    }, {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.39239126443862915
+    }, {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.3645055890083313
+    } ]
+  }, {
+    "id" : "RQ2-039",
+    "type" : "unsupported",
+    "expectedCategory" : null,
+    "question" : "Mujhe agle order par discount code chahiye, kya milega?",
+    "cacheHit" : false,
+    "serviceDurationMs" : 196,
+    "wallMs" : 196,
+    "hits" : [ {
+      "docId" : "1d660d42-9b4e-3413-9563-cd970d88a84b",
+      "category" : "payment-issues",
+      "similarity" : 0.3858277201652527
+    }, {
+      "docId" : "e3d29d9d-94cb-3af1-8a29-ceaf83606943",
+      "category" : "human-escalation",
+      "similarity" : 0.3790651559829712
+    }, {
+      "docId" : "b29d0792-e0f6-30f8-b6d0-ae28f5e1cda1",
+      "category" : "cancellation-policy",
+      "similarity" : 0.36630702018737793
+    } ]
+  }, {
+    "id" : "RQ2-040",
+    "type" : "unsupported",
+    "expectedCategory" : null,
+    "question" : "کیا آپ کی دکان سے خریدی گئی چیز کی واپسی پالیسی کیا ہے؟",
+    "cacheHit" : false,
+    "serviceDurationMs" : 184,
+    "wallMs" : 185,
+    "hits" : [ {
+      "docId" : "3781d4c9-e8f5-395a-a1a8-57d464d29c29",
+      "category" : "returns-policy",
+      "similarity" : 0.5214665532112122
+    }, {
+      "docId" : "eba0dafc-0d75-39d5-a380-ff3cee1959cc",
+      "category" : "claims-damaged-wrong-missing",
+      "similarity" : 0.4812880754470825
+    }, {
+      "docId" : "b9aec8be-9963-3dd1-9fbf-051ef00dca35",
+      "category" : "refund-timing",
+      "similarity" : 0.4584144353866577
+    } ]
+  } ]
+}

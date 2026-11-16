@@ -1,0 +1,528 @@
+{
+  "area": "E4",
+  "status": "measured",
+  "method": "Binary relevance against the expected policy document category. Answer quality is human scored and is NOT in this file. Unsupported questions are scored separately (correct only when retrieval returns no hits).",
+  "dataset_sha256": "4f71925944fb250bda1bbe91fcbbbeec5622720797784559b1c7411b92931f9d",
+  "dataset_path": "D:\\dev\\VoxTicket-2.0-FYP\\evaluation-package\\datasets\\rag_questions_v2.json",
+  "rag_top_k": 3,
+  "rag_similarity_threshold": 0.35,
+  "embedding_provider_note": "NOT recorded by the harness output. Record the actual provider/model/dimensions in the run header before quoting these numbers (yaml default is Ollama bge-m3; Voyage only when VOXTICKET_EMBEDDING_PROVIDER=voyage).",
+  "overall": {
+    "n": 34,
+    "recall_at_1": 0.9118,
+    "recall_at_3": 0.9412,
+    "mrr": 0.9265,
+    "ndcg_at_3": 0.9303
+  },
+  "by_type": {
+    "direct": {
+      "n": 16,
+      "recall_at_1": 0.9375,
+      "recall_at_3": 0.9375,
+      "mrr": 0.9375,
+      "ndcg_at_3": 0.9375
+    },
+    "exception": {
+      "n": 8,
+      "recall_at_1": 0.875,
+      "recall_at_3": 1.0,
+      "mrr": 0.9375,
+      "ndcg_at_3": 0.9539
+    },
+    "paraphrase": {
+      "n": 10,
+      "recall_at_1": 0.9,
+      "recall_at_3": 0.9,
+      "mrr": 0.9,
+      "ndcg_at_3": 0.9
+    }
+  },
+  "by_language": {
+    "EN": {
+      "n": 16,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    "RU": {
+      "n": 9,
+      "recall_at_1": 0.6667,
+      "recall_at_3": 0.7778,
+      "mrr": 0.7222,
+      "ndcg_at_3": 0.7368
+    },
+    "UR": {
+      "n": 9,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "mrr": 1.0,
+      "ndcg_at_3": 1.0
+    }
+  },
+  "unsupported": {
+    "n": 6,
+    "handled_correctly": 0,
+    "rate": 0.0
+  },
+  "zero_hit_questions": 0,
+  "zero_hit_warning": null,
+  "rows": [
+    {
+      "id": "RQ2-001",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-002",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-003",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "cancellation-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-004",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "cancellation-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-005",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "refund-timing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-006",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "claims-damaged-wrong-missing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-007",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "payment-issues",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-008",
+      "type": "direct",
+      "language": "EN",
+      "expected_category": "shipping-and-delivery",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-009",
+      "type": "direct",
+      "language": "UR",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-010",
+      "type": "direct",
+      "language": "UR",
+      "expected_category": "refund-timing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-011",
+      "type": "direct",
+      "language": "UR",
+      "expected_category": "cancellation-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-012",
+      "type": "direct",
+      "language": "UR",
+      "expected_category": "shipping-and-delivery",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-013",
+      "type": "direct",
+      "language": "RU",
+      "expected_category": "returns-policy",
+      "rank": null,
+      "hits": 3,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_3": 0.0
+    },
+    {
+      "id": "RQ2-014",
+      "type": "direct",
+      "language": "RU",
+      "expected_category": "refund-timing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-015",
+      "type": "direct",
+      "language": "RU",
+      "expected_category": "claims-damaged-wrong-missing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-016",
+      "type": "direct",
+      "language": "RU",
+      "expected_category": "payment-issues",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-017",
+      "type": "paraphrase",
+      "language": "EN",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-018",
+      "type": "paraphrase",
+      "language": "EN",
+      "expected_category": "refund-timing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-019",
+      "type": "paraphrase",
+      "language": "EN",
+      "expected_category": "shipping-and-delivery",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-020",
+      "type": "paraphrase",
+      "language": "EN",
+      "expected_category": "human-escalation",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-021",
+      "type": "paraphrase",
+      "language": "RU",
+      "expected_category": "cancellation-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-022",
+      "type": "paraphrase",
+      "language": "RU",
+      "expected_category": "returns-policy",
+      "rank": null,
+      "hits": 3,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "reciprocal_rank": 0.0,
+      "ndcg_at_3": 0.0
+    },
+    {
+      "id": "RQ2-023",
+      "type": "paraphrase",
+      "language": "RU",
+      "expected_category": "payment-issues",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-024",
+      "type": "paraphrase",
+      "language": "UR",
+      "expected_category": "claims-damaged-wrong-missing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-025",
+      "type": "paraphrase",
+      "language": "UR",
+      "expected_category": "human-escalation",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-026",
+      "type": "paraphrase",
+      "language": "UR",
+      "expected_category": "shipping-and-delivery",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-027",
+      "type": "exception",
+      "language": "EN",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-028",
+      "type": "exception",
+      "language": "EN",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-029",
+      "type": "exception",
+      "language": "EN",
+      "expected_category": "cancellation-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-030",
+      "type": "exception",
+      "language": "EN",
+      "expected_category": "refund-timing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-031",
+      "type": "exception",
+      "language": "RU",
+      "expected_category": "cancellation-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-032",
+      "type": "exception",
+      "language": "RU",
+      "expected_category": "refund-timing",
+      "rank": 2,
+      "hits": 3,
+      "recall_at_1": 0.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 0.5,
+      "ndcg_at_3": 0.6309297535714575
+    },
+    {
+      "id": "RQ2-033",
+      "type": "exception",
+      "language": "UR",
+      "expected_category": "returns-policy",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-034",
+      "type": "exception",
+      "language": "UR",
+      "expected_category": "claims-damaged-wrong-missing",
+      "rank": 1,
+      "hits": 3,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_3": 1.0
+    },
+    {
+      "id": "RQ2-035",
+      "type": "unsupported",
+      "language": "EN",
+      "expected_category": null,
+      "hits": 3,
+      "unsupported_handled_correctly": 0
+    },
+    {
+      "id": "RQ2-036",
+      "type": "unsupported",
+      "language": "EN",
+      "expected_category": null,
+      "hits": 3,
+      "unsupported_handled_correctly": 0
+    },
+    {
+      "id": "RQ2-037",
+      "type": "unsupported",
+      "language": "EN",
+      "expected_category": null,
+      "hits": 3,
+      "unsupported_handled_correctly": 0
+    },
+    {
+      "id": "RQ2-038",
+      "type": "unsupported",
+      "language": "RU",
+      "expected_category": null,
+      "hits": 3,
+      "unsupported_handled_correctly": 0
+    },
+    {
+      "id": "RQ2-039",
+      "type": "unsupported",
+      "language": "RU",
+      "expected_category": null,
+      "hits": 3,
+      "unsupported_handled_correctly": 0
+    },
+    {
+      "id": "RQ2-040",
+      "type": "unsupported",
+      "language": "UR",
+      "expected_category": null,
+      "hits": 3,
+      "unsupported_handled_correctly": 0
+    }
+  ]
+}

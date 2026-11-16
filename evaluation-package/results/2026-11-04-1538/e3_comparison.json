@@ -1,0 +1,287 @@
+{
+  "area": "E3-live",
+  "method": "Same scenarios, same order, every arm. Latency is measured. Task completion and quality come ONLY from the human-scores file; without it they are 'not measured'. Costs are estimates (words x 1.33) when a price was given, never metered tokens. Arms are declared by the caller and must be confirmed from backend logs.",
+  "arms": {
+    "HYBRID": {
+      "turns": 14,
+      "latency_ms": {
+        "mean": 1055.5,
+        "median": 889.3,
+        "p95": 2060.6
+      },
+      "estimated_tokens_mean": 38.6,
+      "estimated_cost_usd_mean": null,
+      "errors": 0,
+      "human_judged_turns": 14,
+      "task_completion_rate": 0.8571,
+      "quality_mean_1_to_5": 3.86
+    },
+    "ALWAYS_TIER_1": {
+      "turns": 14,
+      "latency_ms": {
+        "mean": 1196.7,
+        "median": 1009.9,
+        "p95": 2922.4
+      },
+      "estimated_tokens_mean": 22.4,
+      "estimated_cost_usd_mean": null,
+      "errors": 0,
+      "human_judged_turns": 14,
+      "task_completion_rate": 0.2857,
+      "quality_mean_1_to_5": 1.93
+    },
+    "ALWAYS_TIER_2": {
+      "turns": 14,
+      "latency_ms": {
+        "mean": 963.1,
+        "median": 872.4,
+        "p95": 2171.2
+      },
+      "estimated_tokens_mean": 28.2,
+      "estimated_cost_usd_mean": null,
+      "errors": 0,
+      "human_judged_turns": 14,
+      "task_completion_rate": 0.5714,
+      "quality_mean_1_to_5": 2.79
+    }
+  },
+  "rate_limiting": {
+    "HYBRID": {
+      "rpm_configured": 10.0,
+      "min_interval_seconds": 6.0,
+      "calls_made": 15,
+      "rate_limit_hits_429": 0,
+      "backoff_seconds_total": 0.0,
+      "rate_limit_events": []
+    },
+    "ALWAYS_TIER_1": {
+      "rpm_configured": 10.0,
+      "min_interval_seconds": 6.0,
+      "calls_made": 15,
+      "rate_limit_hits_429": 0,
+      "backoff_seconds_total": 0.0,
+      "rate_limit_events": []
+    },
+    "ALWAYS_TIER_2": {
+      "rpm_configured": 10.0,
+      "min_interval_seconds": 6.0,
+      "calls_made": 15,
+      "rate_limit_hits_429": 0,
+      "backoff_seconds_total": 0.0,
+      "rate_limit_events": []
+    }
+  },
+  "paired_scenarios": [
+    {
+      "scenario_id": "E3-01",
+      "HYBRID": {
+        "latency_ms": 2150.5,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 3945.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 1825.0,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-02",
+      "HYBRID": {
+        "latency_ms": 1981.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 2371.6,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 2375.8,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-03",
+      "HYBRID": {
+        "latency_ms": 476.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 1598.0,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 676.9,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-04",
+      "HYBRID": {
+        "latency_ms": 1593.1,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 1091.5,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 2061.0,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-05",
+      "HYBRID": {
+        "latency_ms": 585.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 101.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 119.2,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-06",
+      "HYBRID": {
+        "latency_ms": 111.0,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 461.1,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 1253.9,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-07",
+      "HYBRID": {
+        "latency_ms": 1114.3,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 102.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 827.3,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-08",
+      "HYBRID": {
+        "latency_ms": 603.3,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 2111.4,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 101.9,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-09",
+      "HYBRID": {
+        "latency_ms": 2012.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 96.4,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 1348.1,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-10",
+      "HYBRID": {
+        "latency_ms": 996.3,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 2101.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 100.0,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-11",
+      "HYBRID": {
+        "latency_ms": 782.3,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 430.3,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 697.7,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-12",
+      "HYBRID": {
+        "latency_ms": 560.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 928.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 917.5,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-13",
+      "HYBRID": {
+        "latency_ms": 511.0,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 85.4,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 1084.2,
+        "status": 200
+      }
+    },
+    {
+      "scenario_id": "E3-14",
+      "HYBRID": {
+        "latency_ms": 1300.3,
+        "status": 200
+      },
+      "ALWAYS_TIER_1": {
+        "latency_ms": 1330.2,
+        "status": 200
+      },
+      "ALWAYS_TIER_2": {
+        "latency_ms": 95.6,
+        "status": 200
+      }
+    }
+  ],
+  "human_scores_used": true
+}

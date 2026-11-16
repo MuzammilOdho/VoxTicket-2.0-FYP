@@ -1,0 +1,11 @@
+call_id,scenario,customer,order,language,turns,stt_ms_mean,brain_ttft_ms_mean,tts_first_audio_ms_mean,e2e_ms_mean,aborted_count,barge_in_count,error_notes,task_completed,meaning_preservation_1_5,intent_understanding_1_5,response_correctness_1_5,naturalness_1_5,pronunciation_1_5,notes
+V01,Order status lookup (English),Maria,ORD-10003,EN,1,,,,,,,,,,,,,,
+V02,Order status lookup (Roman Urdu),Ahmed,(own order),RU,1,,,,,,,,,,,,,,
+V03,Return eligibility - eligible order (re-anchor applied by this package; reseed required; eligible through 2026-11-13),Maria,ORD-10006,EN,1,,,,,,,,,,,,,,
+V04,Return eligibility - expired order,Ahmed,ORD-10007 (expired),EN,1,,,,,,,,,,,,,,
+V05,Cancellation with OTP,Maria,ORD-10003,EN,3,,,,,,,,,,,,,,
+V06,Cancellation with OTP (second customer),Ahmed,(own cancellable order),EN,3,,,,,,,,,,,,,,
+V07,Damaged item claim,Maria,(own order),EN,2,,,,,,,,,,,,,,
+V08,Code-switched complex query,Ahmed,(own order),CS,2,,,,,,,,,,,,,,
+V09,Complex multi-issue plus interruption (barge-in),Maria,(own order),EN,3,,,,,,,,,,,,,,
+V10,Full Urdu-script conversation,Ahmed,(own order),UR,3,,,,,,,,,,,,,,

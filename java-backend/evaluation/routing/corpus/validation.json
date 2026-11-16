@@ -1,0 +1,1442 @@
+[
+  {
+    "id": "VAL-EN-T1-001",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "What is the status of my most recent order?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-002",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Has order ORD-20001 been delivered yet?",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-003",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "When will my parcel ORD-20002 arrive?",
+    "tags": [
+      "delivery-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-004",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I need order ORD-20003 cancelled as soon as possible.",
+    "tags": [
+      "cancellation",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-005",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I would like to send back the watch from order ORD-20004.",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-006",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Has the refund for order ORD-20005 been issued yet?",
+    "tags": [
+      "payment-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-007",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "How many days do I have to return an item?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-008",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "My sunglasses arrived scratched. How do I report this?",
+    "tags": [
+      "claim-request",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-009",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Hello, can you help me check my delivery?",
+    "tags": [
+      "greeting",
+      "delivery-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-010",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "I received the wrong book in order ORD-20006. What should I do?",
+    "tags": [
+      "claim-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-011",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Can I exchange the backpack from order ORD-20007 for a different colour?",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-012",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Is there a delivery fee for order ORD-20008?",
+    "tags": [
+      "delivery-question",
+      "policy-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-013",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "My payment for order ORD-20009 shows as pending. Is that normal?",
+    "tags": [
+      "payment-question",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-014",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "Track the parcel for my headphones order, ORD-20010.",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T1-015",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_1",
+    "text": "What is the refund timing after a cancellation?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-001",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Cancel order ORD-20011, but upgrade the delivery on order ORD-20012 to express if it has not shipped yet.",
+    "tags": [
+      "multi-order",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-002",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Return the torn kurta from order ORD-20013 and tell me why the matching dupatta was not in the parcel.",
+    "tags": [
+      "multi-intent",
+      "reference-resolution"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-003",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "If my parcel for order ORD-20014 arrives after Monday, refuse the delivery and refund me; otherwise let it arrive normally.",
+    "tags": [
+      "conditional",
+      "nested-conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-004",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Compare my three parcels ORD-20015, ORD-20016 and ORD-20017 and tell me which one has the longest delay and why.",
+    "tags": [
+      "comparison",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-005",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "The invoice for order ORD-20018 shows a discount I never applied. Explain where it came from and correct the total.",
+    "tags": [
+      "synthesis",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-006",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "No, not that order — I mean the one with the black wallet, not the brown one. Cancel the wallet order.",
+    "tags": [
+      "correction",
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-007",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I asked for a cancellation, not a return. Please undo the return request on order ORD-20019 and cancel it instead.",
+    "tags": [
+      "correction",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-008",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I want a full refund for order ORD-20020 but I also want to keep the loyalty points I earned on it. Is that possible?",
+    "tags": [
+      "conflicting-constraints",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-009",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "My brother also ordered the same novel as me. Can both copies, orders ORD-20021 and ORD-20022, be delivered together to our home address?",
+    "tags": [
+      "multi-order",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-010",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "The charger from order ORD-20023 works, but the cable is frayed. Replace only the cable and confirm whether the warranty covers it.",
+    "tags": [
+      "multi-intent",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-011",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Following up on my earlier message: the refund for order ORD-20024 arrived, but it is less than the order total. Why is part of it missing?",
+    "tags": [
+      "compound-followup",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-012",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Cancel the exchange I requested for order ORD-20025 because the size fits after all, but keep the complaint about the stitching open.",
+    "tags": [
+      "multi-intent",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-013",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "I ordered a cricket bat, a ball set and gloves in order ORD-20026. The bat is fine, the balls are the wrong weight, and the gloves never arrived. What can I claim for each item?",
+    "tags": [
+      "multi-intent",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-014",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Transfer my pending refund from order ORD-20027 to my wallet balance, unless the refund has already been sent to my card.",
+    "tags": [
+      "conditional",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-EN-T2-015",
+    "split": "VALIDATION",
+    "language": "ENGLISH",
+    "expectedTier": "TIER_2",
+    "text": "Summarise everything outstanding on my account: the delayed parcel, the pending refund and the open claim, in the order I should deal with them.",
+    "tags": [
+      "synthesis",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-001",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میرے تازہ ترین آرڈر کی کیا صورتحال ہے؟",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-002",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "آرڈر ORD-20031 کی ڈیلیوری ہو گئی ہے یا نہیں؟",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-003",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میرا پارسل ORD-20032 کب آائے گا؟",
+    "tags": [
+      "delivery-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-004",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میرا آرڈر ORD-20033 جلد از جلد منسوخ کر دیں۔",
+    "tags": [
+      "cancellation",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-005",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میں آرڈر ORD-20034 سے گھڑی واپس کرنا چاہتا ہوں۔",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-006",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "آرڈر ORD-20035 کا ریفنڈ کہاں ہے؟",
+    "tags": [
+      "payment-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-007",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کسی چیز کو واپس کرنے کے لیے میرے پاس کتنے دن ہیں؟",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-008",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میرے چشمے خراش کے ساتھ آائے ہیں۔ میں اس کی شکایت کیسے کروں؟",
+    "tags": [
+      "claim-request",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-009",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "السلام علیکم، کیا آپ میری ڈیلیوری چیک کرنے میں مدد کر سکتے ہیں؟",
+    "tags": [
+      "greeting",
+      "delivery-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-010",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "آرڈر ORD-20036 میں مجھے غلط کتاب ملی ہے۔ مجھے کیا کرنا چاہیے؟",
+    "tags": [
+      "claim-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-011",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "کیا میں آرڈر ORD-20037 کا بیگ کسی اور رنگ میں تبدیل کر سکتا ہوں؟",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-012",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "آرڈر ORD-20038 کے لیے ڈیلیوری فیس ہے؟",
+    "tags": [
+      "delivery-question",
+      "policy-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-013",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "آرڈر ORD-20039 کی ادائیگی زیر التواء نظر آا رہی ہے۔ کیا یہ معمول کی بات ہے؟",
+    "tags": [
+      "payment-question",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-014",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "میرے ہیڈ فونز والے آرڈر ORD-20040 کا پارسل ٹریک کریں۔",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T1-015",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_1",
+    "text": "منسوخی کے بعد ریفنڈ میں کتنا وقت لگتا ہے؟",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-001",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آرڈر ORD-20041 منسوخ کر دیں، لیکن آرڈر ORD-20042 کی ڈیلیوری ایکسپریس کر دیں اگر وہ ابھی تک نہیں بھیجا گیا۔",
+    "tags": [
+      "multi-order",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-002",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آرڈر ORD-20043 سے پھٹا ہوا کرتا واپس کریں اور بتائیں کہ اس کا دوپٹہ پارسل میں کیوں نہیں تھا۔",
+    "tags": [
+      "multi-intent",
+      "reference-resolution"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-003",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "اگر آرڈر ORD-20044 کا پارسل پیر کے بعد آائے تو ڈیلیوری لینے سے انکار کر دیں اور ریفنڈ کر دیں، ورنہ اسے معمول کے مطابق آنے دیں۔",
+    "tags": [
+      "conditional",
+      "nested-conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-004",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میرے تین پارسلز ORD-20045، ORD-20046 اور ORD-20047 کا موازنہ کریں اور بتائیں کس میں سب سے زیادہ تاخیر ہے اور کیوں۔",
+    "tags": [
+      "comparison",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-005",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آرڈر ORD-20048 کے انوائس میں ایک رعایت دکھائی گئی ہے جو میں نے کبھی استعمال نہیں کی۔ بتائیں یہ کہاں سے آئی اور کل درست کریں۔",
+    "tags": [
+      "synthesis",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-006",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "نہیں، وہ آرڈر نہیں — میرا مطلب کالے بٹوے والا آرڈر ہے، بھورے والا نہیں۔ بٹوے والا آرڈر منسوخ کریں۔",
+    "tags": [
+      "correction",
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-007",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں نے منسوخی مانگی تھی، واپسی نہیں۔ براہ کرم آرڈر ORD-20049 کی واپسی کی درخواست واپس لیں اور اسے منسوخ کر دیں۔",
+    "tags": [
+      "correction",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-008",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں آرڈر ORD-20050 کا مکمل ریفنڈ چاہتا ہوں لیکن اس پر ملنے والے لائلٹی پوائنٹس بھی رکھنا چاہتا ہوں۔ کیا یہ ممکن ہے؟",
+    "tags": [
+      "conflicting-constraints",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-009",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میرے بھائی نے بھی وہی ناول منگوایا ہے جو میں نے منگوایا تھا۔ کیا دونوں کاپیاں، آرڈر ORD-20051 اور ORD-20052، ہمارے گھر کے پتے پر ایک ساتھ پہنچائی جا سکتی ہیں؟",
+    "tags": [
+      "multi-order",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-010",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آرڈر ORD-20053 کا چارجر کام کرتا ہے، لیکن کیبل پھٹی ہوئی ہے۔ صرف کیبل تبدیل کریں اور تصدیق کریں کہ وارنٹی اس کا احاطہ کرتی ہے یا نہیں۔",
+    "tags": [
+      "multi-intent",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-011",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "پچھلے پیغام کے سلسلے میں: آرڈر ORD-20054 کا ریفنڈ آا گیا ہے، لیکن یہ آرڈر کی کل رقم سے کم ہے۔ اس کا کچھ حصہ کیوں غائب ہے؟",
+    "tags": [
+      "compound-followup",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-012",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آرڈر ORD-20055 کے لیے جو تبدیلی مانگی تھی اسے منسوخ کر دیں کیونکہ سائز اب ٹھیک ہے، لیکن سلائی کی شکایت کھلی رکھیں۔",
+    "tags": [
+      "multi-intent",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-013",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میں نے آرڈر ORD-20056 میں کرکٹ بیٹ، بال سیٹ اور دستانے منگوائے تھے۔ بیٹ ٹھیک ہے، گیندوں کا وزن غلط ہے، اور دستانے کبھی آائے ہی نہیں۔ ہر چیز کے لیے میں کیا دعویٰ کر سکتا ہوں؟",
+    "tags": [
+      "multi-intent",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-014",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "آرڈر ORD-20057 کا زیر التواء ریفنڈ میرے والٹ بیلنس میں منتقل کر دیں، جب تک کہ ریفنڈ پہلے سے کارڈ پر نہ بھیجا گیا ہو۔",
+    "tags": [
+      "conditional",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-UR-T2-015",
+    "split": "VALIDATION",
+    "language": "URDU",
+    "expectedTier": "TIER_2",
+    "text": "میرے اکاؤنٹ پر سب کچھ بقایا خلاصہ کریں: تاخیر کا شکار پارسل، زیر التواء ریفنڈ اور کھلا دعویٰ، اس ترتیب میں جس میں مجھے ان سے نمٹنا چاہیے۔",
+    "tags": [
+      "synthesis",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-001",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Mere sab se recent order ki status kya hai?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-002",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Kya order ORD-20101 deliver ho gaya hai?",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-003",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Mera parcel ORD-20102 kab aayega?",
+    "tags": [
+      "delivery-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-004",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Mera order ORD-20103 jald se jald cancel kar dein.",
+    "tags": [
+      "cancellation",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-005",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20104 wali watch mujhe return karni hai.",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-006",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20105 ke refund ka status bata dein.",
+    "tags": [
+      "payment-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-007",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Kisi cheez ko wapas karne ke liye mere paas kitne din hain?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-008",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Mere sunglasses scratched aaye hain. Main is ki report kaise karun?",
+    "tags": [
+      "claim-request",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-009",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Salam, kya aap meri delivery check karne mein madad kar sakte hain?",
+    "tags": [
+      "greeting",
+      "delivery-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-010",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20106 mein mujhe ghalat book mili hai. Main kya karun?",
+    "tags": [
+      "claim-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-011",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Kya main order ORD-20107 ka backpack kisi aur colour mein exchange kar sakta hun?",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-012",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20108 ke liye delivery fee hai?",
+    "tags": [
+      "delivery-question",
+      "policy-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-013",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20109 ki payment pending nazar aa rahi hai. Kya ye normal hai?",
+    "tags": [
+      "payment-question",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-014",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Mere headphones wale order ORD-20110 ka parcel track karein.",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T1-015",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_1",
+    "text": "Cancellation ke baad refund mein kitna waqt lagta hai?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-001",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20111 cancel kar dein, lekin order ORD-20112 ki delivery express kar dein agar woh abhi tak ship nahi hua.",
+    "tags": [
+      "multi-order",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-002",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20113 se phata hua kurta wapas karein aur batayein ke us ka dupatta parcel mein kyun nahi tha.",
+    "tags": [
+      "multi-intent",
+      "reference-resolution"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-003",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Agar order ORD-20114 ka parcel Monday ke baad aaye to delivery lene se inkaar kar dein aur refund kar dein, warna usay normal aane dein.",
+    "tags": [
+      "conditional",
+      "nested-conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-004",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Mere teen parcels ORD-20115, ORD-20116 aur ORD-20117 compare karein aur batayein kis mein sab se zyada delay hai aur kyun.",
+    "tags": [
+      "comparison",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-005",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20118 ke invoice mein aik discount dikhaya gaya hai jo maine kabhi apply nahi kiya. Batayein ye kahan se aaya aur total correct karein.",
+    "tags": [
+      "synthesis",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-006",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Nahi, woh order nahi — mera matlab kaale wallet wala order hai, bhoore wale wala nahi. Wallet wala order cancel karein.",
+    "tags": [
+      "correction",
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-007",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Maine cancellation maangi thi, return nahi. Order ORD-20119 ki return request wapas lein aur usay cancel kar dein.",
+    "tags": [
+      "correction",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-008",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Main order ORD-20120 ka full refund chahta hun lekin us par mile hue loyalty points bhi rakhna chahta hun. Kya ye possible hai?",
+    "tags": [
+      "conflicting-constraints",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-009",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Mere bhai ne bhi wohi novel mangwaya hai jo maine mangwaya tha. Kya dono copies, orders ORD-20121 aur ORD-20122, hamare ghar ke address par aik saath deliver ho sakti hain?",
+    "tags": [
+      "multi-order",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-010",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20123 ka charger kaam karta hai, lekin cable phati hui hai. Sirf cable replace karein aur confirm karein ke warranty isay cover karti hai ya nahi.",
+    "tags": [
+      "multi-intent",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-011",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Pichle message ke silsile mein: order ORD-20124 ka refund aa gaya hai, lekin ye order ke total se kam hai. Us ka kuch hissa kyun missing hai?",
+    "tags": [
+      "compound-followup",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-012",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20125 ke liye jo exchange maangi thi usay cancel kar dein kyunke size ab theek hai, lekin stitching ki complaint open rakhein.",
+    "tags": [
+      "multi-intent",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-013",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Maine order ORD-20126 mein cricket bat, ball set aur gloves mangwaye thay. Bat theek hai, balls ka weight ghalat hai, aur gloves kabhi aaye hi nahi. Har cheez ke liye main kya claim kar sakta hun?",
+    "tags": [
+      "multi-intent",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-014",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20127 ka pending refund mere wallet balance mein transfer kar dein, jab tak ke refund pehle se card par na bheja gaya ho.",
+    "tags": [
+      "conditional",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-RU-T2-015",
+    "split": "VALIDATION",
+    "language": "ROMAN_URDU",
+    "expectedTier": "TIER_2",
+    "text": "Mere account par sab kuch outstanding summarise karein: delayed parcel, pending refund aur open claim, us order mein jis mein mujhe in se deal karna chahiye.",
+    "tags": [
+      "synthesis",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-001",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Mera most recent order ki status kya hai?",
+    "tags": [
+      "order-status",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-002",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20201 deliver ho gaya hai ya nahi? Confirm kar dein.",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-003",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Mera parcel ORD-20202 kab arrive hoga?",
+    "tags": [
+      "delivery-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-004",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Mera order ORD-20203 cancel karna hai, please jaldi karein.",
+    "tags": [
+      "cancellation",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-005",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "I want to return the watch from order ORD-20204.",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-006",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20205 ka refund kahan hai? Status bata dein.",
+    "tags": [
+      "payment-question",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-007",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Return window kitne din ki hai? Policy bata dein.",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-008",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Mere sunglasses scratched aaye hain, claim karna hai.",
+    "tags": [
+      "claim-request",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-009",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Hello, meri delivery check karne mein help karein.",
+    "tags": [
+      "greeting",
+      "delivery-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-010",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20206 mein wrong book mili hai, what should I do?",
+    "tags": [
+      "claim-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-011",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20207 ka backpack kisi aur colour mein exchange ho sakta hai?",
+    "tags": [
+      "return-request",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-012",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20208 par delivery fee lagti hai?",
+    "tags": [
+      "delivery-question",
+      "policy-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-013",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Order ORD-20209 ki payment pending show ho rahi hai, is that normal?",
+    "tags": [
+      "payment-question",
+      "single-lookup"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-014",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Track my headphones order, ORD-20210 hai.",
+    "tags": [
+      "order-status",
+      "simple-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T1-015",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_1",
+    "text": "Cancellation ke baad refund timing kya hai?",
+    "tags": [
+      "policy-question",
+      "faq"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-001",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Order ORD-20211 cancel kar dein, but upgrade the delivery on order ORD-20212 to express agar woh abhi ship nahi hua.",
+    "tags": [
+      "multi-order",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-002",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Return the torn kurta from order ORD-20213 aur batayein ke matching dupatta parcel mein kyun nahi tha.",
+    "tags": [
+      "multi-intent",
+      "reference-resolution"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-003",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "If mera parcel for order ORD-20214 Monday ke baad aaye, refuse the delivery and refund me, warna let it arrive normally.",
+    "tags": [
+      "conditional",
+      "nested-conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-004",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Compare my teen parcels ORD-20215, ORD-20216 aur ORD-20217, tell me kis mein longest delay hai aur kyun.",
+    "tags": [
+      "comparison",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-005",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "The invoice for order ORD-20218 shows a discount maine kabhi apply nahi kiya. Explain kahan se aaya aur total correct karein.",
+    "tags": [
+      "synthesis",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-006",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Nahi, not that order — I mean the black wallet wala order, brown wale wala nahi. Cancel the wallet order.",
+    "tags": [
+      "correction",
+      "ambiguous-reference"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-007",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Maine cancellation maangi thi, not a return. Undo the return request on order ORD-20219 aur usay cancel kar dein instead.",
+    "tags": [
+      "correction",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-008",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "I want a full refund for order ORD-20220 lekin loyalty points bhi rakhna chahta hun jo us par mile thay. Is that possible?",
+    "tags": [
+      "conflicting-constraints",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-009",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Mere bhai ne bhi same novel order kiya hai. Can both copies, orders ORD-20221 aur ORD-20222, be delivered together hamare home address par?",
+    "tags": [
+      "multi-order",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-010",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "The charger from order ORD-20223 works, lekin cable phati hui hai. Replace only the cable aur confirm karein ke warranty cover karti hai ya nahi.",
+    "tags": [
+      "multi-intent",
+      "conditional"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-011",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Following up on my earlier message: order ORD-20224 ka refund aa gaya, lekin it is less than the order total. Part missing kyun hai?",
+    "tags": [
+      "compound-followup",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-012",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Cancel the exchange I requested for order ORD-20225 kyunke size fits after all, lekin keep the complaint about stitching open.",
+    "tags": [
+      "multi-intent",
+      "correction"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-013",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "I ordered a cricket bat, ball set aur gloves in order ORD-20226. Bat is fine, balls ka weight ghalat hai, aur gloves never arrived. Har item ke liye what can I claim?",
+    "tags": [
+      "multi-intent",
+      "synthesis"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-014",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Transfer my pending refund from order ORD-20227 to my wallet balance, unless refund already card par bhej diya gaya ho.",
+    "tags": [
+      "conditional",
+      "payment-question"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  },
+  {
+    "id": "VAL-CS-T2-015",
+    "split": "VALIDATION",
+    "language": "CODE_SWITCH",
+    "expectedTier": "TIER_2",
+    "text": "Summarise everything outstanding on my account: delayed parcel, pending refund aur open claim, us order mein jis mein mujhe deal karna chahiye.",
+    "tags": [
+      "synthesis",
+      "multi-intent"
+    ],
+    "sourceNote": "Authored 2026-11-01 for the VoxTicket routing evaluation corpus."
+  }
+]

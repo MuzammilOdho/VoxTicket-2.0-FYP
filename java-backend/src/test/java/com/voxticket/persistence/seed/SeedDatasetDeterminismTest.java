@@ -58,7 +58,7 @@ class SeedDatasetDeterminismTest {
     void noTimestampComesFromTheWallClock() {
         // Any Instant.now() leak inside generation would land within a day of the
         // real wall clock. Every legitimate dataset timestamp is anchor-relative
-        // (the latest is an estimated delivery a few days after the 2026-09-01
+        // (the latest is an estimated delivery a few days after the 2026-10-24
         // anchor), so a one-day cutoff separates leaks from real data cleanly.
         Instant wallClockCutoff = Instant.now().minus(1, ChronoUnit.DAYS);
         Instant lowerBound = SeedDatasetFactory.ANCHOR.minus(400, ChronoUnit.DAYS);

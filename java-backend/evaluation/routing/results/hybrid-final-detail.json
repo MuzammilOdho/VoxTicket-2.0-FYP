@@ -1,0 +1,12 @@
+{
+  "t2Precision" : 0.8450704225352113,
+  "t2Recall" : 1.0,
+  "t2F1" : 0.916030534351145,
+  "structuralDecisions" : 0,
+  "semanticDecisions" : 120,
+  "reasonCounts" : {
+    "SEMANTIC_AMBIGUOUS" : 38,
+    "SEMANTIC_COMPLEX" : 33,
+    "SEMANTIC_SIMPLE" : 49
+  }
+}

@@ -1,0 +1,1450 @@
+{
+  "selectedSimpleMargin" : 0.002625864735131711,
+  "beforeMetrics" : {
+    "n" : 120,
+    "confusionMatrix" : {
+      "tp" : 60,
+      "fp" : 31,
+      "tn" : 29,
+      "fn" : 0
+    },
+    "accuracy" : 0.7416666666666667,
+    "balancedAccuracy" : 0.7416666666666667,
+    "macroF1" : 0.7231936900066969,
+    "t2Precision" : 0.6593406593406593,
+    "t2Recall" : 1.0,
+    "t2F1" : 0.794701986754967,
+    "t1Precision" : 1.0,
+    "t1Recall" : 0.48333333333333334,
+    "t1F1" : 0.6516853932584269,
+    "underRouted" : 0,
+    "underRouteRate" : 0.0,
+    "overRouted" : 31,
+    "overRouteRate" : 0.5166666666666667,
+    "t2SelectionRate" : 0.7583333333333333
+  },
+  "afterMetrics" : {
+    "n" : 120,
+    "confusionMatrix" : {
+      "tp" : 60,
+      "fp" : 8,
+      "tn" : 52,
+      "fn" : 0
+    },
+    "accuracy" : 0.9333333333333333,
+    "balancedAccuracy" : 0.9333333333333333,
+    "macroF1" : 0.9330357142857143,
+    "t2Precision" : 0.8823529411764706,
+    "t2Recall" : 1.0,
+    "t2F1" : 0.9375,
+    "t1Precision" : 1.0,
+    "t1Recall" : 0.8666666666666667,
+    "t1F1" : 0.9285714285714286,
+    "underRouted" : 0,
+    "underRouteRate" : 0.0,
+    "overRouted" : 8,
+    "overRouteRate" : 0.13333333333333333,
+    "t2SelectionRate" : 0.5666666666666667
+  },
+  "candidateRows" : [ {
+    "simpleMargin" : 0.0,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 59,
+        "fp" : 7,
+        "tn" : 53,
+        "fn" : 1
+      },
+      "accuracy" : 0.9333333333333333,
+      "balancedAccuracy" : 0.9333333333333333,
+      "macroF1" : 0.9331662489557226,
+      "t2Precision" : 0.8939393939393939,
+      "t2Recall" : 0.9833333333333333,
+      "t2F1" : 0.9365079365079364,
+      "t1Precision" : 0.9814814814814815,
+      "t1Recall" : 0.8833333333333333,
+      "t1F1" : 0.9298245614035088,
+      "underRouted" : 1,
+      "underRouteRate" : 0.016666666666666666,
+      "overRouted" : 7,
+      "overRouteRate" : 0.11666666666666667,
+      "t2SelectionRate" : 0.55
+    }
+  }, {
+    "simpleMargin" : 7.539849584499714E-4,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 59,
+        "fp" : 7,
+        "tn" : 53,
+        "fn" : 1
+      },
+      "accuracy" : 0.9333333333333333,
+      "balancedAccuracy" : 0.9333333333333333,
+      "macroF1" : 0.9331662489557226,
+      "t2Precision" : 0.8939393939393939,
+      "t2Recall" : 0.9833333333333333,
+      "t2F1" : 0.9365079365079364,
+      "t1Precision" : 0.9814814814814815,
+      "t1Recall" : 0.8833333333333333,
+      "t1F1" : 0.9298245614035088,
+      "underRouted" : 1,
+      "underRouteRate" : 0.016666666666666666,
+      "overRouted" : 7,
+      "overRouteRate" : 0.11666666666666667,
+      "t2SelectionRate" : 0.55
+    }
+  }, {
+    "simpleMargin" : 0.002625864735131711,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 8,
+        "tn" : 52,
+        "fn" : 0
+      },
+      "accuracy" : 0.9333333333333333,
+      "balancedAccuracy" : 0.9333333333333333,
+      "macroF1" : 0.9330357142857143,
+      "t2Precision" : 0.8823529411764706,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.9375,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.8666666666666667,
+      "t1F1" : 0.9285714285714286,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 8,
+      "overRouteRate" : 0.13333333333333333,
+      "t2SelectionRate" : 0.5666666666666667
+    }
+  }, {
+    "simpleMargin" : 0.004107038379103034,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 12,
+        "tn" : 48,
+        "fn" : 0
+      },
+      "accuracy" : 0.9,
+      "balancedAccuracy" : 0.9,
+      "macroF1" : 0.898989898989899,
+      "t2Precision" : 0.8333333333333334,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.9090909090909091,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.8,
+      "t1F1" : 0.888888888888889,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 12,
+      "overRouteRate" : 0.2,
+      "t2SelectionRate" : 0.6
+    }
+  }, {
+    "simpleMargin" : 0.005087055026320231,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 13,
+        "tn" : 47,
+        "fn" : 0
+      },
+      "accuracy" : 0.8916666666666667,
+      "balancedAccuracy" : 0.8916666666666666,
+      "macroF1" : 0.8903801559974703,
+      "t2Precision" : 0.821917808219178,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.9022556390977443,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.7833333333333333,
+      "t1F1" : 0.8785046728971964,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 13,
+      "overRouteRate" : 0.21666666666666667,
+      "t2SelectionRate" : 0.6083333333333333
+    }
+  }, {
+    "simpleMargin" : 0.0061293746903269275,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 15,
+        "tn" : 45,
+        "fn" : 0
+      },
+      "accuracy" : 0.875,
+      "balancedAccuracy" : 0.875,
+      "macroF1" : 0.873015873015873,
+      "t2Precision" : 0.8,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.888888888888889,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.75,
+      "t1F1" : 0.8571428571428571,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 15,
+      "overRouteRate" : 0.25,
+      "t2SelectionRate" : 0.625
+    }
+  }, {
+    "simpleMargin" : 0.006299149509003121,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 15,
+        "tn" : 45,
+        "fn" : 0
+      },
+      "accuracy" : 0.875,
+      "balancedAccuracy" : 0.875,
+      "macroF1" : 0.873015873015873,
+      "t2Precision" : 0.8,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.888888888888889,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.75,
+      "t1F1" : 0.8571428571428571,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 15,
+      "overRouteRate" : 0.25,
+      "t2SelectionRate" : 0.625
+    }
+  }, {
+    "simpleMargin" : 0.006623929242201454,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 17,
+        "tn" : 43,
+        "fn" : 0
+      },
+      "accuracy" : 0.8583333333333333,
+      "balancedAccuracy" : 0.8583333333333334,
+      "macroF1" : 0.8554319325349018,
+      "t2Precision" : 0.7792207792207793,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8759124087591241,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.7166666666666667,
+      "t1F1" : 0.8349514563106796,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 17,
+      "overRouteRate" : 0.2833333333333333,
+      "t2SelectionRate" : 0.6416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.006918926752921883,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 18,
+        "tn" : 42,
+        "fn" : 0
+      },
+      "accuracy" : 0.85,
+      "balancedAccuracy" : 0.85,
+      "macroF1" : 0.8465473145780051,
+      "t2Precision" : 0.7692307692307693,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8695652173913044,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.7,
+      "t1F1" : 0.8235294117647058,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 18,
+      "overRouteRate" : 0.3,
+      "t2SelectionRate" : 0.65
+    }
+  }, {
+    "simpleMargin" : 0.00771466030822876,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 19,
+        "tn" : 41,
+        "fn" : 0
+      },
+      "accuracy" : 0.8416666666666667,
+      "balancedAccuracy" : 0.8416666666666667,
+      "macroF1" : 0.8375952703183989,
+      "t2Precision" : 0.759493670886076,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8633093525179857,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6833333333333333,
+      "t1F1" : 0.8118811881188119,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 19,
+      "overRouteRate" : 0.31666666666666665,
+      "t2SelectionRate" : 0.6583333333333333
+    }
+  }, {
+    "simpleMargin" : 0.00858806792969008,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 19,
+        "tn" : 41,
+        "fn" : 0
+      },
+      "accuracy" : 0.8416666666666667,
+      "balancedAccuracy" : 0.8416666666666667,
+      "macroF1" : 0.8375952703183989,
+      "t2Precision" : 0.759493670886076,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8633093525179857,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6833333333333333,
+      "t1F1" : 0.8118811881188119,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 19,
+      "overRouteRate" : 0.31666666666666665,
+      "t2SelectionRate" : 0.6583333333333333
+    }
+  }, {
+    "simpleMargin" : 0.009007221909701324,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 19,
+        "tn" : 41,
+        "fn" : 0
+      },
+      "accuracy" : 0.8416666666666667,
+      "balancedAccuracy" : 0.8416666666666667,
+      "macroF1" : 0.8375952703183989,
+      "t2Precision" : 0.759493670886076,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8633093525179857,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6833333333333333,
+      "t1F1" : 0.8118811881188119,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 19,
+      "overRouteRate" : 0.31666666666666665,
+      "t2SelectionRate" : 0.6583333333333333
+    }
+  }, {
+    "simpleMargin" : 0.009429488447106726,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 21,
+        "tn" : 39,
+        "fn" : 0
+      },
+      "accuracy" : 0.825,
+      "balancedAccuracy" : 0.825,
+      "macroF1" : 0.819471308833011,
+      "t2Precision" : 0.7407407407407407,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.851063829787234,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.65,
+      "t1F1" : 0.787878787878788,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 21,
+      "overRouteRate" : 0.35,
+      "t2SelectionRate" : 0.675
+    }
+  }, {
+    "simpleMargin" : 0.009651604436801464,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 22,
+        "tn" : 38,
+        "fn" : 0
+      },
+      "accuracy" : 0.8166666666666667,
+      "balancedAccuracy" : 0.8166666666666667,
+      "macroF1" : 0.8102903133084219,
+      "t2Precision" : 0.7317073170731707,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8450704225352113,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6333333333333333,
+      "t1F1" : 0.7755102040816326,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 22,
+      "overRouteRate" : 0.36666666666666664,
+      "t2SelectionRate" : 0.6833333333333333
+    }
+  }, {
+    "simpleMargin" : 0.009807806911749317,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 22,
+        "tn" : 38,
+        "fn" : 0
+      },
+      "accuracy" : 0.8166666666666667,
+      "balancedAccuracy" : 0.8166666666666667,
+      "macroF1" : 0.8102903133084219,
+      "t2Precision" : 0.7317073170731707,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8450704225352113,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6333333333333333,
+      "t1F1" : 0.7755102040816326,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 22,
+      "overRouteRate" : 0.36666666666666664,
+      "t2SelectionRate" : 0.6833333333333333
+    }
+  }, {
+    "simpleMargin" : 0.009984628029987896,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 22,
+        "tn" : 38,
+        "fn" : 0
+      },
+      "accuracy" : 0.8166666666666667,
+      "balancedAccuracy" : 0.8166666666666667,
+      "macroF1" : 0.8102903133084219,
+      "t2Precision" : 0.7317073170731707,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8450704225352113,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6333333333333333,
+      "t1F1" : 0.7755102040816326,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 22,
+      "overRouteRate" : 0.36666666666666664,
+      "t2SelectionRate" : 0.6833333333333333
+    }
+  }, {
+    "simpleMargin" : 0.010239375296031472,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 23,
+        "tn" : 37,
+        "fn" : 0
+      },
+      "accuracy" : 0.8083333333333333,
+      "balancedAccuracy" : 0.8083333333333333,
+      "macroF1" : 0.8010237185494917,
+      "t2Precision" : 0.7228915662650602,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8391608391608391,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6166666666666667,
+      "t1F1" : 0.7628865979381444,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 23,
+      "overRouteRate" : 0.38333333333333336,
+      "t2SelectionRate" : 0.6916666666666667
+    }
+  }, {
+    "simpleMargin" : 0.010529258552899434,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 23,
+        "tn" : 37,
+        "fn" : 0
+      },
+      "accuracy" : 0.8083333333333333,
+      "balancedAccuracy" : 0.8083333333333333,
+      "macroF1" : 0.8010237185494917,
+      "t2Precision" : 0.7228915662650602,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8391608391608391,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6166666666666667,
+      "t1F1" : 0.7628865979381444,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 23,
+      "overRouteRate" : 0.38333333333333336,
+      "t2SelectionRate" : 0.6916666666666667
+    }
+  }, {
+    "simpleMargin" : 0.0108307317244965,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 23,
+        "tn" : 37,
+        "fn" : 0
+      },
+      "accuracy" : 0.8083333333333333,
+      "balancedAccuracy" : 0.8083333333333333,
+      "macroF1" : 0.8010237185494917,
+      "t2Precision" : 0.7228915662650602,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8391608391608391,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6166666666666667,
+      "t1F1" : 0.7628865979381444,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 23,
+      "overRouteRate" : 0.38333333333333336,
+      "t2SelectionRate" : 0.6916666666666667
+    }
+  }, {
+    "simpleMargin" : 0.011595045200236243,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.01241102079428108,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.012661286831950613,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.013483488500359575,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.014772956828895734,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.015718427402496238,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.016362330260615232,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.01659651371920673,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 24,
+        "tn" : 36,
+        "fn" : 0
+      },
+      "accuracy" : 0.8,
+      "balancedAccuracy" : 0.8,
+      "macroF1" : 0.7916666666666665,
+      "t2Precision" : 0.7142857142857143,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8333333333333333,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.6,
+      "t1F1" : 0.7499999999999999,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 24,
+      "overRouteRate" : 0.4,
+      "t2SelectionRate" : 0.7
+    }
+  }, {
+    "simpleMargin" : 0.016837502319586917,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 25,
+        "tn" : 35,
+        "fn" : 0
+      },
+      "accuracy" : 0.7916666666666666,
+      "balancedAccuracy" : 0.7916666666666667,
+      "macroF1" : 0.7822141560798548,
+      "t2Precision" : 0.7058823529411765,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8275862068965517,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.5833333333333334,
+      "t1F1" : 0.7368421052631579,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 25,
+      "overRouteRate" : 0.4166666666666667,
+      "t2SelectionRate" : 0.7083333333333334
+    }
+  }, {
+    "simpleMargin" : 0.01733529399213396,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 28,
+        "tn" : 32,
+        "fn" : 0
+      },
+      "accuracy" : 0.7666666666666667,
+      "balancedAccuracy" : 0.7666666666666666,
+      "macroF1" : 0.7532314923619272,
+      "t2Precision" : 0.6818181818181818,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8108108108108109,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.5333333333333333,
+      "t1F1" : 0.6956521739130436,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 28,
+      "overRouteRate" : 0.4666666666666667,
+      "t2SelectionRate" : 0.7333333333333333
+    }
+  }, {
+    "simpleMargin" : 0.017827466697775907,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 28,
+        "tn" : 32,
+        "fn" : 0
+      },
+      "accuracy" : 0.7666666666666667,
+      "balancedAccuracy" : 0.7666666666666666,
+      "macroF1" : 0.7532314923619272,
+      "t2Precision" : 0.6818181818181818,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8108108108108109,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.5333333333333333,
+      "t1F1" : 0.6956521739130436,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 28,
+      "overRouteRate" : 0.4666666666666667,
+      "t2SelectionRate" : 0.7333333333333333
+    }
+  }, {
+    "simpleMargin" : 0.019341857376622418,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 30,
+        "tn" : 30,
+        "fn" : 0
+      },
+      "accuracy" : 0.75,
+      "balancedAccuracy" : 0.75,
+      "macroF1" : 0.7333333333333334,
+      "t2Precision" : 0.6666666666666666,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.8,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.5,
+      "t1F1" : 0.6666666666666666,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 30,
+      "overRouteRate" : 0.5,
+      "t2SelectionRate" : 0.75
+    }
+  }, {
+    "simpleMargin" : 0.02,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 31,
+        "tn" : 29,
+        "fn" : 0
+      },
+      "accuracy" : 0.7416666666666667,
+      "balancedAccuracy" : 0.7416666666666667,
+      "macroF1" : 0.7231936900066969,
+      "t2Precision" : 0.6593406593406593,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.794701986754967,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.48333333333333334,
+      "t1F1" : 0.6516853932584269,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 31,
+      "overRouteRate" : 0.5166666666666667,
+      "t2SelectionRate" : 0.7583333333333333
+    }
+  }, {
+    "simpleMargin" : 0.021993306842757687,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 32,
+        "tn" : 28,
+        "fn" : 0
+      },
+      "accuracy" : 0.7333333333333333,
+      "balancedAccuracy" : 0.7333333333333334,
+      "macroF1" : 0.7129186602870814,
+      "t2Precision" : 0.6521739130434783,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7894736842105263,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.4666666666666667,
+      "t1F1" : 0.6363636363636364,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 32,
+      "overRouteRate" : 0.5333333333333333,
+      "t2SelectionRate" : 0.7666666666666667
+    }
+  }, {
+    "simpleMargin" : 0.025113994446992527,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 36,
+        "tn" : 24,
+        "fn" : 0
+      },
+      "accuracy" : 0.7,
+      "balancedAccuracy" : 0.7,
+      "macroF1" : 0.6703296703296704,
+      "t2Precision" : 0.625,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7692307692307693,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.4,
+      "t1F1" : 0.5714285714285715,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 36,
+      "overRouteRate" : 0.6,
+      "t2SelectionRate" : 0.8
+    }
+  }, {
+    "simpleMargin" : 0.02698113970360483,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 41,
+        "tn" : 19,
+        "fn" : 0
+      },
+      "accuracy" : 0.6583333333333333,
+      "balancedAccuracy" : 0.6583333333333333,
+      "macroF1" : 0.6131771365673402,
+      "t2Precision" : 0.594059405940594,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7453416149068323,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.31666666666666665,
+      "t1F1" : 0.4810126582278481,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 41,
+      "overRouteRate" : 0.6833333333333333,
+      "t2SelectionRate" : 0.8416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.02754205276929189,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 41,
+        "tn" : 19,
+        "fn" : 0
+      },
+      "accuracy" : 0.6583333333333333,
+      "balancedAccuracy" : 0.6583333333333333,
+      "macroF1" : 0.6131771365673402,
+      "t2Precision" : 0.594059405940594,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7453416149068323,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.31666666666666665,
+      "t1F1" : 0.4810126582278481,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 41,
+      "overRouteRate" : 0.6833333333333333,
+      "t2SelectionRate" : 0.8416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.028849185394590804,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 41,
+        "tn" : 19,
+        "fn" : 0
+      },
+      "accuracy" : 0.6583333333333333,
+      "balancedAccuracy" : 0.6583333333333333,
+      "macroF1" : 0.6131771365673402,
+      "t2Precision" : 0.594059405940594,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7453416149068323,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.31666666666666665,
+      "t1F1" : 0.4810126582278481,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 41,
+      "overRouteRate" : 0.6833333333333333,
+      "t2SelectionRate" : 0.8416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.029998830572185053,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 41,
+        "tn" : 19,
+        "fn" : 0
+      },
+      "accuracy" : 0.6583333333333333,
+      "balancedAccuracy" : 0.6583333333333333,
+      "macroF1" : 0.6131771365673402,
+      "t2Precision" : 0.594059405940594,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7453416149068323,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.31666666666666665,
+      "t1F1" : 0.4810126582278481,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 41,
+      "overRouteRate" : 0.6833333333333333,
+      "t2SelectionRate" : 0.8416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.030389070002544927,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 42,
+        "tn" : 18,
+        "fn" : 0
+      },
+      "accuracy" : 0.65,
+      "balancedAccuracy" : 0.65,
+      "macroF1" : 0.6011396011396011,
+      "t2Precision" : 0.5882352941176471,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7407407407407407,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.3,
+      "t1F1" : 0.4615384615384615,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 42,
+      "overRouteRate" : 0.7,
+      "t2SelectionRate" : 0.85
+    }
+  }, {
+    "simpleMargin" : 0.030469946917792867,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 42,
+        "tn" : 18,
+        "fn" : 0
+      },
+      "accuracy" : 0.65,
+      "balancedAccuracy" : 0.65,
+      "macroF1" : 0.6011396011396011,
+      "t2Precision" : 0.5882352941176471,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7407407407407407,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.3,
+      "t1F1" : 0.4615384615384615,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 42,
+      "overRouteRate" : 0.7,
+      "t2SelectionRate" : 0.85
+    }
+  }, {
+    "simpleMargin" : 0.030527840726342514,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 42,
+        "tn" : 18,
+        "fn" : 0
+      },
+      "accuracy" : 0.65,
+      "balancedAccuracy" : 0.65,
+      "macroF1" : 0.6011396011396011,
+      "t2Precision" : 0.5882352941176471,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7407407407407407,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.3,
+      "t1F1" : 0.4615384615384615,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 42,
+      "overRouteRate" : 0.7,
+      "t2SelectionRate" : 0.85
+    }
+  }, {
+    "simpleMargin" : 0.03135750565864137,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 42,
+        "tn" : 18,
+        "fn" : 0
+      },
+      "accuracy" : 0.65,
+      "balancedAccuracy" : 0.65,
+      "macroF1" : 0.6011396011396011,
+      "t2Precision" : 0.5882352941176471,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7407407407407407,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.3,
+      "t1F1" : 0.4615384615384615,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 42,
+      "overRouteRate" : 0.7,
+      "t2SelectionRate" : 0.85
+    }
+  }, {
+    "simpleMargin" : 0.0327364738706159,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 44,
+        "tn" : 16,
+        "fn" : 0
+      },
+      "accuracy" : 0.6333333333333333,
+      "balancedAccuracy" : 0.6333333333333333,
+      "macroF1" : 0.576379974326059,
+      "t2Precision" : 0.5769230769230769,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7317073170731707,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.26666666666666666,
+      "t1F1" : 0.4210526315789474,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 44,
+      "overRouteRate" : 0.7333333333333333,
+      "t2SelectionRate" : 0.8666666666666667
+    }
+  }, {
+    "simpleMargin" : 0.033338901705026736,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 44,
+        "tn" : 16,
+        "fn" : 0
+      },
+      "accuracy" : 0.6333333333333333,
+      "balancedAccuracy" : 0.6333333333333333,
+      "macroF1" : 0.576379974326059,
+      "t2Precision" : 0.5769230769230769,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7317073170731707,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.26666666666666666,
+      "t1F1" : 0.4210526315789474,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 44,
+      "overRouteRate" : 0.7333333333333333,
+      "t2SelectionRate" : 0.8666666666666667
+    }
+  }, {
+    "simpleMargin" : 0.03390956655485605,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 44,
+        "tn" : 16,
+        "fn" : 0
+      },
+      "accuracy" : 0.6333333333333333,
+      "balancedAccuracy" : 0.6333333333333333,
+      "macroF1" : 0.576379974326059,
+      "t2Precision" : 0.5769230769230769,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7317073170731707,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.26666666666666666,
+      "t1F1" : 0.4210526315789474,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 44,
+      "overRouteRate" : 0.7333333333333333,
+      "t2SelectionRate" : 0.8666666666666667
+    }
+  }, {
+    "simpleMargin" : 0.034956112391273275,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 44,
+        "tn" : 16,
+        "fn" : 0
+      },
+      "accuracy" : 0.6333333333333333,
+      "balancedAccuracy" : 0.6333333333333333,
+      "macroF1" : 0.576379974326059,
+      "t2Precision" : 0.5769230769230769,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7317073170731707,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.26666666666666666,
+      "t1F1" : 0.4210526315789474,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 44,
+      "overRouteRate" : 0.7333333333333333,
+      "t2SelectionRate" : 0.8666666666666667
+    }
+  }, {
+    "simpleMargin" : 0.036353016352390743,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 47,
+        "tn" : 13,
+        "fn" : 0
+      },
+      "accuracy" : 0.6083333333333333,
+      "balancedAccuracy" : 0.6083333333333334,
+      "macroF1" : 0.5373636289065704,
+      "t2Precision" : 0.5607476635514018,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7185628742514969,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.21666666666666667,
+      "t1F1" : 0.3561643835616438,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 47,
+      "overRouteRate" : 0.7833333333333333,
+      "t2SelectionRate" : 0.8916666666666667
+    }
+  }, {
+    "simpleMargin" : 0.03894327650422108,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 49,
+        "tn" : 11,
+        "fn" : 0
+      },
+      "accuracy" : 0.5916666666666667,
+      "balancedAccuracy" : 0.5916666666666667,
+      "macroF1" : 0.5099591632636054,
+      "t2Precision" : 0.5504587155963303,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7100591715976332,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.18333333333333332,
+      "t1F1" : 0.30985915492957744,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 49,
+      "overRouteRate" : 0.8166666666666667,
+      "t2SelectionRate" : 0.9083333333333333
+    }
+  }, {
+    "simpleMargin" : 0.04139997660297168,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 50,
+        "tn" : 10,
+        "fn" : 0
+      },
+      "accuracy" : 0.5833333333333334,
+      "balancedAccuracy" : 0.5833333333333334,
+      "macroF1" : 0.49579831932773105,
+      "t2Precision" : 0.5454545454545454,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.7058823529411764,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.16666666666666666,
+      "t1F1" : 0.2857142857142857,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 50,
+      "overRouteRate" : 0.8333333333333334,
+      "t2SelectionRate" : 0.9166666666666666
+    }
+  }, {
+    "simpleMargin" : 0.04480517064478712,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 53,
+        "tn" : 7,
+        "fn" : 0
+      },
+      "accuracy" : 0.5583333333333333,
+      "balancedAccuracy" : 0.5583333333333333,
+      "macroF1" : 0.45129842118885344,
+      "t2Precision" : 0.5309734513274337,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6936416184971099,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.11666666666666667,
+      "t1F1" : 0.208955223880597,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 53,
+      "overRouteRate" : 0.8833333333333333,
+      "t2SelectionRate" : 0.9416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.048395470117007844,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 53,
+        "tn" : 7,
+        "fn" : 0
+      },
+      "accuracy" : 0.5583333333333333,
+      "balancedAccuracy" : 0.5583333333333333,
+      "macroF1" : 0.45129842118885344,
+      "t2Precision" : 0.5309734513274337,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6936416184971099,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.11666666666666667,
+      "t1F1" : 0.208955223880597,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 53,
+      "overRouteRate" : 0.8833333333333333,
+      "t2SelectionRate" : 0.9416666666666667
+    }
+  }, {
+    "simpleMargin" : 0.04965737285534377,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 54,
+        "tn" : 6,
+        "fn" : 0
+      },
+      "accuracy" : 0.55,
+      "balancedAccuracy" : 0.55,
+      "macroF1" : 0.4357366771159875,
+      "t2Precision" : 0.5263157894736842,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6896551724137931,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.1,
+      "t1F1" : 0.18181818181818182,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 54,
+      "overRouteRate" : 0.9,
+      "t2SelectionRate" : 0.95
+    }
+  }, {
+    "simpleMargin" : 0.05147639886328442,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 55,
+        "tn" : 5,
+        "fn" : 0
+      },
+      "accuracy" : 0.5416666666666666,
+      "balancedAccuracy" : 0.5416666666666666,
+      "macroF1" : 0.41978021978021973,
+      "t2Precision" : 0.5217391304347826,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6857142857142856,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.08333333333333333,
+      "t1F1" : 0.15384615384615385,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 55,
+      "overRouteRate" : 0.9166666666666666,
+      "t2SelectionRate" : 0.9583333333333334
+    }
+  }, {
+    "simpleMargin" : 0.05335383026466495,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 55,
+        "tn" : 5,
+        "fn" : 0
+      },
+      "accuracy" : 0.5416666666666666,
+      "balancedAccuracy" : 0.5416666666666666,
+      "macroF1" : 0.41978021978021973,
+      "t2Precision" : 0.5217391304347826,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6857142857142856,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.08333333333333333,
+      "t1F1" : 0.15384615384615385,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 55,
+      "overRouteRate" : 0.9166666666666666,
+      "t2SelectionRate" : 0.9583333333333334
+    }
+  }, {
+    "simpleMargin" : 0.05481339332114343,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 55,
+        "tn" : 5,
+        "fn" : 0
+      },
+      "accuracy" : 0.5416666666666666,
+      "balancedAccuracy" : 0.5416666666666666,
+      "macroF1" : 0.41978021978021973,
+      "t2Precision" : 0.5217391304347826,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6857142857142856,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.08333333333333333,
+      "t1F1" : 0.15384615384615385,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 55,
+      "overRouteRate" : 0.9166666666666666,
+      "t2SelectionRate" : 0.9583333333333334
+    }
+  }, {
+    "simpleMargin" : 0.06591308968647057,
+    "metrics" : {
+      "n" : 120,
+      "confusionMatrix" : {
+        "tp" : 60,
+        "fp" : 58,
+        "tn" : 2,
+        "fn" : 0
+      },
+      "accuracy" : 0.5166666666666667,
+      "balancedAccuracy" : 0.5166666666666667,
+      "macroF1" : 0.3693367162015223,
+      "t2Precision" : 0.5084745762711864,
+      "t2Recall" : 1.0,
+      "t2F1" : 0.6741573033707865,
+      "t1Precision" : 1.0,
+      "t1Recall" : 0.03333333333333333,
+      "t1F1" : 0.06451612903225806,
+      "underRouted" : 0,
+      "underRouteRate" : 0.0,
+      "overRouted" : 58,
+      "overRouteRate" : 0.9666666666666667,
+      "t2SelectionRate" : 0.9833333333333333
+    }
+  } ]
+}
