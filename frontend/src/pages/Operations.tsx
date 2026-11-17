@@ -137,7 +137,7 @@ export function Operations() {
             key={t.kind}
             to={`/admin/operations/${t.kind}`}
             className={({ isActive }) =>
-              `rounded-[18px] px-3.5 py-2 text-[14px] font-medium transition-colors ${isActive ? 'border border-line bg-paper text-signal shadow-card' : 'text-ink-mute hover:bg-canvas hover:text-ink'}`
+              `rounded-full px-4 py-2 text-[14px] font-medium transition-colors ${isActive ? 'bg-brand text-white' : 'border border-line text-ink-mute hover:border-stone hover:text-ink'}`
             }
           >
             {t.label}

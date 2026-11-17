@@ -124,7 +124,7 @@ export function CommandPalette({ open, onClose, triggerRef }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] px-4" role="dialog" aria-modal="true" aria-label="Quick navigation">
       <button aria-label="Close quick navigation" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="relative w-full max-w-lg overflow-hidden rounded-[24px] border border-line bg-paper shadow-card">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-line bg-paper shadow-card">
         <div className="p-3">
           <input
             ref={inputRef}
@@ -132,7 +132,7 @@ export function CommandPalette({ open, onClose, triggerRef }: {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Go to a page, or a recent conversation or call…"
             aria-label="Search admin pages"
-            className="w-full rounded-[18px] border border-transparent bg-canvas px-3 py-2 text-[14px] text-ink placeholder:text-ink-mute/70 outline-none focus:border-line focus:bg-transparent"
+            className="w-full rounded-md border border-line bg-paper px-3 py-2 text-[14px] text-ink placeholder:text-ash outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
           />
         </div>
         <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1">
@@ -144,7 +144,7 @@ export function CommandPalette({ open, onClose, triggerRef }: {
                 key={`${item.to}-${i}`}
                 onClick={() => { navigate(item.to); onClose(); }}
                 onMouseEnter={() => setActive(i)}
-                className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm ${i === active ? 'bg-canvas text-ink' : 'text-ink-dim'}`}
+                className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm ${i === active ? 'bg-brand-soft text-brand-ink' : 'text-ink-dim'}`}
               >
                 <span>{item.label}</span>
                 {item.hint && <span className="text-xs text-ink-mute">{item.hint}</span>}

@@ -68,7 +68,7 @@ export function VoiceCallDetail() {
                 <StatusBadge value={d.call.outcome} />
                 <span className="text-sm text-ink-mute">{d.call.turnCount} turns · {d.call.bargeInCount} barge-ins</span>
               </div>
-              <div className="mb-6 rounded-[24px] border border-line bg-paper p-5 shadow-card">
+              <div className="mb-6 rounded-xl border border-line bg-paper p-5 shadow-card">
                 <FactGrid
                   items={[
                     { label: 'STT provider', value: d.call.sttProvider ?? 'n/a' },
@@ -97,7 +97,7 @@ export function VoiceCallDetail() {
                   items={[
                     { label: 'Mean end-to-end', value: <Latency ms={mean(d.turns.map((t) => t.e2eMs))} /> },
                     { label: 'End-to-end p95', value: <Latency ms={percentile(d.turns.map((t) => t.e2eMs), 95)} /> },
-                    { label: 'Mean brain TTFT', value: <Latency ms={mean(d.turns.map((t) => t.brainTtftMs))} /> },
+                    { label: 'Mean response TTFT', value: <Latency ms={mean(d.turns.map((t) => t.brainTtftMs))} /> },
                     { label: 'Mean STT commit', value: <Latency ms={mean(d.turns.map((t) => t.sttLatencyMs))} /> },
                     { label: 'Mean TTS first audio', value: <Latency ms={mean(d.turns.map((t) => t.ttsFirstAudioMs))} /> },
                     { label: 'Slowest turn', value: d.turns.length > 0 ? `Turn ${d.turns.reduce((a, b) => (b.e2eMs ?? 0) > (a.e2eMs ?? 0) ? b : a).turnNumber}` : 'n/a' },
@@ -121,7 +121,7 @@ export function VoiceCallDetail() {
                         ),
                       },
                       { key: 'sttLatencyMs', header: 'STT', render: (r) => <Latency ms={r.sttLatencyMs} maxMs={r.e2eMs ?? undefined} />, sortable: true, sortValue: (r) => r.sttLatencyMs },
-                      { key: 'brainTtftMs', header: 'Brain TTFT', render: (r) => <Latency ms={r.brainTtftMs} maxMs={r.e2eMs ?? undefined} />, sortable: true, sortValue: (r) => r.brainTtftMs },
+                      { key: 'brainTtftMs', header: 'Response TTFT', render: (r) => <Latency ms={r.brainTtftMs} maxMs={r.e2eMs ?? undefined} />, sortable: true, sortValue: (r) => r.brainTtftMs },
                       { key: 'ttsFirstAudioMs', header: 'TTS first audio', render: (r) => <Latency ms={r.ttsFirstAudioMs} maxMs={r.e2eMs ?? undefined} />, sortable: true, sortValue: (r) => r.ttsFirstAudioMs },
                       { key: 'e2eMs', header: 'End-to-end', render: (r) => <Latency ms={r.e2eMs} />, sortable: true, sortValue: (r) => r.e2eMs },
                       { key: 'sttLanguage', header: 'STT lang', render: (r) => r.sttLanguage ?? <span className="text-ink-mute">—</span> },

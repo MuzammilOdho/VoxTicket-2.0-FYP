@@ -28,7 +28,7 @@ export function AiModels() {
       <QueryState query={models}>
         {(m) => (
           <div>
-            <div className="mb-6 grid grid-cols-2 gap-6 rounded-[24px] border border-line bg-paper p-5 shadow-card">
+            <div className="mb-6 grid grid-cols-2 gap-6 rounded-xl border border-line bg-paper p-5 shadow-card">
               <KpiCard title="Est. cost" value={fmtUsd(m.costUsd)} />
               <KpiCard title="Tokens (total)" value={fmtInt(Object.values(m.tokensByProvider).reduce((a, b) => a + b, 0))} />
             </div>

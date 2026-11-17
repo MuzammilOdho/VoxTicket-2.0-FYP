@@ -24,8 +24,8 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
             key={k}
             onClick={() => setKind(k)}
             aria-pressed={kind === k}
-            className={`min-h-[36px] rounded-[18px] px-3 text-xs font-medium ${
-              kind === k ? 'bg-signal/10 text-signal' : 'border border-line text-ink-dim hover:border-ink-mute hover:text-ink'
+            className={`min-h-[36px] rounded-full px-3 text-xs font-medium ${
+              kind === k ? 'bg-brand text-white' : 'border border-line text-ink-dim hover:border-ink-mute hover:text-ink'
             }`}
           >
             {k === 'ALL' ? 'All' : k.charAt(0) + k.slice(1).toLowerCase()}

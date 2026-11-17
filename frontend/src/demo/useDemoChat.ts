@@ -81,7 +81,7 @@ export function useDemoChat() {
         setError(msg);
         setMessages((m) =>
           m.map((x) =>
-            x.id === pendingId ? { ...x, pending: false, error: true, text: 'The agent could not be reached. Is the backend running?' } : x,
+            x.id === pendingId ? { ...x, pending: false, error: true, text: 'The agent could not be reached. Check that the service is running and try again.' } : x,
           ),
         );
       } finally {

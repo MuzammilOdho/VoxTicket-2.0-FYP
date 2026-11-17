@@ -213,7 +213,7 @@ export function useVoiceCall() {
       // "ideal" (not "exact"): a browser lacking one keeps working. This is
       // the client-side half of echo/noise handling; the worker-side half is
       // the AEC warmup + adaptive interruption in python-voice/agent.py.
-      // No extra server-side DSP (e.g. RNNoise) is warranted at FYP scope:
+      // No extra server-side DSP (e.g. RNNoise) is warranted here:
       // it would add latency and ops cost for no measurable quality gain
       // over this combination.
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -238,7 +238,7 @@ export function useVoiceCall() {
         (phone?.trim() ? `&identity=${encodeURIComponent(phone.trim())}` : '');
       const tres = await fetch(tokenUrl);
       if (!tres.ok) {
-        throw new Error(`Token request failed (${tres.status}). Is the backend running with the dev profile?`);
+        throw new Error('We couldn\'t start the voice call. Check that the service is running and try again.');
       }
       const { url, token } = (await tres.json()) as TokenResponse;
 

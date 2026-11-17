@@ -75,7 +75,7 @@ export function VoiceAnalytics() {
       <QueryState query={q} emptyTitle="No voice calls" skeleton>
         {(p) =>
           p.content.length === 0 ? (
-            <EmptyState title="No voice calls recorded" hint="Calls appear once the voice worker reports telemetry." />
+            <EmptyState title="No voice calls recorded" hint="Calls appear here once they are recorded." />
           ) : (
             <DataTable
               columns={[
@@ -92,7 +92,7 @@ export function VoiceAnalytics() {
                 { key: 'turnCount', header: 'Turns', render: (r) => fmtInt(r.turnCount) },
                 { key: 'bargeInCount', header: 'Barge-ins', render: (r) => fmtInt(r.bargeInCount) },
                 { key: 'avgE2eMs', header: 'Mean end-to-end', render: (r) => <Latency ms={r.avgE2eMs} /> },
-                { key: 'avgBrainTtftMs', header: 'Mean brain TTFT', render: (r) => <Latency ms={r.avgBrainTtftMs} /> },
+                { key: 'avgBrainTtftMs', header: 'Mean response TTFT', render: (r) => <Latency ms={r.avgBrainTtftMs} /> },
                 { key: 'sttProvider', header: 'STT', render: (r) => r.sttProvider ?? <span className="text-ink-mute">—</span> },
                 { key: 'ttsProvider', header: 'TTS', render: (r) => r.ttsProvider ?? <span className="text-ink-mute">—</span> },
                 { key: 'startedAt', header: 'Started', render: (r) => <span className="whitespace-nowrap">{fmtTime(r.startedAt)}</span> },

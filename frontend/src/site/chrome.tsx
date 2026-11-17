@@ -1,14 +1,22 @@
-/** VoxTicket public site chrome — Linear-style fixed nav + footer. */
+/** VoxTicket public site chrome — ElevenLabs layout, v4 colour system.
+ * No promo banner: the reference nav is a minimal transparent top bar
+ * (logo left, links center-left, auth buttons right). The demo CTA is
+ * the brand indigo pill in the nav. The footer is a compact single
+ * band on eggshell with a stone hairline — logo + tagline only, no
+ * duplicated menu. Active nav is brand-ink text with a 2px brand
+ * underline. Max content width 1280px, per the reference layout. */
+import { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { ButtonLink } from '../ui/primitives';
 
-export function Logo({ sub }: { sub?: string }) {
+export function Logo({ sub, dark = false }: { sub?: string; dark?: boolean }) {
+  void dark;
   return (
     <Link to="/" className="flex items-center gap-2.5">
-      <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-signal font-mono text-[11px] font-bold text-[#08090a]">
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-[12px] font-semibold text-white">
         V
       </span>
-      <span className="text-[16px] font-medium tracking-[-0.01em] text-white">
+      <span className="font-display text-[16px] font-semibold tracking-[-0.01em] text-ink">
         VoxTicket{sub ? <span className="text-ink-mute"> {sub}</span> : null}
       </span>
     </Link>
@@ -16,74 +24,61 @@ export function Logo({ sub }: { sub?: string }) {
 }
 
 export function SiteNav() {
+  const [menuOpen, setMenuOpen] = useState(false);
   const link = ({ isActive }: { isActive: boolean }) =>
-    `px-3 py-2 text-[13px] transition-colors ${isActive ? 'text-white' : 'text-ink-dim hover:text-white'}`;
+    `border-b-2 px-3 py-2 text-[15px] transition-colors ${isActive ? 'border-brand font-medium text-brand-ink' : 'border-transparent text-smoke hover:text-ink'}`;
   return (
-    <header className="glass fixed inset-x-0 top-0 z-40 border-b border-line/70">
-      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-6">
+    <header className="sticky top-0 z-40 border-b border-line bg-eggshell/95">
+      <div className="mx-auto flex h-16 max-w-[1280px] items-center justify-between px-6">
         <Logo />
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 md:flex" aria-label="Site">
           <NavLink to="/product" className={link}>Product</NavLink>
           <NavLink to="/how-it-works" className={link}>How it works</NavLink>
           <NavLink to="/technology" className={link}>Technology</NavLink>
         </nav>
         <div className="flex items-center gap-2">
-          <Link to="/admin" className="hidden px-3 py-2 text-[13px] text-ink-dim transition-colors hover:text-white sm:block">
+          <Link to="/admin" className="hidden px-3 py-2 text-[15px] text-smoke transition-colors hover:text-ink sm:block">
             Operations
           </Link>
-          <ButtonLink to="/demo" variant="pill" className="!px-4 !py-2">
+          <ButtonLink to="/demo" variant="primary" className="!px-4 !py-2 !text-[14px]">
             Live demo
           </ButtonLink>
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="rounded-full border border-line px-3 py-2 text-[14px] font-medium text-ink md:hidden"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? 'Close' : 'Menu'}
+          </button>
         </div>
       </div>
+      {menuOpen && (
+        <nav className="border-t border-line bg-eggshell px-6 py-3 md:hidden" aria-label="Site mobile">
+          <NavLink to="/product" onClick={() => setMenuOpen(false)} className="block py-2 text-[15px] text-smoke hover:text-ink">Product</NavLink>
+          <NavLink to="/how-it-works" onClick={() => setMenuOpen(false)} className="block py-2 text-[15px] text-smoke hover:text-ink">How it works</NavLink>
+          <NavLink to="/technology" onClick={() => setMenuOpen(false)} className="block py-2 text-[15px] text-smoke hover:text-ink">Technology</NavLink>
+          <Link to="/admin" onClick={() => setMenuOpen(false)} className="block py-2 text-[15px] text-smoke hover:text-ink">Operations</Link>
+        </nav>
+      )}
     </header>
   );
 }
 
+/* The footer is one band — logo + tagline, nothing else. It used to
+ * carry a second nav (Product / How it works / Technology / Live demo /
+ * Operations console) that duplicated the header menu exactly, plus a
+ * bottom bar that repeated the brand name and tagline a second time.
+ * Both are removed: every public page already has the menu in the
+ * header, and the brand appears once, here. */
 export function SiteFooter() {
   return (
-    <footer className="border-t border-line">
-      <div className="mx-auto grid max-w-[1200px] gap-10 px-6 py-16 md:grid-cols-[1.2fr_2fr]">
-        <div>
-          <Logo />
-          <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-ink-mute">
-            Voice-first AI customer support for e-commerce. AI understands the request —
-            the system controls what it is allowed to do.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-10 sm:grid-cols-3">
-          <div>
-            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-mute">Product</div>
-            <div className="space-y-2.5 text-[14px]">
-              <Link to="/product" className="block text-ink-dim transition-colors hover:text-white">Capabilities</Link>
-              <Link to="/how-it-works" className="block text-ink-dim transition-colors hover:text-white">How it works</Link>
-              <Link to="/technology" className="block text-ink-dim transition-colors hover:text-white">Technology</Link>
-            </div>
-          </div>
-          <div>
-            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-mute">Try it</div>
-            <div className="space-y-2.5 text-[14px]">
-              <Link to="/demo" className="block text-ink-dim transition-colors hover:text-white">Live demo</Link>
-              <Link to="/admin" className="block text-ink-dim transition-colors hover:text-white">Operations console</Link>
-            </div>
-          </div>
-          <div>
-            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-mute">Project</div>
-            <div className="space-y-2.5 font-mono text-[12px] text-ink-mute">
-              <span className="block">VOICE-FIRST SUPPORT</span>
-              <span className="block">FINAL-YEAR PROJECT</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="border-t border-line/60">
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-5 font-mono text-[11px] text-ash">
-          <span>VOXTICKET</span>
-          <span className="flex items-center gap-2">
-            <span className="vq-pulse inline-block h-1.5 w-1.5 rounded-full bg-pulse-green" />
-            ALL SYSTEMS NOMINAL
-          </span>
-        </div>
+    <footer className="border-t border-line bg-eggshell text-ink">
+      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-6 py-8">
+        <Logo />
+        <span className="text-[14px] text-smoke">
+          Voice-first AI customer support for e-commerce.
+        </span>
       </div>
     </footer>
   );
@@ -91,9 +86,9 @@ export function SiteFooter() {
 
 export function Page({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-void text-white">
+    <div className="min-h-screen bg-eggshell text-ink">
       <SiteNav />
-      <main className="pt-16">{children}</main>
+      <main>{children}</main>
       <SiteFooter />
     </div>
   );

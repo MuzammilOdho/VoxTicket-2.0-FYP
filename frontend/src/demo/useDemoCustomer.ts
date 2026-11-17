@@ -33,9 +33,8 @@ export function useDemoCustomer() {
     try {
       const res = await fetch('/api/v1/demo/customer/random');
       if (!res.ok) {
-        const t = await res.text().catch(() => '');
         throw new Error(
-          t || `Customer assignment failed (${res.status}). Is the backend running with the dev profile?`,
+          `We couldn't start a demo session. Check that the service is running and try again.`,
         );
       }
       const data = (await res.json()) as DemoCustomer;

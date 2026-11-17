@@ -25,7 +25,7 @@ export function AiRag() {
       <QueryState query={q}>
         {(r) => (
           <div>
-            <div className="mb-6 grid grid-cols-2 gap-6 rounded-[24px] border border-line bg-paper p-5 shadow-card md:grid-cols-3">
+            <div className="mb-6 grid grid-cols-2 gap-6 rounded-xl border border-line bg-paper p-5 shadow-card md:grid-cols-3">
               <KpiCard title="Searches" value={fmtInt(r.searches)} />
               <KpiCard title="Cache hit rate" value={fmtPct(r.cacheHitRate)} accent="green" />
               <KpiCard title="Mean latency" value={<Latency ms={r.meanMs} />} accent="sky" />
@@ -33,7 +33,7 @@ export function AiRag() {
               <KpiCard title="Similarity p95" value={r.similarityP95 !== null ? r.similarityP95.toFixed(3) : 'n/a'} />
               <KpiCard title="Retrieval quality" value={r.similarityP50 !== null && r.similarityP50 >= 0.35 ? 'healthy' : 'check'} accent={r.similarityP50 !== null && r.similarityP50 >= 0.35 ? 'green' : 'amber'} sub="p50 vs 0.35 threshold" />
             </div>
-            <p className="rounded-[24px] border border-line bg-paper p-5 text-sm text-ink-mute shadow-card">
+            <p className="rounded-xl border border-line bg-paper p-5 text-sm text-ink-mute shadow-card">
               Similarity percentiles describe the cosine-similarity distribution of retrieved knowledge chunks.
               Low p50 values suggest the knowledge base or the similarity threshold needs attention.
             </p>

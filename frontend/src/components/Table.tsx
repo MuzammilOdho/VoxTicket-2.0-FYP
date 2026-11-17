@@ -80,7 +80,7 @@ export function DataTable<T>({
 
   return (
     <div>
-      <div className="overflow-x-auto rounded-[24px] border border-line bg-paper shadow-card">
+      <div className="overflow-x-auto rounded-xl border border-line bg-paper shadow-card">
         <table className="min-w-full text-[14px]">
           {caption && <caption className="py-2 text-left text-xs text-ink-mute">{caption}</caption>}
           <thead>
@@ -143,7 +143,7 @@ export function DataTable<T>({
                   value={size ?? 20}
                   onChange={(e) => onSizeChange(Number(e.target.value))}
                   aria-label="Rows per page"
-                  className="min-h-[36px] rounded-[18px] border border-transparent bg-canvas px-2 text-sm text-ink outline-none focus:border-line"
+                  className="min-h-[36px] rounded-md border border-line bg-paper px-2 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
                 >
                   {[20, 50, 100].map((n) => (
                     <option key={n} value={n}>{n}</option>

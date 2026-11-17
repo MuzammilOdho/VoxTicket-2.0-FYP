@@ -39,7 +39,7 @@ export function Evaluation() {
                 How to read this page: {e.notes}
               </p>
             )}
-            <div className="mb-6 grid grid-cols-2 gap-6 rounded-[24px] border border-line bg-paper p-5 shadow-card md:grid-cols-5">
+            <div className="mb-6 grid grid-cols-2 gap-6 rounded-xl border border-line bg-paper p-5 shadow-card md:grid-cols-5">
               <KpiCard title="Guard block rate" value={fmtPct(e.guardBlockRate)} accent="amber" />
               <KpiCard title="Clarification rate" value={fmtPct(e.clarificationRate)} />
               <KpiCard title="Escalation rate" value={fmtPct(e.escalationRate)} accent="amber" />
@@ -55,7 +55,7 @@ export function Evaluation() {
                     columns={[
                       { key: 'tier', header: 'Tier' },
                       { key: 'sttP50Ms', header: 'STT p50', render: (r) => <Latency ms={r.sttP50Ms} /> },
-                      { key: 'brainP50Ms', header: 'Brain p50', render: (r) => <Latency ms={r.brainP50Ms} /> },
+                      { key: 'brainP50Ms', header: 'Response p50', render: (r) => <Latency ms={r.brainP50Ms} /> },
                       { key: 'ttsP50Ms', header: 'TTS p50', render: (r) => <Latency ms={r.ttsP50Ms} /> },
                       { key: 'e2eP50Ms', header: 'End-to-end p50', render: (r) => <Latency ms={r.e2eP50Ms} /> },
                       { key: 'e2eP95Ms', header: 'End-to-end p95', render: (r) => <Latency ms={r.e2eP95Ms} /> },

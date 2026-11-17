@@ -12,8 +12,8 @@ import {
   YAxis,
 } from 'recharts';
 
-/* shadcn palette from admin/tokens.ts: strictly achromatic. No colour
-   ever means a category on a chart. */
+/* Warm palette from admin/tokens.ts: black first, then warm grays.
+   One accent on a chart, never a rainbow. */
 import { CHART_COLORS, SHADCN_TOKENS } from '../admin/tokens';
 
 const COLORS = [...CHART_COLORS];
@@ -36,7 +36,7 @@ function ChartShell({ title, height = 180, children }: { title?: string; height?
   // next to the charts. Each chart is its own card so a grid of charts
   // reads as a set of panels, not one wall of ink.
   return (
-    <div className="rounded-[24px] border border-line bg-paper p-5 shadow-card">
+    <div className="rounded-xl border border-line bg-paper p-5 shadow-card">
       {title && <div className="mb-2 text-[14px] font-medium text-ink">{title}</div>}
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -51,7 +51,7 @@ const tooltipStyle = {
   backgroundColor: SHADCN_TOKENS.paper,
   border: `1px solid ${SHADCN_TOKENS.hairline}`,
   borderRadius: 10,
-  boxShadow: '0 0 0 1px rgba(23,23,23,0.05), 0 1px 3px rgba(0,0,0,0.1)',
+  boxShadow: 'rgba(28, 40, 64, 0.1) 0px 2px 3px -2px, rgba(28, 40, 64, 0.04) 0px 4px 6px -2px',
   fontSize: 12,
   color: SHADCN_TOKENS.ink,
 };

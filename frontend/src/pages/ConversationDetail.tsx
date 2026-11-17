@@ -123,7 +123,7 @@ export function ConversationDetail() {
               {s!.escalated && <StatusBadge value="ESCALATED" />}
               <span className="text-sm text-ink-mute">{s!.turnCount} turns</span>
             </div>
-            <div className="mb-6 rounded-[24px] border border-line bg-paper p-5 shadow-card">
+            <div className="mb-6 rounded-xl border border-line bg-paper p-5 shadow-card">
               <FactGrid
                 items={[
                   { label: 'Customer', value: <span className="font-mono text-xs">{s!.customerId ?? 'anonymous'}</span> },
@@ -143,7 +143,7 @@ export function ConversationDetail() {
                   <p className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-mute">
                     <span>Jump to turn:</span>
                     {turns.map(([n]) => (
-                      <a key={n} href={`#turn-${n}`} className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-[18px] border border-line bg-paper px-1.5 font-mono text-ink-dim hover:border-ink-mute hover:text-ink">
+                      <a key={n} href={`#turn-${n}`} className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-line bg-paper px-1.5 font-mono text-ink-dim hover:border-ink-mute hover:text-ink">
                         {n}
                       </a>
                     ))}

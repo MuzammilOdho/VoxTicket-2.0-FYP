@@ -1,4 +1,4 @@
-/** Minimal fetch wrapper: same-origin, HTTP Basic auth, 401 -> login. */
+/** Minimal fetch wrapper: same-origin, administrator auth, 401 -> login. */
 
 export const AUTH_KEY = 'vt_admin_auth';
 

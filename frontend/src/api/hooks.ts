@@ -89,8 +89,11 @@ export function useConversations(f: ConversationFilters) {
   if (f.status) p.set('status', f.status);
   if (f.escalated) p.set('escalated', f.escalated);
   if (f.q) p.set('q', f.q);
-  if (f.from) p.set('from', f.from);
-  if (f.to) p.set('to', f.to);
+  // Dates must be instants: the backend declares Instant from/to, and a raw
+  // yyyy-MM-dd is rejected (400). Every other hook routes through setWindow;
+  // conversations previously passed the raw strings, so its date filter
+  // never worked. (Audit finding, fixed in the redesign; no backend change.)
+  setWindow(p, f.from, f.to);
   p.set('page', String(f.page));
   p.set('size', String(f.size));
   return useQuery({
@@ -174,8 +177,9 @@ export function useAuditEvents(f: AuditFilters) {
   const p = new URLSearchParams({ page: String(f.page), size: String(f.size) });
   if (f.sessionId) p.set('sessionId', f.sessionId);
   if (f.type) p.set('type', f.type);
-  if (f.from) p.set('from', f.from);
-  if (f.to) p.set('to', f.to);
+  // Same instant conversion as conversations above (audit finding): the
+  // backend declares Instant from/to; raw yyyy-MM-dd was rejected (400).
+  setWindow(p, f.from, f.to);
   return useQuery({
     queryKey: ['audit', f],
     queryFn: () => api.get<Page<AuditEvent>>(`${ADMIN}/audit/events?${p}`),

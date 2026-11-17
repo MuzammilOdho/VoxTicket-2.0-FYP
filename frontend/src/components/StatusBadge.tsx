@@ -7,15 +7,14 @@
  *   VERIFIED): solid green with white text (5.05:1). A table of
  *   completed rows now reads green at a glance instead of gray.
  * - DEGRADED / CLARIFICATION: solid amber with white text (4.90:1).
- * - ESCALATED (needs attention, not an error): solid indigo with
- *   white text (7.24:1) — attention, in the interaction colour.
+ * - ESCALATED (needs attention, not an error): solid violet with
+ *   white text (4.8:1) — attention in the reasoning colour, distinct
+ *   from amber (degraded) and red (error).
  * - Channels and other neutral labels (CHAT, VOICE, PHONE, ACTIVE,
- *   in-progress, unknown, pending): indigo tint — they are clickable
- *   context, not outcomes, so they get the interaction colour at
- *   low weight, not a solid outcome colour.
- * Pill geometry: 18px radius, 12px/500, 2px 8px padding, per the
- * reference's badge spec. This file no longer uses primitives Badge
- * (a dark-theme component); admin badges live here.
+ *   in-progress, unknown, pending): brand-soft tint with brand-ink
+ *   text — quiet context that still reads as part of the system.
+ * Badge geometry: pill (9999px), 12px/500.
+ * This file no longer uses primitives Badge; admin badges live here.
  */
 type BadgeKind = 'error' | 'ok' | 'warn' | 'accent' | 'info' | 'soft' | 'outline';
 
@@ -23,9 +22,9 @@ const CLASSES: Record<BadgeKind, string> = {
   error: 'bg-ember text-[#fafafa]',
   ok: 'bg-ok text-[#fafafa]',
   warn: 'bg-warn text-[#fafafa]',
-  accent: 'bg-signal text-[#fafafa]',
-  info: 'bg-signal/10 text-signal',
-  soft: 'bg-canvas text-ink-soft',
+  accent: 'bg-violet text-[#fdfcfc]',
+  info: 'bg-brand-soft text-brand-ink',
+  soft: 'bg-brand-soft text-brand-ink',
   outline: 'border border-line bg-transparent text-ink',
 };
 
@@ -41,7 +40,7 @@ function kind(value: string): BadgeKind {
 
 function Pill({ kind: k, children }: { kind: BadgeKind; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-[18px] px-2 py-0.5 text-[12px] font-medium ${CLASSES[k]}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium ${CLASSES[k]}`}>
       {children}
     </span>
   );

@@ -1,4 +1,4 @@
-/** Dashboard (Overview) — Signal redesign, Phase 5 (admin rework).
+/** Dashboard (Overview) — Attio system (DESIGN.md).
  *
  * Order is the design. The old page showed six KPI boxes, four rainbow
  * charts, and the only actionable content (recent errors) crammed into
@@ -9,7 +9,7 @@
  * is deliberately NOT repeated
  * here — it lives on AI Models, linked once.
  *
- * Colour rule, from the Signal direction: indigo is the only action
+ * Colour rule (DESIGN-ELEVENLABS.md): black is the only action
  * colour; green/amber/red appear only as outcome badges. The four chart
  * cards are replaced by two single-hue bar lists with directly labelled
  * values (no rotated axis labels, no legend to decode).
@@ -27,7 +27,11 @@ import { DataTable } from '../components/Table';
 import { Button } from '../components/Button';
 import { Section } from '../components/Card';
 
-function BarList({ rows }: { rows: { label: string; value: number }[] }) {
+/* Bar colour: a row may carry its own colour (the channel split:
+ * Chat is brand indigo, Voice is teal — two categories, two colours).
+ * Otherwise the largest bar is brand and the rest warm gray, so the
+ * highlight still reads at a glance. */
+function BarList({ rows }: { rows: { label: string; value: number; color?: string }[] }) {
   const total = rows.reduce((a, r) => a + r.value, 0);
   const max = Math.max(...rows.map((r) => r.value));
   if (total === 0) return <EmptyState title="No data in this window" />;
@@ -38,7 +42,7 @@ function BarList({ rows }: { rows: { label: string; value: number }[] }) {
           <span className="truncate text-ink">{r.label}</span>
           <span className="block h-2.5 overflow-hidden rounded-full bg-line-soft">
             <span
-              className={`block h-full rounded-full ${r.value === max ? 'bg-signal' : 'bg-ink-mute'}`}
+              className={`block h-full rounded-full ${r.color ?? (r.value === max ? 'bg-signal' : 'bg-ink-mute')}`}
               style={{ width: `${Math.max(2, (r.value / total) * 100)}%` }}
             />
           </span>
@@ -81,15 +85,15 @@ export function Dashboard() {
           return (
             <div>
               {/* KPI card grid: five numbers with context. */}
-              <div className="mb-6 grid grid-cols-2 gap-6 rounded-[24px] border border-line bg-paper p-5 shadow-card md:grid-cols-5">
+              <div className="mb-6 grid grid-cols-2 gap-6 rounded-xl border border-line bg-paper p-5 shadow-card md:grid-cols-5">
                 {[
-                  { label: 'Conversations', value: fmtInt(s.totals.total), note: `${fmtInt(s.totals.active)} active · ${fmtInt(s.totals.completed)} done · ${fmtInt(s.totals.aborted)} aborted` },
-                  { label: 'Resolution rate', value: fmtPct(s.rates.resolutionRate), note: 'normal outcomes / terminal turns' },
-                  { label: 'Turn p95', value: <Latency ms={s.latency.turnP95Ms} />, note: <>p50 <Latency ms={s.latency.turnP50Ms} /> · chat + voice</> },
-                  { label: 'Est. cost', value: fmtUsd(s.cost.estimatedUsd), note: `${fmtInt(s.tokens.total)} tokens` },
-                  { label: 'Procedures', value: `${fmtInt(s.procedures.success)} ok`, note: `${fmtInt(s.procedures.failure)} failed · ${fmtInt(s.procedures.clarification)} clarifications` },
+                  { label: 'Conversations', dot: 'bg-brand', value: fmtInt(s.totals.total), note: <><span className="whitespace-nowrap">{fmtInt(s.totals.active)} active</span> · <span className="whitespace-nowrap">{fmtInt(s.totals.completed)} done</span> · <span className="whitespace-nowrap">{fmtInt(s.totals.aborted)} aborted</span></> },
+                  { label: 'Resolution rate', dot: 'bg-ok', value: fmtPct(s.rates.resolutionRate), note: 'normal outcomes / terminal turns' },
+                  { label: 'Turn p95', dot: 'bg-teal', value: <Latency ms={s.latency.turnP95Ms} />, note: <>p50 <Latency ms={s.latency.turnP50Ms} /> <span className="whitespace-nowrap">· chat + voice</span></> },
+                  { label: 'Est. cost', dot: 'bg-amber', value: fmtUsd(s.cost.estimatedUsd), note: `${fmtInt(s.tokens.total)} tokens` },
+                  { label: 'Procedures', dot: 'bg-violet', value: `${fmtInt(s.procedures.success)} ok`, note: <><span className="whitespace-nowrap">{fmtInt(s.procedures.failure)} failed</span> · <span className="whitespace-nowrap">{fmtInt(s.procedures.clarification)} clarifications</span></> },
                 ].map((k) => (
-                  <KpiCard key={k.label} title={k.label} value={k.value} sub={k.note} />
+                  <KpiCard key={k.label} title={k.label} dot={k.dot} value={k.value} sub={k.note} />
                 ))}
               </div>
 
@@ -98,7 +102,7 @@ export function Dashboard() {
                 note={<>This is a voice-first system, so voice gets its own section instead of being buried in a channel split. <Link to="/admin/voice" className="font-medium text-signal hover:underline hover:underline-offset-4">All voice calls →</Link></>}
               >
                 {s.recentVoiceCalls.length === 0 ? (
-                  <EmptyState title="No voice calls in this window" hint="Voice calls appear here once the worker reports them." />
+                  <EmptyState title="No voice calls in this window" hint="Voice calls appear here once they are recorded." />
                 ) : (
                   <DataTable
                     columns={[
@@ -110,7 +114,7 @@ export function Dashboard() {
                       { key: 'outcome', header: 'Outcome', render: (r) => <StatusBadge value={r.outcome} /> },
                       { key: 'turnCount', header: 'Turns', render: (r) => fmtInt(r.turnCount) },
                       { key: 'avgE2eMs', header: 'Mean end-to-end', render: (r) => <Latency ms={r.avgE2eMs} /> },
-                      { key: 'avgBrainMs', header: 'Mean brain', render: (r) => <Latency ms={r.avgBrainMs} /> },
+                      { key: 'avgBrainMs', header: 'Mean response', render: (r) => <Latency ms={r.avgBrainMs} /> },
                       { key: 'startedAt', header: 'Started', render: (r) => <span className="whitespace-nowrap">{fmtTime(r.startedAt)}</span> },
                     ]}
                     rows={s.recentVoiceCalls}
@@ -121,14 +125,14 @@ export function Dashboard() {
 
               <Section
                 title="Where the turns go"
-                note={<>Two splits, values labelled directly; the largest bar in each split is indigo, the rest gray. Model and provider detail lives on <Link to="/admin/ai/models" className="font-medium text-signal hover:underline hover:underline-offset-4">AI Models →</Link>, not repeated here.</>}
+                note={<>Two splits, values labelled directly; Chat is indigo, Voice is teal, and the largest tier bar is indigo, the rest gray. Model and provider detail lives on <Link to="/admin/ai/models" className="font-medium text-signal hover:underline hover:underline-offset-4">AI Models →</Link>, not repeated here.</>}
               >
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div>
                     <div className="mb-1 font-medium text-ink">Channel</div>
                     <BarList rows={[
-                      { label: 'Chat', value: s.byChannel.chat },
-                      { label: 'Voice', value: s.byChannel.voice },
+                      { label: 'Chat', value: s.byChannel.chat, color: 'bg-brand' },
+                      { label: 'Voice', value: s.byChannel.voice, color: 'bg-teal' },
                     ]} />
                   </div>
                   <div>

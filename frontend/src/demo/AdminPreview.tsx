@@ -1,19 +1,20 @@
 /**
- * VoxTicket demo — "Preview admin console".
+ * VoxTicket demo — "Preview operations console".
  *
  * A guided, read-only peek at the operator dashboard from inside the demo.
  *
- * Step 1 (not signed in): shows the demo test credentials (admin / admin)
- * with a one-click sign-in. This runs the exact same HTTP Basic handshake
- * as the admin login page (probeLogin + setAuth) — auth is never bypassed.
+ * Step 1 (not signed in): one-click sign-in with the demo administrator
+ * account. This runs the exact same sign-in handshake as the admin login
+ * page (probeLogin + setAuth) — auth is never bypassed, and no credential
+ * is ever shown on screen.
  *
  * Step 2 (signed in): renders the real <Dashboard /> component inside a
  * modal, with a banner noting the current demo session is live on it and
  * a link out to the full console at /admin.
  *
- * The full 12-page console stays at /admin; this is a curated preview,
- * not a replacement. Nothing here can mutate anything: the admin API
- * is read-only, and the preview surfaces no prompts, chain-of-thought,
+ * The full console stays at /admin; this is a curated preview, not a
+ * replacement. Nothing here can mutate anything: the admin API is
+ * read-only, and the preview surfaces no prompts, chain-of-thought,
  * OTP codes, or secrets.
  */
 
@@ -70,7 +71,7 @@ export function AdminPreview({
       setAuth(basic);
       setAuthed(true);
     } else {
-      setError('Login failed — check the backend is reachable and the admin account exists.');
+      setError('Sign-in failed — the service may be unavailable. Try again.');
     }
   };
 
@@ -82,17 +83,17 @@ export function AdminPreview({
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="Preview admin console"
+      aria-label="Preview operations console"
     >
       {!authed ? (
-        /* ---------------- step 1: test credentials ---------------- */
-        <div className="g-border w-full max-w-[520px] rounded-2xl bg-carbon p-8">
+        /* ---------------- step 1: demo-account sign-in ---------------- */
+        <div className="w-full max-w-[520px] rounded-xl border border-line bg-paper p-8 shadow-xl">
           <div className="flex items-start justify-between gap-4">
-            <Kicker className="!text-signal">Operator preview</Kicker>
+            <Kicker>Operator preview</Kicker>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="rounded-md p-1 text-ash transition-colors hover:text-white"
+              className="rounded-full p-1 text-slate-600 transition-colors hover:text-ink"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -100,32 +101,17 @@ export function AdminPreview({
               </svg>
             </button>
           </div>
-          <h2 className="heading-tight mt-3 text-[22px] font-medium text-white">
+          <h2 className="font-display mt-3 text-[22px] font-semibold tracking-[-0.2px] text-ink">
             See what the support team sees
           </h2>
-          <p className="mt-2.5 text-[14px] leading-relaxed text-fog">
+          <p className="mt-2.5 text-[14px] leading-relaxed text-slate-600">
             This is the operator&apos;s view of VoxTicket — live dashboards over the
-            same conversations you&apos;re having in the demo. Sign in with the
-            test credentials to open a read-only preview.
+            same conversations you&apos;re having in the demo. Open a read-only
+            preview signed in with the demo administrator account.
           </p>
 
-          <div className="mt-5 rounded-xl border border-dashed border-signal/40 bg-signal/[0.04] p-4">
-            <div className="flex items-center justify-between py-1.5">
-              <span className="text-[13px] text-ash">Username</span>
-              <code className="rounded-md border border-line bg-void px-2.5 py-1 font-mono text-[13px] text-signal">
-                {DEMO_USERNAME}
-              </code>
-            </div>
-            <div className="flex items-center justify-between py-1.5">
-              <span className="text-[13px] text-ash">Password</span>
-              <code className="rounded-md border border-line bg-void px-2.5 py-1 font-mono text-[13px] text-signal">
-                {DEMO_PASSWORD}
-              </code>
-            </div>
-          </div>
-
           {error && (
-            <div className="mt-4 rounded-md border border-bad/40 bg-bad/[0.07] p-3 text-[13px] text-bad">
+            <div className="mt-4 rounded-md border border-bad/40 bg-bad/5 p-3 text-[13px] text-[#b42318]">
               {error}
             </div>
           )}
@@ -134,35 +120,34 @@ export function AdminPreview({
             <button
               onClick={signInWithTestCredentials}
               disabled={busy}
-              className="rounded-md bg-signal px-5 py-2.5 text-[14px] font-medium text-[#08090a] transition-all hover:brightness-110 disabled:opacity-40"
+              className="rounded-full bg-brand px-5 py-2.5 text-[14px] font-medium text-white transition-colors hover:bg-brand-strong disabled:opacity-40"
             >
-              {busy ? 'Signing in…' : 'Sign in with test credentials'}
+              {busy ? 'Signing in…' : 'Preview the operations console'}
             </button>
-            <button onClick={onClose} className="text-[13px] text-fog underline underline-offset-4 transition-colors hover:text-white">
+            <button onClick={onClose} className="text-[13px] text-slate-600 underline underline-offset-4 transition-colors hover:text-ink">
               Not now
             </button>
           </div>
 
-          <p className="mt-5 text-[11.5px] leading-relaxed text-ash">
-            Demo credentials only — the full console uses the same HTTP Basic
-            login as <span className="font-mono">/admin</span>. The preview is
-            read-only; nothing here can change orders, customers, or settings.
+          <p className="mt-5 text-[11.5px] leading-relaxed text-slate-700">
+            The preview is read-only; nothing here can change orders, customers,
+            or settings. The full console uses your own administrator sign-in.
           </p>
         </div>
       ) : (
         /* ---------------- step 2: dashboard preview ---------------- */
-        <div className="g-border flex max-h-[92dvh] w-full max-w-[1100px] flex-col overflow-hidden rounded-2xl bg-void">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line/70 px-6 pb-5 pt-6 md:px-8">
+        <div className="flex max-h-[92dvh] w-full max-w-[1100px] flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-xl">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-6 pb-5 pt-6 md:px-8">
             <div>
               <div className="flex items-center gap-2.5">
-                <Kicker className="!text-signal">Operator preview</Kicker>
-                <Badge tone="ok">Signed in as admin (demo)</Badge>
+                <Kicker>Operator preview</Kicker>
+                <Badge tone="ok">Signed in with the demo account</Badge>
               </div>
-              <h2 className="heading-tight mt-2.5 text-[22px] font-medium text-white">Dashboard</h2>
+              <h2 className="font-display mt-2.5 text-[22px] font-semibold tracking-[-0.2px] text-ink">Dashboard</h2>
             </div>
             <button
               onClick={onClose}
-              className="shrink-0 rounded-md border border-line px-3 py-1.5 text-[13px] text-fog transition-colors hover:border-smoke hover:text-white"
+              className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[13px] text-slate-600 transition-colors hover:border-cloud-200 hover:text-ink"
             >
               ← Back to demo
             </button>
@@ -170,15 +155,15 @@ export function AdminPreview({
 
           <div className="min-w-0 flex-1 overflow-y-auto px-6 py-6 md:px-8">
             {sessionId && (
-              <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-signal/30 bg-signal/[0.05] px-4 py-3">
+              <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-stone bg-surface px-4 py-3">
                 <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-signal" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-teal" />
                 </span>
-                <p className="text-[13px] text-mist">
-                  <span className="font-medium text-white">This session is live here.</span>{' '}
+                <p className="text-[13px] text-ink-dim">
+                  <span className="font-medium text-ink">This session is live here.</span>{' '}
                   The turns from your current demo conversation{' '}
-                  <span className="font-mono text-[12px] text-ash">{sessionId.slice(0, 18)}…</span>{' '}
+                  <span className="font-mono text-[12px] text-slate-700">{sessionId.slice(0, 18)}…</span>{' '}
                   appear on this dashboard as they happen.
                 </p>
               </div>
@@ -186,18 +171,18 @@ export function AdminPreview({
             <Dashboard />
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-line/70 px-6 py-4 md:px-8">
+          <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-line px-6 py-4 md:px-8">
             <button
               onClick={onClose}
-              className="rounded-md bg-signal px-5 py-2 text-[13px] font-medium text-[#08090a] transition-all hover:brightness-110"
+              className="rounded-full bg-brand px-5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-brand-strong"
             >
               ← Back to demo
             </button>
-            <Link to="/admin" className="text-[13px] text-fog underline underline-offset-4 transition-colors hover:text-white">
+            <Link to="/admin" className="text-[13px] text-slate-600 underline underline-offset-4 transition-colors hover:text-ink">
               Open full console →
             </Link>
-            <span className="ml-auto hidden text-[11.5px] text-ash sm:block">
-              Preview build — the full console adds conversations, voice analytics, AI routing, evaluation, audit log, and system health.
+            <span className="ml-auto hidden text-[11.5px] text-slate-700 sm:block">
+              The full console also includes conversations, voice analytics, AI routing, evaluation, audit log, and system health.
             </span>
           </div>
         </div>

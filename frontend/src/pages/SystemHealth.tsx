@@ -11,7 +11,7 @@ export function SystemHealth() {
       <PageHeader title="System health" sub="Java backend, PostgreSQL/pgvector, voice worker, LLM providers and embedding services. Auto-refreshes every 30s. This is a point-in-time snapshot — no health history is stored." />
       <QueryState query={q}>
         {(h) => (
-          <div className="rounded-[24px] border border-line bg-paper p-5 shadow-card">
+          <div className="rounded-xl border border-line bg-paper p-5 shadow-card">
             <p className="border-b border-line pb-4 text-[14px] text-ink">
               Overall status: <StatusBadge value={h.status} />
             </p>

@@ -1,11 +1,11 @@
-/** Shared shadcn page pieces — replaces components/Signal.tsx.
+/** Shared Attio page pieces (DESIGN.md).
  *
- * The page system is now cards, not ruled sections: a white card with a
- * 24px radius, a 1px hairline border, the reference's whisper-quiet
- * shadow, and 20px padding. Titles are 18px/600, notes are 14px
- * mid-gray, fact labels are 12px uppercase mid-gray. The voice pipeline
- * strip is strictly achromatic (mid-gray / ink / ink-soft on a canvas
- * track); ember never appears here — a pipeline stage is not an error.
+ * The page system is cards, not ruled sections: a white card with a
+ * 12px radius, a 1px hairline border, a blue-tinted shadow at very
+ * low opacity, and 20px padding. Titles are 18px/600, notes are 14px
+ * slate-600, fact labels are 12px slate-600. The voice pipeline
+ * strip uses black for the response stage and warm grays for the rest;
+ * ember never appears here — a pipeline stage is not an error.
  * Pages keep their existing hooks and data — only presentation moves
  * here, so no page logic changes.
  */
@@ -24,7 +24,7 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className="mb-6 scroll-mt-6 rounded-[24px] border border-line bg-paper p-5 shadow-card">
+    <section id={id} className="mb-6 scroll-mt-6 rounded-xl border border-line bg-paper p-8 shadow-card">
       <h2 className="text-[18px] font-semibold text-ink">{title}</h2>
       {note && <p className="mb-4 mt-1 text-[14px] text-ink-mute">{note}</p>}
       {children}
@@ -38,7 +38,7 @@ export function FactGrid({ items }: { items: { label: string; value: React.React
     <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
       {items.map((f) => (
         <div key={f.label}>
-          <div className="text-[12px] font-medium uppercase tracking-[0.6px] text-ink-mute">{f.label}</div>
+          <div className="text-[12px] font-medium text-ink-mute">{f.label}</div>
           <div className="mt-0.5 text-sm text-ink">{f.value}</div>
         </div>
       ))}
@@ -48,8 +48,8 @@ export function FactGrid({ items }: { items: { label: string; value: React.React
 
 /**
  * One turn as a bar scaled to its end-to-end time. Segments are the three
- * measured stages: STT commit (light gray), brain to first token
- * (indigo — the stage that matters most, so it carries the accent),
+ * measured stages: STT commit (light gray), response to first token
+ * (black — the stage that matters most, so it carries the accent),
  * TTS to first audio (mid-gray). Their sum is usually less than
  * end-to-end; the rest shows as the canvas track and is labelled
  * "remaining" in the legend, never folded into a stage. Numbers always
@@ -81,9 +81,9 @@ export function PipelineStrip({
   };
   return (
     <span
-      className="block h-2 w-32 overflow-hidden rounded-full bg-canvas"
+      className="block h-2 w-32 overflow-hidden rounded-full bg-line-soft"
       role="img"
-      aria-label={`Pipeline: STT ${sttMs ?? 'n/a'}ms, brain ${brainMs ?? 'n/a'}ms, TTS ${ttsMs ?? 'n/a'}ms, end-to-end ${e2eMs}ms`}
+      aria-label={`Pipeline: STT ${sttMs ?? 'n/a'}ms, response ${brainMs ?? 'n/a'}ms, TTS ${ttsMs ?? 'n/a'}ms, end-to-end ${e2eMs}ms`}
     >
       <span className="flex h-full">
         {seg(sttMs, '#a3a3a3')}
@@ -104,7 +104,7 @@ export function PipelineLegend() {
   return (
     <p className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-mute">
       {swatch('#a3a3a3', 'STT commit')}
-      {swatch(SHADCN_TOKENS.accent, 'Brain to first token')}
+      {swatch(SHADCN_TOKENS.accent, 'Response to first token')}
       {swatch(SHADCN_TOKENS.midGray, 'TTS to first audio')}
       {swatch(SHADCN_TOKENS.canvas, 'Remaining time to end of turn', true)}
     </p>

@@ -25,7 +25,7 @@ export function AiRouting() {
       <QueryState query={q}>
         {(r) => (
           <div>
-            <div className="mb-6 grid grid-cols-2 gap-6 rounded-[24px] border border-line bg-paper p-5 shadow-card">
+            <div className="mb-6 grid grid-cols-2 gap-6 rounded-xl border border-line bg-paper p-5 shadow-card">
               <KpiCard title="Semantic margin p50" value={r.marginP50 !== null ? r.marginP50.toFixed(4) : 'n/a'} />
               <KpiCard title="Semantic margin p95" value={r.marginP95 !== null ? r.marginP95.toFixed(4) : 'n/a'} />
             </div>
